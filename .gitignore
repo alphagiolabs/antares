@@ -1,0 +1,26 @@
+# Base de datos local
+data/*.db
+
+# Archivos de Excel temporales
+~$*.xlsx
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+
+# Entornos virtuales
+venv/
+.venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Output de pruebas
+test_output/
