@@ -22,5 +22,8 @@ env/
 .idea/
 *.swp
 
+# PyInstaller
+*.spec
+
 # Output de pruebas
 test_output/
