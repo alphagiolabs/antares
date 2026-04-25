@@ -20,9 +20,35 @@ export default function AppearanceTab() {
   const [theme, setTheme] = useState<ThemeConfig | null>(null);
   const [presets, setPresets] = useState<string[]>([]);
 
+  function applyThemeToCSS(theme: Record<string, string>) {
+    const root = document.documentElement;
+    const mapping: Record<string, string> = {
+      bg: '--mc-canvas',
+      bg_secondary: '--mc-lifted',
+      fg: '--mc-ink',
+      fg_muted: '--mc-slate',
+      fg_secondary: '--mc-granite',
+      fg_tertiary: '--mc-graphite',
+      accent: '--mc-signal',
+      accent_light: '--mc-signalLight',
+      accent_hover: '--mc-clay',
+      accent_dark: '--mc-clay',
+      border: '--mc-dust',
+      blue_hover: '--mc-linkBlue',
+      error: '--mc-red',
+      warning: '--mc-yellow',
+      success: '--mc-success',
+      orange: '--mc-signalLight',
+    };
+    for (const [key, cssVar] of Object.entries(mapping)) {
+      if (theme[key]) root.style.setProperty(cssVar, theme[key]);
+    }
+  }
+
   const refresh = async () => {
     const t = await api.getTheme();
     setTheme(t);
+    applyThemeToCSS(t);
     const p = await api.getPresets();
     setPresets(p.presets);
   };
@@ -30,19 +56,22 @@ export default function AppearanceTab() {
   useEffect(() => { refresh(); }, []);
 
   const applyPreset = async (name: string) => {
-    await api.applyPreset(name);
-    await refresh();
+    const t = await api.applyPreset(name);
+    setTheme(t);
+    applyThemeToCSS(t);
   };
 
   const save = async () => {
     if (!theme) return;
     await api.saveTheme(theme);
+    applyThemeToCSS(theme);
     alert('Tema guardado');
   };
 
   const reset = async () => {
-    await api.resetTheme();
-    await refresh();
+    const t = await api.resetTheme();
+    setTheme(t);
+    applyThemeToCSS(t);
   };
 
   const updateColor = (key: string, value: string) => {
