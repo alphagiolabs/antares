@@ -102,6 +102,11 @@ class Handlers:
     def formats(params: dict[str, Any]) -> dict[str, list[str]]:
         return {"formats": list(FORMATOS_SOPORTADOS.keys())}
 
+    @staticmethod
+    def plugin_formats(params: dict[str, Any]) -> dict[str, list[str]]:
+        from backend.core.format_registry import get_registry
+        return {"formats": get_registry().list_formats()}
+
     # ─── Diálogos ────────────────────────────────────────────────────────────
 
     @staticmethod
@@ -368,6 +373,7 @@ def _process_thread(params: dict[str, Any]) -> None:
 HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
     "version": Handlers.version,
     "formats": Handlers.formats,
+    "plugin_formats": Handlers.plugin_formats,
     "dialog_files": Handlers.dialog_files,
     "dialog_folder": Handlers.dialog_folder,
     "dialog_dest": Handlers.dialog_dest,

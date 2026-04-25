@@ -7,17 +7,22 @@ from typing import Callable, Union
 
 from PIL import Image
 
-FORMATOS_SOPORTADOS: dict[str, dict[str, tuple[str, ...]]] = {
-    "JPEG": {"ext": ".jpg", "modes": ("RGB", "L", "CMYK")},
-    "JPG": {"ext": ".jpg", "modes": ("RGB", "L", "CMYK")},
-    "PNG": {"ext": ".png", "modes": ("RGB", "RGBA", "L", "LA", "P")},
-    "WEBP": {"ext": ".webp", "modes": ("RGB", "RGBA", "L")},
-    "BMP": {"ext": ".bmp", "modes": ("RGB", "RGBA", "L")},
-    "TIFF": {"ext": ".tiff", "modes": ("RGB", "RGBA", "L", "CMYK")},
-    "GIF": {"ext": ".gif", "modes": ("P", "RGB", "L")},
-    "ICO": {"ext": ".ico", "modes": ("RGB", "RGBA", "L")},
-    "PDF": {"ext": ".pdf", "modes": ("RGB", "RGBA", "L", "P")},
-}
+from backend.core.format_registry import FormatRegistry, get_registry
+
+# Initialize default formats in the global registry
+_registry = get_registry()
+_registry.add_format("JPEG", ".jpg", ("RGB", "L", "CMYK"))
+_registry.add_format("JPG", ".jpg", ("RGB", "L", "CMYK"))
+_registry.add_format("PNG", ".png", ("RGB", "RGBA", "L", "LA", "P"))
+_registry.add_format("WEBP", ".webp", ("RGB", "RGBA", "L"))
+_registry.add_format("BMP", ".bmp", ("RGB", "RGBA", "L"))
+_registry.add_format("TIFF", ".tiff", ("RGB", "RGBA", "L", "CMYK"))
+_registry.add_format("GIF", ".gif", ("P", "RGB", "L"))
+_registry.add_format("ICO", ".ico", ("RGB", "RGBA", "L"))
+_registry.add_format("PDF", ".pdf", ("RGB", "RGBA", "L", "P"))
+
+# Backward compatibility alias
+FORMATOS_SOPORTADOS = _registry
 
 # Mapeo de nombres internos a formatos Pillow
 PIL_FORMAT_MAP: dict[str, str] = {
@@ -29,7 +34,7 @@ ProgresoCallback = Callable[[int, int, Path], None]
 
 def obtener_formatos() -> list[str]:
     """Retorna lista de formatos soportados."""
-    return list(FORMATOS_SOPORTADOS.keys())
+    return get_registry().list_formats()
 
 
 def convertir_imagen(
