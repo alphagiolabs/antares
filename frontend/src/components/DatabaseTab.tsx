@@ -64,83 +64,76 @@ export default function DatabaseTab() {
   };
 
   return (
-    <div className="flex h-full w-full">
-      {/* Sidebar izquierdo */}
-      <div className="w-[280px] shrink-0 flex flex-col border-r border-mc-dust/20 bg-mc-white">
-        <div className="p-5 border-b border-mc-dust/20">
-          <div className="mc-eyebrow mb-2">Base de Datos</div>
-          <h2 className="text-lg font-medium tracking-tight">Gestión</h2>
-        </div>
-
-        <nav className="flex-1 p-3 space-y-1">
+    <div className="flex flex-col h-full w-full bg-dark-base">
+      {/* Top tab bar with action buttons */}
+      <div className="flex items-center justify-between px-6 py-3 border-b border-bdr-subtle bg-dark-surface shrink-0">
+        <div className="flex items-center gap-2">
           <button
             onClick={() => setActiveSection('records')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-btn text-sm font-medium transition-all duration-200 ${
-              activeSection === 'records' ? 'bg-mc-ink text-mc-canvas shadow-card' : 'text-mc-ink hover:bg-mc-lifted'
+            className={`px-4 py-2 rounded-btn text-sm font-semibold transition-all duration-200 ${
+              activeSection === 'records'
+                ? 'bg-accent text-white'
+                : 'bg-dark-elevated text-txt-secondary hover:text-txt-primary'
             }`}
           >
-            <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${activeSection === 'records' ? 'bg-mc-canvas text-mc-ink' : 'bg-mc-lifted text-mc-slate'}`}>
-              {records.length}
-            </span>
             Registros
           </button>
           <button
             onClick={() => setActiveSection('schema')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-btn text-sm font-medium transition-all duration-200 ${
-              activeSection === 'schema' ? 'bg-mc-ink text-mc-canvas shadow-card' : 'text-mc-ink hover:bg-mc-lifted'
+            className={`px-4 py-2 rounded-btn text-sm font-semibold transition-all duration-200 ${
+              activeSection === 'schema'
+                ? 'bg-accent text-white'
+                : 'bg-dark-elevated text-txt-secondary hover:text-txt-primary'
             }`}
           >
-            <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${activeSection === 'schema' ? 'bg-mc-canvas text-mc-ink' : 'bg-mc-lifted text-mc-slate'}`}>
-              {allFields.length}
-            </span>
             Esquema
           </button>
-        </nav>
+        </div>
 
-        <div className="p-4 border-t border-mc-dust/20 space-y-2">
-          <Button variant="secondary" className="w-full justify-center" onClick={importExcel}>Importar Excel</Button>
-          <Button variant="secondary" className="w-full justify-center" onClick={exportExcel}>Exportar Excel</Button>
-          <Button variant="ghost" className="w-full justify-center" onClick={template}>Plantilla</Button>
-          <Button variant="ghost" className="w-full justify-center" onClick={refresh}>Refrescar</Button>
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" className="text-txt-secondary hover:text-txt-primary" onClick={refresh}>Refrescar</Button>
+          <Button variant="ghost" className="text-txt-secondary hover:text-txt-primary" onClick={template}>Plantilla</Button>
+          <Button variant="secondary" onClick={importExcel}>Importar</Button>
+          <Button variant="secondary" onClick={exportExcel}>Exportar</Button>
         </div>
       </div>
 
-      {/* Right panel */}
-      <div className="flex-1 flex flex-col min-w-0 bg-mc-canvas p-6">
+      {/* Content area */}
+      <div className="flex-1 flex flex-col min-w-0 p-6 overflow-hidden">
         {activeSection === 'records' && (
           <div className="flex flex-col h-full">
             <div className="flex items-center justify-between mb-4">
               <div>
-                <div className="mc-eyebrow mb-1">Registros</div>
-                <h3 className="text-lg font-medium">{records.length} registros en base de datos</h3>
+                <p className="text-txt-muted text-xs uppercase tracking-wider mb-1">Visor de datos</p>
+                <h3 className="text-xl font-semibold text-txt-primary">{records.length} registros en base de datos</h3>
               </div>
             </div>
 
-            <div className="flex-1 bg-mc-white rounded-card border border-mc-dust/20 flex flex-col overflow-hidden">
+            <div className="flex-1 bg-dark-surface rounded-lg border border-bdr-subtle flex flex-col overflow-hidden">
               {records.length === 0 ? (
                 <div className="flex-1 flex flex-col items-center justify-center text-center">
-                  <div className="w-14 h-14 rounded-full bg-mc-canvas flex items-center justify-center mb-4 border border-mc-dust/30">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#D1CDC7" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <div className="w-16 h-16 rounded-full bg-dark-elevated flex items-center justify-center mb-4">
+                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" className="text-txt-muted" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
                       <polyline points="14 2 14 8 20 8" />
                     </svg>
                   </div>
-                  <p className="text-mc-ink font-medium">Sin registros</p>
-                  <p className="text-mc-slate text-sm mt-1">Importa un archivo Excel para comenzar</p>
+                  <p className="text-txt-primary font-semibold text-lg">Sin registros</p>
+                  <p className="text-txt-muted text-sm mt-1">Importa un archivo Excel para comenzar</p>
                 </div>
               ) : (
                 <div className="flex-1 flex flex-col">
-                  <div className="px-4 py-2.5 bg-mc-lifted border-b border-mc-dust/20 flex items-center gap-2 shrink-0">
+                  <div className="px-4 py-2.5 bg-dark-elevated border-b border-bdr-subtle flex items-center gap-3 shrink-0">
                     {fields.map((f) => (
-                      <span key={f} className="text-[11px] font-bold uppercase tracking-eyebrow text-mc-slate flex-1 min-w-0 truncate">{f}</span>
+                      <span key={f} className="text-[11px] font-bold uppercase tracking-wider text-txt-muted flex-1 min-w-0 truncate">{f}</span>
                     ))}
                   </div>
                   <div className="flex-1 p-2 overflow-y-auto">
                     <div className="grid gap-1">
                       {records.map((r, i) => (
-                        <div key={i} className={`flex items-center gap-2 px-3 py-2 rounded-btn text-xs ${i % 2 === 0 ? 'bg-mc-lifted' : 'bg-mc-white'}`}>
+                        <div key={i} className={`flex items-center gap-3 px-4 py-2.5 rounded-lg text-[13px] transition-colors border ${i % 2 === 0 ? 'bg-dark-elevated/50 border-bdr-subtle/50' : 'bg-transparent border-transparent hover:border-bdr-subtle/50 hover:bg-dark-elevated/30'}`}>
                           {fields.map((f) => (
-                            <span key={f} className="flex-1 min-w-0 truncate text-mc-ink">{String(r[f] ?? '')}</span>
+                            <span key={f} className="flex-1 min-w-0 truncate text-txt-secondary">{String(r[f] ?? '')}</span>
                           ))}
                         </div>
                       ))}
@@ -156,54 +149,57 @@ export default function DatabaseTab() {
           <div className="flex flex-col h-full">
             <div className="flex items-center justify-between mb-4">
               <div>
-                <div className="mc-eyebrow mb-1">Esquema</div>
-                <h3 className="text-lg font-medium">Configurar campos</h3>
+                <p className="text-txt-muted text-xs uppercase tracking-wider mb-1">Esquema</p>
+                <h3 className="text-xl font-semibold text-txt-primary">Configurar campos</h3>
               </div>
-              <Button variant="ghost" onClick={resetFields}>Restaurar defaults</Button>
+              <Button variant="ghost" className="text-txt-secondary hover:text-txt-primary border border-bdr-subtle" onClick={resetFields}>Restaurar defaults</Button>
             </div>
 
             {/* New field form */}
-            <div className="bg-mc-white rounded-card border border-mc-dust/20 p-4 mb-4 flex items-end gap-3 shrink-0">
+            <div className="bg-dark-surface rounded-lg border border-bdr-subtle p-4 mb-4 flex items-end gap-4 shrink-0">
               <div className="flex-1">
-                <label className="mc-label text-[11px]">Nombre</label>
-                <input className="mc-input w-full py-1.5" value={newField.name} onChange={(e) => setNewField({ ...newField, name: e.target.value })} placeholder="nombre_campo" />
+                <label className="block text-xs font-medium text-txt-secondary mb-1.5">Nombre del campo</label>
+                <input className="w-full bg-dark-input border border-bdr-medium rounded-btn px-3 py-2 text-sm text-txt-primary placeholder-txt-muted focus:outline-none focus:border-accent" value={newField.name} onChange={(e) => setNewField({ ...newField, name: e.target.value })} placeholder="ej. sku_producto" />
               </div>
-              <div className="w-32">
-                <label className="mc-label text-[11px]">Tipo</label>
-                <select className="mc-input w-full py-1.5" value={newField.type} onChange={(e) => setNewField({ ...newField, type: e.target.value })}>
-                  <option>TEXT</option><option>INTEGER</option><option>REAL</option><option>BLOB</option>
+              <div className="w-36">
+                <label className="block text-xs font-medium text-txt-secondary mb-1.5">Tipo de dato</label>
+                <select className="w-full bg-dark-input border border-bdr-medium rounded-btn px-3 py-2 text-sm text-txt-primary appearance-none cursor-pointer focus:outline-none focus:border-accent" value={newField.type} onChange={(e) => setNewField({ ...newField, type: e.target.value })}>
+                  <option className="bg-dark-input">TEXT</option>
+                  <option className="bg-dark-input">INTEGER</option>
+                  <option className="bg-dark-input">REAL</option>
+                  <option className="bg-dark-input">BLOB</option>
                 </select>
               </div>
-              <label className="flex items-center gap-1.5 text-xs cursor-pointer select-none pb-2">
-                <input type="checkbox" className="accent-mc-ink" checked={newField.required} onChange={(e) => setNewField({ ...newField, required: e.target.checked })} />
+              <label className="flex items-center gap-2 text-sm text-txt-secondary cursor-pointer select-none pb-2">
+                <input type="checkbox" className="w-4 h-4 rounded border-bdr-medium bg-dark-input accent-accent" checked={newField.required} onChange={(e) => setNewField({ ...newField, required: e.target.checked })} />
                 Requerido
               </label>
-              <label className="flex items-center gap-1.5 text-xs cursor-pointer select-none pb-2">
-                <input type="checkbox" className="accent-mc-ink" checked={newField.unique} onChange={(e) => setNewField({ ...newField, unique: e.target.checked })} />
+              <label className="flex items-center gap-2 text-sm text-txt-secondary cursor-pointer select-none pb-2">
+                <input type="checkbox" className="w-4 h-4 rounded border-bdr-medium bg-dark-input accent-accent" checked={newField.unique} onChange={(e) => setNewField({ ...newField, unique: e.target.checked })} />
                 Único
               </label>
-              <Button variant="primary" className="py-1.5" onClick={addField}>Agregar</Button>
+              <Button variant="primary" className="mb-0.5" onClick={addField}>Agregar Campo</Button>
             </div>
 
             {/* Fields list */}
-            <div className="flex-1 bg-mc-white rounded-card border border-mc-dust/20 flex flex-col overflow-hidden">
-              <div className="px-4 py-2.5 bg-mc-lifted border-b border-mc-dust/20 flex items-center gap-2 shrink-0">
-                <span className="text-[11px] font-bold uppercase tracking-eyebrow text-mc-slate flex-1">Campo</span>
-                <span className="text-[11px] font-bold uppercase tracking-eyebrow text-mc-slate w-20">Tipo</span>
-                <span className="text-[11px] font-bold uppercase tracking-eyebrow text-mc-slate w-20 text-center">Requerido</span>
-                <span className="text-[11px] font-bold uppercase tracking-eyebrow text-mc-slate w-20 text-center">Único</span>
-                <span className="text-[11px] font-bold uppercase tracking-eyebrow text-mc-slate w-16 text-center">—</span>
+            <div className="flex-1 bg-dark-surface rounded-lg border border-bdr-subtle flex flex-col overflow-hidden">
+              <div className="px-4 py-2.5 bg-dark-elevated border-b border-bdr-subtle flex items-center gap-3 shrink-0">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-txt-muted flex-1">Campo</span>
+                <span className="text-[11px] font-bold uppercase tracking-wider text-txt-muted w-28">Tipo</span>
+                <span className="text-[11px] font-bold uppercase tracking-wider text-txt-muted w-24 text-center">Requerido</span>
+                <span className="text-[11px] font-bold uppercase tracking-wider text-txt-muted w-24 text-center">Único</span>
+                <span className="text-[11px] font-bold uppercase tracking-wider text-txt-muted w-20 text-center">Acción</span>
               </div>
-              <div className="flex-1 p-2">
+              <div className="flex-1 p-2 overflow-y-auto">
                 <div className="space-y-1">
                   {allFields.map((f, i) => (
-                    <div key={f.name} className={`flex items-center gap-2 px-3 py-2 rounded-btn text-xs ${i % 2 === 0 ? 'bg-mc-lifted' : 'bg-mc-white'}`}>
-                      <span className="flex-1 text-mc-ink font-medium">{f.name}</span>
-                      <span className="w-20 text-mc-slate font-mono">{f.type}</span>
-                      <span className="w-20 text-center"><Badge variant={f.required ? 'success' : 'default'} className="text-[10px] px-2 py-0.5">{f.required ? 'Sí' : 'No'}</Badge></span>
-                      <span className="w-20 text-center"><Badge variant={f.unique ? 'success' : 'default'} className="text-[10px] px-2 py-0.5">{f.unique ? 'Sí' : 'No'}</Badge></span>
-                      <span className="w-16 text-center">
-                        <button className="text-mc-slate hover:text-mc-signal text-xs font-medium" onClick={() => removeField(f.name)}>Eliminar</button>
+                    <div key={f.name} className={`flex items-center gap-3 px-4 py-2.5 rounded-lg text-[14px] transition-colors border ${i % 2 === 0 ? 'bg-dark-elevated/50 border-bdr-subtle/50' : 'bg-transparent border-transparent hover:border-bdr-subtle/50 hover:bg-dark-elevated/30'}`}>
+                      <span className="flex-1 text-txt-primary font-medium">{f.name}</span>
+                      <span className="w-28 text-txt-muted font-mono bg-dark-input px-2 py-1 rounded text-xs text-center">{f.type}</span>
+                      <span className="w-24 flex justify-center"><Badge variant={f.required ? 'success' : 'default'}>{f.required ? 'Sí' : 'No'}</Badge></span>
+                      <span className="w-24 flex justify-center"><Badge variant={f.unique ? 'success' : 'default'}>{f.unique ? 'Sí' : 'No'}</Badge></span>
+                      <span className="w-20 flex justify-center">
+                        <button className="text-txt-muted hover:text-red-400 hover:bg-red-500/10 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors" onClick={() => removeField(f.name)}>Eliminar</button>
                       </span>
                     </div>
                   ))}
