@@ -253,6 +253,28 @@ class Handlers:
         return {"cancelled": True}
 
     @staticmethod
+    def history_list(params: dict[str, Any]) -> dict[str, Any]:
+        from backend.core.history import list_runs
+        limit = params.get("limit", 50)
+        return {"runs": list_runs(limit)}
+
+    @staticmethod
+    def history_get(params: dict[str, Any]) -> dict[str, Any]:
+        from backend.core.history import get_run
+        run_id = params.get("id", 0)
+        run = get_run(run_id)
+        if run:
+            run["files"] = json.loads(run["files_json"])
+            run["options"] = json.loads(run["options_json"])
+        return {"run": run}
+
+    @staticmethod
+    def history_delete(params: dict[str, Any]) -> dict[str, bool]:
+        from backend.core.history import delete_run
+        run_id = params.get("id", 0)
+        return {"deleted": delete_run(run_id)}
+
+    @staticmethod
     def preview_image(params: dict[str, Any]) -> dict[str, str]:
         from backend.core.converter import convertir_a_preview
         path = params.get("path", "")
@@ -328,6 +350,17 @@ def _process_thread(params: dict[str, Any]) -> None:
     _state.progress = 100
     _log("Proceso finalizado.", "info")
     send_notification("process.complete", {"ok_count": _state.ok_count, "err_count": _state.err_count})
+    from backend.core.history import save_run
+    save_run(
+        files=[str(f) for f in files],
+        options={"formato": formato, "calidad": calidad, "resize": str(resize) if resize else None, "keep_exif": keep_exif, "usar_rename": usar_rename},
+        patron=patron,
+        formato=formato,
+        calidad=calidad,
+        resize=str(resize) if resize else None,
+        ok_count=_state.ok_count,
+        err_count=_state.err_count,
+    )
 
 
 # ─── Router ─────────────────────────────────────────────────────────────────
@@ -356,5 +389,8 @@ HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
     "process_start": Handlers.process_start,
     "process_status": Handlers.process_status,
     "process_cancel": Handlers.process_cancel,
+    "history_list": Handlers.history_list,
+    "history_get": Handlers.history_get,
+    "history_delete": Handlers.history_delete,
     "preview_image": Handlers.preview_image,
 }
