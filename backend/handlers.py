@@ -38,6 +38,7 @@ from backend.core.renamer import RenamerEngine
 from backend.utils.paths import resource_path, user_data_path
 from backend.utils.validators import parse_filename_parts, sanitizar_nombre, obtener_codigo_desde_nombre
 from backend.ipc_protocol import send_notification
+from backend.utils.i18n import t, set_locale
 
 logger = logging.getLogger(__name__)
 
@@ -96,14 +97,17 @@ class Handlers:
 
     @staticmethod
     def version(params: dict[str, Any]) -> dict[str, str]:
+        set_locale(params.get("locale", "es"))
         return {"version": "0.2.0"}
 
     @staticmethod
     def formats(params: dict[str, Any]) -> dict[str, list[str]]:
+        set_locale(params.get("locale", "es"))
         return {"formats": list(FORMATOS_SOPORTADOS.keys())}
 
     @staticmethod
     def plugin_formats(params: dict[str, Any]) -> dict[str, list[str]]:
+        set_locale(params.get("locale", "es"))
         from backend.core.format_registry import get_registry
         return {"formats": get_registry().list_formats()}
 
@@ -111,46 +115,55 @@ class Handlers:
 
     @staticmethod
     def dialog_files(params: dict[str, Any]) -> dict[str, list[str]]:
+        set_locale(params.get("locale", "es"))
         return {"paths": _run_dialog(fd.askopenfilenames, title="Seleccionar archivos")}
 
     @staticmethod
     def dialog_folder(params: dict[str, Any]) -> dict[str, list[str]]:
+        set_locale(params.get("locale", "es"))
         return {"paths": _run_dialog(fd.askdirectory, title="Seleccionar carpeta")}
 
     @staticmethod
     def dialog_dest(params: dict[str, Any]) -> dict[str, list[str]]:
+        set_locale(params.get("locale", "es"))
         return {"paths": _run_dialog(fd.askdirectory, title="Seleccionar destino")}
 
     @staticmethod
     def dialog_save(params: dict[str, Any]) -> dict[str, list[str]]:
+        set_locale(params.get("locale", "es"))
         return {"paths": _run_dialog(fd.asksaveasfilename, title="Guardar archivo")}
 
     # ─── Base de datos ───────────────────────────────────────────────────────
 
     @staticmethod
     def db_records(params: dict[str, Any]) -> dict[str, Any]:
+        set_locale(params.get("locale", "es"))
         return {"records": obtener_todos(), "fields": get_field_names()}
 
     @staticmethod
     def db_import(params: dict[str, Any]) -> dict[str, int]:
+        set_locale(params.get("locale", "es"))
         path = params.get("path", "")
         n = importar_excel(path)
         return {"imported": n}
 
     @staticmethod
     def db_export(params: dict[str, Any]) -> dict[str, int]:
+        set_locale(params.get("locale", "es"))
         path = params.get("path", "")
         n = exportar_excel(path)
         return {"exported": n}
 
     @staticmethod
     def db_template(params: dict[str, Any]) -> dict[str, Any]:
+        set_locale(params.get("locale", "es"))
         path = params.get("path", "")
         generar_plantilla_excel(path)
         return {"path": path}
 
     @staticmethod
     def scan_folder(params: dict[str, Any]) -> dict[str, list[str]]:
+        set_locale(params.get("locale", "es"))
         folder = params.get("folder", "")
         path = Path(folder)
         if not path.is_dir():
@@ -166,15 +179,18 @@ class Handlers:
 
     @staticmethod
     def db_fields(params: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
+        set_locale(params.get("locale", "es"))
         return {"fields": load_fields()}
 
     @staticmethod
     def db_fields_update(params: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
+        set_locale(params.get("locale", "es"))
         fields = params.get("fields", [])
         return {"fields": save_fields(fields)}
 
     @staticmethod
     def db_fields_reset(params: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
+        set_locale(params.get("locale", "es"))
         from core.config_fields import reset_to_defaults
         return {"fields": reset_to_defaults()}
 
@@ -182,29 +198,35 @@ class Handlers:
 
     @staticmethod
     def theme_get(params: dict[str, Any]) -> dict[str, str]:
+        set_locale(params.get("locale", "es"))
         return load_theme()
 
     @staticmethod
     def theme_save(params: dict[str, Any]) -> dict[str, str]:
+        set_locale(params.get("locale", "es"))
         return save_theme(params)
 
     @staticmethod
     def theme_presets(params: dict[str, Any]) -> dict[str, list[str]]:
+        set_locale(params.get("locale", "es"))
         return {"presets": list(PRESETS.keys())}
 
     @staticmethod
     def theme_preset(params: dict[str, Any]) -> dict[str, str]:
+        set_locale(params.get("locale", "es"))
         name = params.get("name", "")
         return load_preset(name)
 
     @staticmethod
     def theme_reset(params: dict[str, Any]) -> dict[str, str]:
+        set_locale(params.get("locale", "es"))
         return reset_theme()
 
     # ─── Proceso y Vista Previa ────────────────────────────────────────────
 
     @staticmethod
     def preview(params: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
+        set_locale(params.get("locale", "es"))
         files = params.get("files", [])
         patron = params.get("patron", "")
         secuencia = params.get("secuencia", 1)
@@ -229,6 +251,7 @@ class Handlers:
 
     @staticmethod
     def process_start(params: dict[str, Any]) -> dict[str, bool]:
+        set_locale(params.get("locale", "es"))
         if _state.running:
             return {"started": False}
         _reset_state()
@@ -243,6 +266,7 @@ class Handlers:
 
     @staticmethod
     def process_status(params: dict[str, Any]) -> dict[str, Any]:
+        set_locale(params.get("locale", "es"))
         return {
             "running": _state.running,
             "progress": _state.progress,
@@ -254,17 +278,21 @@ class Handlers:
 
     @staticmethod
     def process_cancel(params: dict[str, Any]) -> dict[str, bool]:
+        set_locale(params.get("locale", "es"))
         _state.cancel_requested = True
+        _log(t("info.process_cancelled"), "warn")
         return {"cancelled": True}
 
     @staticmethod
     def history_list(params: dict[str, Any]) -> dict[str, Any]:
+        set_locale(params.get("locale", "es"))
         from backend.core.history import list_runs
         limit = params.get("limit", 50)
         return {"runs": list_runs(limit)}
 
     @staticmethod
     def history_get(params: dict[str, Any]) -> dict[str, Any]:
+        set_locale(params.get("locale", "es"))
         from backend.core.history import get_run
         run_id = params.get("id", 0)
         run = get_run(run_id)
@@ -275,12 +303,14 @@ class Handlers:
 
     @staticmethod
     def history_delete(params: dict[str, Any]) -> dict[str, bool]:
+        set_locale(params.get("locale", "es"))
         from backend.core.history import delete_run
         run_id = params.get("id", 0)
         return {"deleted": delete_run(run_id)}
 
     @staticmethod
     def preview_image(params: dict[str, Any]) -> dict[str, str]:
+        set_locale(params.get("locale", "es"))
         from backend.core.converter import convertir_a_preview
         path = params.get("path", "")
         formato = params.get("formato", "PNG")
@@ -292,6 +322,7 @@ class Handlers:
 
 def _process_thread(params: dict[str, Any]) -> None:
     """Thread de procesamiento en background."""
+    set_locale(params.get("locale", "es"))
     files = params.get("files", [])
     destino = params.get("destino", "")
     formato = params.get("formato", "JPEG")
@@ -312,7 +343,7 @@ def _process_thread(params: dict[str, Any]) -> None:
 
     for i, fpath in enumerate(files):
         if _state.cancel_requested:
-            _log("Proceso cancelado por el usuario", "warn")
+            _log(t("info.process_cancelled"), "warn")
             break
 
         p = Path(fpath)
@@ -349,11 +380,11 @@ def _process_thread(params: dict[str, Any]) -> None:
                 _log(f"Error: {res[0]}", "error")
         except Exception as e:
             _state.err_count += 1
-            _log(f"Error: {p.name} -> {e}", "error")
+            _log(t("error.process_failed", file=p.name, error=e), "error")
 
     _state.running = False
     _state.progress = 100
-    _log("Proceso finalizado.", "info")
+    _log(t("info.process_complete", ok=_state.ok_count, err=_state.err_count), "info")
     send_notification("process.complete", {"ok_count": _state.ok_count, "err_count": _state.err_count})
     from backend.core.history import save_run
     save_run(

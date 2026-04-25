@@ -32,6 +32,7 @@ load_plugins_from_dir()
 
 from ipc_protocol import IPCMessage, read_message, send_response
 from handlers import HANDLERS
+from backend.utils.i18n import t
 
 # Logging to stderr so stdout stays clean for IPC
 logging.basicConfig(
@@ -48,7 +49,7 @@ def main() -> None:
     print(json.dumps({"jsonrpc": "2.0", "method": "ready", "params": {}}))
     sys.stdout.flush()
 
-    logger.info("Backend IPC iniciado. Esperando mensajes en stdin...")
+    logger.info(t("info.backend_ready"))
 
     while True:
         msg = read_message()
@@ -66,7 +67,7 @@ def main() -> None:
         else:
             send_response(None, msg.id, error=f"Método desconocido: {msg.method}")
 
-    logger.info("Backend IPC finalizado.")
+    logger.info(t("info.backend_shutdown"))
 
 
 if __name__ == "__main__":
