@@ -29,6 +29,30 @@ export default function ConversionTab() {
   const [activeSection, setActiveSection] = useState<'files' | 'options' | 'rename' | 'output'>('files');
 
   useEffect(() => {
+    const onMessage = (e: MessageEvent) => {
+      if (e.data?.type === 'HISTORY_REEXECUTE') {
+        const run = e.data.payload;
+        const files = JSON.parse(run.files_json || '[]');
+        const options = JSON.parse(run.options_json || '{}');
+        setFiles(files);
+        setFormato(options.formato || 'JPEG');
+        setCalidad(options.calidad || 95);
+        setPatron(run.patron || '');
+        if (options.resize) {
+          const parts = options.resize.replace(/[()\[\]]/g, '').split(',');
+          if (parts.length === 2) {
+            setResizeAncho(parts[0].trim());
+            setResizeAlto(parts[1].trim());
+          }
+        }
+        setActiveSection('files');
+      }
+    };
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, []);
+
+  useEffect(() => {
     api.formats().then((r) => setFormats(r.formats));
     api.getFields().then((r) => {
       const names = r.fields.map((f) => f.name);

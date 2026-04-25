@@ -112,4 +112,8 @@ export const api = {
   getPresets: () => _invoke<{ presets: string[] }>('theme_presets'),
   applyPreset: (name: string) => _invoke<ThemeConfig>('theme_preset', { name }),
   resetTheme: () => _invoke<ThemeConfig>('theme_reset'),
+
+  historyList: (body?: { limit?: number }) => _invoke<{ runs: any[] }>('history_list', body as Record<string, unknown>),
+  historyGet: (id: number) => _invoke<{ run: any }>('history_get', { id }),
+  historyDelete: (id: number) => _invoke<{ deleted: boolean }>('history_delete', { id }),
 };
