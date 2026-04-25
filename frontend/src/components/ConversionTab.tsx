@@ -4,6 +4,7 @@ import { LogEntry, PreviewItem, ProcessStatus } from '../types';
 import Button from './ui/Button';
 import Badge from './ui/Badge';
 import Thumbnail from './Thumbnail';
+import ImagePreview from './ImagePreview';
 
 export default function ConversionTab() {
   const [files, setFiles] = useState<string[]>([]);
@@ -22,6 +23,7 @@ export default function ConversionTab() {
   const [status, setStatus] = useState<ProcessStatus | null>(null);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [preview, setPreview] = useState<PreviewItem[] | null>(null);
+  const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [activeSection, setActiveSection] = useState<'files' | 'options' | 'rename' | 'output'>('files');
@@ -236,7 +238,8 @@ export default function ConversionTab() {
                         key={f}
                         className={`flex items-center gap-2 px-3 py-2 rounded-btn text-xs transition-colors ${
                           i % 2 === 0 ? 'bg-mc-white' : 'bg-mc-lifted'
-                        }`}
+                        } ${selectedFile === f ? 'ring-2 ring-mc-signal' : ''}`}
+                        onClick={() => setSelectedFile(f)}
                       >
                         <Thumbnail path={f} />
                         <span className="flex-1 truncate pr-2 text-mc-ink font-medium">{f.split('\\').pop()}</span>
@@ -253,6 +256,18 @@ export default function ConversionTab() {
                 </div>
               )}
             </div>
+
+            {selectedFile && (
+              <div className="h-56 shrink-0 border-t border-mc-dust/20 pt-3 mt-3">
+                <ImagePreview
+                  path={selectedFile}
+                  formato={formato}
+                  calidad={calidad}
+                  resizeAncho={resizeAncho}
+                  resizeAlto={resizeAlto}
+                />
+              </div>
+            )}
 
             <div className="flex items-center justify-between mt-3 shrink-0">
               <Badge variant={files.length ? 'success' : 'default'}>
