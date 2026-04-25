@@ -7,6 +7,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('ipc-notify', listener);
     return () => ipcRenderer.removeListener('ipc-notify', listener);
   },
+  onUpdateAvailable: (callback) => {
+    const listener = (event, info) => callback(info);
+    ipcRenderer.on('update-available', listener);
+    return () => ipcRenderer.removeListener('update-available', listener);
+  },
+  onUpdateDownloaded: (callback) => {
+    const listener = (event, info) => callback(info);
+    ipcRenderer.on('update-downloaded', listener);
+    return () => ipcRenderer.removeListener('update-downloaded', listener);
+  },
+  quitAndInstall: () => ipcRenderer.send('quit-and-install'),
 });
 
 window.addEventListener('error', (e) => {

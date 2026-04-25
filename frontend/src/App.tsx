@@ -55,13 +55,41 @@ type TabId = typeof tabs[number]['id'];
 function App() {
   const [activeTab, setActiveTab] = useState<TabId>('convert');
   const [version, setVersion] = useState<string>('');
+  const [updateInfo, setUpdateInfo] = useState<any>(null);
 
   useEffect(() => {
     api.version().then((v) => setVersion(v.version)).catch(() => {});
   }, []);
 
+  useEffect(() => {
+    if (!window.electronAPI?.onUpdateAvailable) return;
+    const unsubAvail = window.electronAPI.onUpdateAvailable((info: any) => {
+      setUpdateInfo({ ...info, status: 'available' });
+    });
+    const unsubDown = window.electronAPI.onUpdateDownloaded((info: any) => {
+      setUpdateInfo({ ...info, status: 'downloaded' });
+    });
+    return () => {
+      unsubAvail();
+      unsubDown();
+    };
+  }, []);
+
   return (
     <div className="flex h-screen w-screen bg-mc-canvas text-mc-ink font-mark overflow-hidden">
+      {updateInfo && (
+        <div className="fixed top-0 left-0 right-0 bg-mc-signal text-white px-6 py-3 flex items-center justify-between z-50 shadow-card">
+          <span className="text-sm font-medium">
+            Nueva versión disponible: {updateInfo.version || 'actualización'}
+          </span>
+          <button
+            onClick={() => window.electronAPI?.quitAndInstall?.()}
+            className="text-sm font-bold underline hover:no-underline"
+          >
+            {updateInfo.status === 'downloaded' ? 'Reiniciar para actualizar' : 'Descargando...'}
+          </button>
+        </div>
+      )}
       {/* Sidebar profesional */}
       <aside className="w-[72px] flex flex-col items-center py-6 bg-mc-white border-r border-mc-dust/20 shrink-0">
         {/* Logo compacto */}

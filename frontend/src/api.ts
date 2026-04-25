@@ -62,6 +62,9 @@ declare global {
     electronAPI?: {
       invoke: (method: string, params?: Record<string, unknown>) => Promise<unknown>;
       onNotify: (callback: (method: string, params: unknown) => void) => () => void;
+      onUpdateAvailable?: (callback: (info: any) => void) => () => void;
+      onUpdateDownloaded?: (callback: (info: any) => void) => () => void;
+      quitAndInstall?: () => void;
     };
   }
 }

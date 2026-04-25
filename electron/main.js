@@ -1,6 +1,7 @@
 const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 const { spawn } = require('child_process');
+const { autoUpdater } = require('electron-updater');
 
 const isDev = !app.isPackaged;
 
@@ -160,6 +161,23 @@ ipcMain.handle('ipc-call', async (event, method, params) => {
   });
 });
 
+// Auto-updater events
+autoUpdater.on('update-available', (info) => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('update-available', info);
+  }
+});
+
+autoUpdater.on('update-downloaded', (info) => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('update-downloaded', info);
+  }
+});
+
+autoUpdater.on('error', (err) => {
+  console.error('Auto-updater error:', err);
+});
+
 function createWindow() {
   const { width, height } = require('electron').screen.getPrimaryDisplay().workAreaSize;
 
@@ -203,6 +221,10 @@ app.whenReady().then(async () => {
   try {
     await startPythonBackend();
     createWindow();
+    // Check for updates in production
+    if (!isDev) {
+      autoUpdater.checkForUpdates();
+    }
   } catch (err) {
     dialog.showErrorBox('Error de inicio', err.message);
     app.quit();
@@ -215,6 +237,10 @@ app.on('window-all-closed', () => {
     pythonProcess.kill();
   }
   if (process.platform !== 'darwin') app.quit();
+});
+
+ipcMain.on('quit-and-install', () => {
+  autoUpdater.quitAndInstall();
 });
 
 app.on('activate', () => {
