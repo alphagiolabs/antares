@@ -3,6 +3,7 @@ import { api, onNotify } from '../api';
 import { LogEntry, PreviewItem, ProcessStatus } from '../types';
 import Button from './ui/Button';
 import Badge from './ui/Badge';
+import Thumbnail from './Thumbnail';
 
 export default function ConversionTab() {
   const [files, setFiles] = useState<string[]>([]);
@@ -233,11 +234,12 @@ export default function ConversionTab() {
                     {files.map((f, i) => (
                       <div
                         key={f}
-                        className={`flex items-center justify-between px-3 py-2 rounded-btn text-xs transition-colors ${
+                        className={`flex items-center gap-2 px-3 py-2 rounded-btn text-xs transition-colors ${
                           i % 2 === 0 ? 'bg-mc-white' : 'bg-mc-lifted'
                         }`}
                       >
-                        <span className="truncate pr-2 text-mc-ink font-medium">{f.split('\\').pop()}</span>
+                        <Thumbnail path={f} />
+                        <span className="flex-1 truncate pr-2 text-mc-ink font-medium">{f.split('\\').pop()}</span>
                         <button
                           onClick={() => removeFile(i)}
                           className="shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-mc-slate hover:bg-mc-ink hover:text-white transition-all text-xs"
