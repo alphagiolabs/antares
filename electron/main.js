@@ -1,0 +1,222 @@
+const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const path = require('path');
+const { spawn } = require('child_process');
+
+const isDev = !app.isPackaged;
+
+let mainWindow;
+let pythonProcess = null;
+
+function getBackendCommand() {
+  if (isDev) {
+    const pythonPath = process.platform === 'win32'
+      ? path.join(__dirname, '..', 'venv312', 'Scripts', 'python.exe')
+      : path.join(__dirname, '..', 'venv312', 'bin', 'python');
+    const script = path.join(__dirname, '..', 'backend', 'main.py');
+    return { cmd: pythonPath, args: [script] };
+  }
+  // Production: use PyInstaller bundled executable
+  const exePath = process.platform === 'win32'
+    ? path.join(process.resourcesPath, 'backend', 'HidroConvertBackend.exe')
+    : path.join(process.resourcesPath, 'backend', 'HidroConvertBackend');
+  return { cmd: exePath, args: [] };
+}
+
+async function startPythonBackend(attempt = 1) {
+  try {
+    await _startPythonBackend();
+  } catch (err) {
+    console.error(`Backend start attempt ${attempt} failed:`, err.message);
+    if (attempt >= 3) {
+      dialog.showErrorBox(
+        'Error de inicio',
+        'El backend no pudo iniciar después de 3 intentos. Intenta reiniciar la aplicación.'
+      );
+      app.quit();
+      return;
+    }
+    const delay = Math.pow(2, attempt - 1) * 1000;
+    await new Promise(r => setTimeout(r, delay));
+    return startPythonBackend(attempt + 1);
+  }
+}
+
+function _startPythonBackend() {
+  const { cmd, args } = getBackendCommand();
+  
+  pythonProcess = spawn(cmd, args, {
+    stdio: ['pipe', 'pipe', 'pipe'],
+    env: { ...process.env, PYTHONIOENCODING: 'utf-8' },
+  });
+
+  pythonProcess.stderr.on('data', (data) => {
+    console.error('[Python]', data.toString().trim());
+  });
+
+  pythonProcess.on('close', (code) => {
+    console.log(`Python backend exited with code ${code}`);
+    pythonProcess = null;
+  });
+
+  pythonProcess.on('error', (err) => {
+    console.error('Failed to start Python backend:', err);
+    dialog.showErrorBox('Backend Error', `No se pudo iniciar el backend Python:\n${err.message}`);
+    app.quit();
+  });
+
+  return new Promise((resolve, reject) => {
+    let buffer = '';
+    const onData = (data) => {
+      buffer += data.toString();
+      const lines = buffer.split('\n');
+      buffer = lines.pop();
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        try {
+          const msg = JSON.parse(line);
+          if (msg.method === 'ready') {
+            pythonProcess.stdout.off('data', onData);
+            resolve();
+            return;
+          }
+        } catch {
+          // Not JSON, ignore
+        }
+      }
+    };
+    pythonProcess.stdout.on('data', onData);
+    setTimeout(() => reject(new Error('Python backend timeout')), 30000);
+  });
+}
+
+// IPC bridge: frontend -> main -> Python -> main -> frontend
+ipcMain.handle('ipc-call', async (event, method, params) => {
+  if (!pythonProcess || pythonProcess.killed) {
+    throw new Error('Backend no disponible');
+  }
+
+  const id = Math.random().toString(36).slice(2);
+  const request = { jsonrpc: '2.0', id, method, params };
+  
+  return new Promise((resolve, reject) => {
+    let buffer = '';
+    const onData = (data) => {
+      buffer += data.toString();
+      const lines = buffer.split('\n');
+      buffer = lines.pop();
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        try {
+          const msg = JSON.parse(line);
+          // Ignore notifications without id
+          if (msg.id === id) {
+            pythonProcess.stdout.off('data', onData);
+            if (msg.error) {
+              reject(new Error(msg.error.message || msg.error));
+            } else {
+              resolve(msg.result);
+            }
+            return;
+          }
+        } catch {
+          // Not JSON, ignore
+        }
+      }
+    };
+    pythonProcess.stdout.on('data', onData);
+    
+    // Also collect notifications in a separate buffer for the frontend
+    const onNotify = (data) => {
+      let buf = data.toString();
+      const lines = buf.split('\n');
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        try {
+          const msg = JSON.parse(line);
+          if (msg.method && msg.params && msg.id === undefined) {
+            // Notification
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.webContents.send('ipc-notify', msg.method, msg.params);
+            }
+          }
+        } catch {
+          // ignore
+        }
+      }
+    };
+    // Attach notification listener once
+    pythonProcess.stdout.on('data', onNotify);
+    
+    pythonProcess.stdin.write(JSON.stringify(request) + '\n');
+
+    setTimeout(() => {
+      pythonProcess.stdout.off('data', onData);
+      pythonProcess.stdout.off('data', onNotify);
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('ipc-notify', 'ipc.error', { message: 'IPC timeout: backend no responde' });
+      }
+      reject(new Error('IPC timeout'));
+    }, 30000);
+  });
+});
+
+function createWindow() {
+  const { width, height } = require('electron').screen.getPrimaryDisplay().workAreaSize;
+
+  mainWindow = new BrowserWindow({
+    width: width,
+    height: height,
+    show: false,
+    frame: true,
+    titleBarStyle: 'hiddenInset',
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+    },
+  });
+
+  // Maximize para ocupar toda la pantalla sin bordes
+  mainWindow.maximize();
+
+  if (isDev) {
+    mainWindow.loadURL('http://localhost:5173');
+    mainWindow.webContents.openDevTools();
+  } else {
+    // In production, the app is packaged in app.asar; resolve the HTML entry
+    const htmlPath = path.join(__dirname, '..', 'frontend', 'dist', 'index.html');
+    console.log('[Electron] Loading production HTML:', htmlPath);
+    mainWindow.loadFile(htmlPath);
+  }
+
+  mainWindow.once('ready-to-show', () => {
+    mainWindow.show();
+  });
+
+  mainWindow.on('closed', () => {
+    mainWindow = null;
+  });
+}
+
+app.whenReady().then(async () => {
+  try {
+    await startPythonBackend();
+    createWindow();
+  } catch (err) {
+    dialog.showErrorBox('Error de inicio', err.message);
+    app.quit();
+  }
+});
+
+app.on('window-all-closed', () => {
+  if (pythonProcess && !pythonProcess.killed) {
+    pythonProcess.stdin.end();
+    pythonProcess.kill();
+  }
+  if (process.platform !== 'darwin') app.quit();
+});
+
+app.on('activate', () => {
+  if (BrowserWindow.getAllWindows().length === 0) createWindow();
+});
