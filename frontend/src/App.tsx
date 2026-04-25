@@ -6,68 +6,35 @@ import AppearanceTab from './components/AppearanceTab';
 import HistoryTab from './components/HistoryTab';
 
 const tabs = [
-  { id: 'convert' as const, label: 'Conversión', icon: convertIcon },
-  { id: 'db' as const, label: 'Base de Datos', icon: dbIcon },
-  { id: 'appearance' as const, label: 'Apariencia', icon: appearanceIcon },
-  { id: 'history' as const, label: 'Historial', icon: historyIcon },
+  { id: 'convert' as const, label: 'Conversión', icon: '⚡' },
+  { id: 'db' as const, label: 'Base de Datos', icon: '🗄️' },
+  { id: 'appearance' as const, label: 'Apariencia', icon: '🎨' },
+  { id: 'history' as const, label: 'Historial', icon: '📋' },
 ];
-
-function convertIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-      <polyline points="17 8 12 3 7 8" />
-      <line x1="12" y1="3" x2="12" y2="15" />
-    </svg>
-  );
-}
-
-function dbIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <ellipse cx="12" cy="5" rx="9" ry="3" />
-      <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" />
-      <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
-    </svg>
-  );
-}
-
-function appearanceIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="3" />
-      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
-    </svg>
-  );
-}
-
-function historyIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="10" />
-      <polyline points="12 6 12 12 16 14" />
-    </svg>
-  );
-}
 
 type TabId = typeof tabs[number]['id'];
 
 function App() {
   const [activeTab, setActiveTab] = useState<TabId>('convert');
   const [version, setVersion] = useState<string>('');
-  const [updateInfo, setUpdateInfo] = useState<any>(null);
+  const [toast, setToast] = useState<{ message: string; action?: () => void } | null>(null);
 
   useEffect(() => {
     api.version().then((v) => setVersion(v.version)).catch(() => {});
   }, []);
 
   useEffect(() => {
-    if (!window.electronAPI?.onUpdateAvailable) return;
+    if (!window.electronAPI?.onUpdateAvailable || !window.electronAPI?.onUpdateDownloaded) return;
     const unsubAvail = window.electronAPI.onUpdateAvailable((info: any) => {
-      setUpdateInfo({ ...info, status: 'available' });
+      setToast({
+        message: `Nueva versión disponible: ${info.version || 'actualización'}`,
+      });
     });
     const unsubDown = window.electronAPI.onUpdateDownloaded((info: any) => {
-      setUpdateInfo({ ...info, status: 'downloaded' });
+      setToast({
+        message: `Actualización lista: ${info.version || 'actualización'}`,
+        action: () => { if (window.electronAPI?.quitAndInstall) window.electronAPI.quitAndInstall(); },
+      });
     });
     return () => {
       unsubAvail();
@@ -76,80 +43,79 @@ function App() {
   }, []);
 
   return (
-    <div className="flex h-screen w-screen bg-mc-canvas text-mc-ink font-mark overflow-hidden">
-      {updateInfo && (
-        <div className="fixed top-0 left-0 right-0 bg-mc-signal text-white px-6 py-3 flex items-center justify-between z-50 shadow-card">
-          <span className="text-sm font-medium">
-            Nueva versión disponible: {updateInfo.version || 'actualización'}
-          </span>
-          <button
-            onClick={() => window.electronAPI?.quitAndInstall?.()}
-            className="text-sm font-bold underline hover:no-underline"
-          >
-            {updateInfo.status === 'downloaded' ? 'Reiniciar para actualizar' : 'Descargando...'}
-          </button>
-        </div>
-      )}
-      {/* Sidebar profesional */}
-      <aside className="w-[72px] flex flex-col items-center py-6 bg-mc-white border-r border-mc-dust/20 shrink-0">
-        {/* Logo compacto */}
-        <div className="flex flex-col items-center mb-8">
-          <div className="flex -space-x-1.5">
-            <div className="w-5 h-5 rounded-full bg-mc-red opacity-90 mix-blend-multiply" />
-            <div className="w-5 h-5 rounded-full bg-mc-yellow opacity-90 mix-blend-multiply" />
+    <div className="flex h-screen w-screen bg-dark-base text-txt-primary font-mark overflow-hidden animate-fade-in">
+      {/* Sidebar 240px */}
+      <aside className="w-[240px] flex flex-col bg-dark-surface border-r border-bdr-subtle shrink-0">
+        {/* Logo + App name */}
+        <div className="px-5 pt-6 pb-4">
+          <div className="flex items-center gap-3 mb-1">
+            <div className="flex -space-x-1.5">
+              <div className="w-5 h-5 rounded-full bg-mc-red opacity-90 mix-blend-multiply shadow-sm" />
+              <div className="w-5 h-5 rounded-full bg-mc-yellow opacity-90 mix-blend-multiply shadow-sm" />
+            </div>
+            <span className="text-base font-bold text-txt-primary tracking-tight">HidroConvert</span>
           </div>
+          <span className="text-[10px] text-txt-muted font-medium tracking-wider uppercase ml-8">v{version || '0.2.0'}</span>
         </div>
 
-        {/* Nav icons */}
-        <nav className="flex flex-col gap-3 flex-1">
+        {/* Divider */}
+        <div className="mx-5 h-px bg-bdr-subtle" />
+
+        {/* Nav items */}
+        <nav className="flex flex-col gap-1 flex-1 px-3 py-4">
           {tabs.map((t) => {
             const isActive = activeTab === t.id;
             return (
               <button
                 key={t.id}
                 onClick={() => setActiveTab(t.id)}
-                title={t.label}
-                className={`w-12 h-12 rounded-btn flex items-center justify-center transition-all duration-200 ${
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${
                   isActive
-                    ? 'bg-mc-ink text-mc-canvas shadow-card'
-                    : 'text-mc-slate hover:bg-mc-lifted hover:text-mc-ink'
+                    ? 'bg-dark-elevated text-txt-primary border-l-[3px] border-accent'
+                    : 'text-txt-muted hover:bg-dark-elevated hover:text-txt-secondary border-l-[3px] border-transparent'
                 }`}
               >
-                {t.icon()}
+                <span className="text-base w-6 text-center">{t.icon}</span>
+                <span className="flex-1 text-left">{t.label}</span>
               </button>
             );
           })}
         </nav>
 
-        {/* Footer sidebar */}
-        <div className="text-[10px] text-mc-dust font-medium tracking-wider uppercase mt-auto">
-          v{version}
+        {/* Divider */}
+        <div className="mx-5 h-px bg-bdr-subtle" />
+
+        {/* Footer */}
+        <div className="px-5 py-4 text-[10px] text-txt-muted font-medium tracking-wider uppercase">
+          HidroConvert © 2026
         </div>
       </aside>
 
       {/* Main content area */}
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        {/* Header compacto */}
-        <header className="shrink-0 px-8 py-5 flex items-center justify-between border-b border-mc-dust/20">
-          <div>
-            <h1 className="text-xl font-medium tracking-display">HidroConvert</h1>
-            <p className="text-xs text-mc-slate mt-0.5">Conversor y renombrador profesional de imágenes</p>
+        <div className="flex-1 overflow-hidden relative">
+          <div key={activeTab} className="h-full w-full animate-fade-in">
+            {activeTab === 'convert' && <ConversionTab />}
+            {activeTab === 'db' && <DatabaseTab />}
+            {activeTab === 'appearance' && <AppearanceTab />}
+            {activeTab === 'history' && <HistoryTab />}
           </div>
-          <div className="flex items-center gap-3">
-            <span className="text-xs text-mc-slate bg-mc-lifted px-3 py-1.5 rounded-pill border border-mc-dust/30">
-              {tabs.find(t => t.id === activeTab)?.label}
-            </span>
-          </div>
-        </header>
-
-        {/* Content viewport — sin scrollbars */}
-        <div className="flex-1 overflow-hidden">
-          {activeTab === 'convert' && <ConversionTab />}
-          {activeTab === 'db' && <DatabaseTab />}
-          {activeTab === 'appearance' && <AppearanceTab />}
-          {activeTab === 'history' && <HistoryTab />}
         </div>
       </main>
+
+      {/* Toast notification */}
+      {toast && (
+        <div className="fixed bottom-6 right-6 bg-dark-surface border border-bdr-subtle rounded-xl px-5 py-3 shadow-elevated flex items-center gap-3 animate-slide-up z-50">
+          <span className="w-2 h-2 rounded-full bg-accent animate-pulse" />
+          <span className="text-sm text-txt-primary">{toast.message}</span>
+          {toast.action && (
+            <button onClick={toast.action} className="text-sm font-bold text-accent hover:text-accent-hover underline ml-2">
+              Instalar
+            </button>
+          )}
+          <button onClick={() => setToast(null)} className="text-txt-muted hover:text-txt-primary ml-2">✕</button>
+        </div>
+      )}
     </div>
   );
 }
