@@ -1,0 +1,116 @@
+{
+  "name": "hidro-convert",
+  "version": "0.2.0",
+  "description": "Conversor y renombrador profesional de imágenes — nativo de escritorio",
+  "author": "HidroConvert",
+  "private": true,
+  "main": "electron/main.js",
+  "scripts": {
+    "dev": "concurrently \"cd frontend && npm run dev\" \"wait-on http://localhost:5173 && electron electron/main.js\"",
+    "build:frontend": "cd frontend && npm run build",
+    "build:backend": "node scripts/build-backend.js",
+    "build:win": "npm run build:backend && npm run build:frontend && electron-builder --win",
+    "build:all": "npm run build:backend && npm run build:frontend && electron-builder --win --mac --linux",
+    "dist": "npm run build:backend && npm run build:frontend && electron-builder",
+    "dist:dir": "npm run build:backend && npm run build:frontend && electron-builder --dir",
+    "test": "cd backend && python -m pytest ../tests -v",
+    "lint:python": "cd backend && ruff check .",
+    "lint:fix": "cd backend && ruff check . --fix"
+  },
+  "build": {
+    "appId": "com.hidroconvert.app",
+    "productName": "HidroConvert",
+    "directories": {
+      "output": "dist-electron",
+      "buildResources": "assets"
+    },
+    "files": [
+      "!**/*",
+      "frontend/dist/**/*",
+      "electron/**/*",
+      "assets/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "assets",
+        "to": "assets",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "dist",
+        "to": "backend",
+        "filter": [
+          "HidroConvertBackend.exe"
+        ]
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "category": "public.app-category.utilities"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Utility"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "allowElevation": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "HidroConvert",
+      "artifactName": "HidroConvert-Setup-${version}.exe"
+    },
+    "portable": {
+      "artifactName": "HidroConvert-Portable-${version}.exe"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "HIDROAA",
+      "repo": "hidro_convert"
+    },
+    "asar": true,
+    "asarUnpack": [
+      "frontend/dist/**/*",
+      "electron/**/*"
+    ]
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.0",
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0",
+    "wait-on": "^8.0.0"
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.3"
+  }
+}

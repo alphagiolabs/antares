@@ -1,0 +1,135 @@
+@import url('https://fonts.googleapis.com/css2?family=Sofia+Sans:ital,wght@0,400;0,450;0,500;0,700;1,400&display=swap');
+
+:root {
+  --mc-canvas: #F3F0EE;
+  --mc-lifted: #FCFBFA;
+  --mc-white: #FFFFFF;
+  --mc-bone: #F4F4F4;
+  --mc-ink: #141413;
+  --mc-charcoal: #262627;
+  --mc-slate: #696969;
+  --mc-granite: #555555;
+  --mc-graphite: #565656;
+  --mc-dust: #D1CDC7;
+  --mc-signal: #CF4500;
+  --mc-signalLight: #F37338;
+  --mc-clay: #9A3A0A;
+  --mc-linkBlue: #3860BE;
+  --mc-red: #EB001B;
+  --mc-yellow: #F79E1B;
+  --mc-ghost: #E8E2DA;
+}
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html, body, #root {
+    height: 100%;
+    overflow: hidden;
+  }
+  body {
+    background-color: #F3F0EE;
+    color: #141413;
+    font-family: 'Sofia Sans', Inter, Arial, sans-serif;
+    font-weight: 450;
+    line-height: 1.4;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  body::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@layer components {
+  .mc-card {
+    @apply bg-mc-lifted rounded-card p-6 shadow-card transition-all duration-300;
+  }
+  .mc-card-hover:hover {
+    @apply shadow-elevated;
+  }
+  .mc-btn-primary {
+    @apply px-[24px] py-[6px] font-medium text-[16px] rounded-btn bg-mc-ink text-mc-canvas border-[1.5px] border-mc-ink transition-all duration-200;
+    letter-spacing: -0.02em;
+  }
+  .mc-btn-primary:hover {
+    @apply bg-mc-charcoal border-mc-charcoal;
+  }
+  .mc-btn-primary:active {
+    @apply translate-y-[2px];
+  }
+  .mc-btn-secondary {
+    @apply px-[24px] py-[6px] font-medium text-[16px] rounded-btn bg-mc-white text-mc-ink border-[1.5px] border-mc-ink transition-all duration-200;
+    letter-spacing: -0.02em;
+  }
+  .mc-btn-secondary:hover {
+    @apply bg-mc-canvas;
+  }
+  .mc-btn-signal {
+    @apply px-[30px] py-[1px] font-normal text-[13px] rounded-[24px] bg-mc-signal text-white transition-all duration-200 border-0;
+    letter-spacing: 0.13px;
+  }
+  .mc-btn-signal:hover {
+    @apply opacity-90;
+  }
+  .mc-input {
+    @apply bg-mc-white text-mc-ink border border-mc-dust rounded-pill px-5 py-2.5 text-base outline-none transition-all duration-200;
+    font-weight: 450;
+  }
+  .mc-input:focus {
+    @apply border-mc-ink ring-1 ring-mc-ink/20;
+  }
+  .mc-input::placeholder {
+    @apply text-mc-dust;
+  }
+  .mc-label {
+    @apply text-sm font-bold uppercase tracking-eyebrow text-mc-slate mb-2;
+  }
+  .mc-eyebrow {
+    @apply text-sm font-bold uppercase tracking-eyebrow text-mc-slate flex items-center gap-2;
+  }
+  .mc-eyebrow::before {
+    content: '';
+    @apply w-1.5 h-1.5 rounded-full bg-mc-signalLight inline-block;
+  }
+  .mc-chip {
+    @apply inline-flex items-center px-5 py-2 rounded-pill bg-mc-white text-mc-ink text-sm font-medium border border-mc-dust/50 transition-all duration-200;
+  }
+  .mc-chip:hover {
+    @apply border-mc-ink;
+  }
+  .mc-chip-active {
+    @apply inline-flex items-center px-5 py-2 rounded-pill bg-mc-ink text-mc-canvas text-sm font-medium border border-mc-ink transition-all duration-200;
+  }
+}
+
+@layer utilities {
+  .animate-fade-in {
+    animation: fadeIn 0.4s ease-out forwards;
+  }
+  .animate-slide-up {
+    animation: slideUp 0.5s ease-out forwards;
+  }
+  .animate-scale-in {
+    animation: scaleIn 0.3s ease-out forwards;
+  }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
