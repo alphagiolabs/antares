@@ -42,17 +42,17 @@ export default function ImagePreview({ path, formato, calidad, resizeAncho, resi
   return (
     <div className="flex gap-4 h-full min-h-0">
       <div className="flex-1 flex flex-col min-w-0 min-h-0">
-        <span className="text-xs font-bold uppercase tracking-eyebrow text-mc-slate mb-2">Original</span>
-        <div className="flex-1 min-h-0 rounded-card bg-mc-ink overflow-hidden">
+        <span className="text-xs font-bold uppercase tracking-eyebrow text-txt-secondary mb-2">Original</span>
+        <div className="flex-1 min-h-0 rounded-2xl bg-dark-surface border border-bdr-subtle overflow-hidden">
           <img src={originalSrc} alt="" className="w-full h-full object-contain" />
         </div>
       </div>
       <div className="flex-1 flex flex-col min-w-0 min-h-0">
-        <span className="text-xs font-bold uppercase tracking-eyebrow text-mc-slate mb-2">Previsualización</span>
-        <div className="flex-1 min-h-0 rounded-card bg-mc-ink overflow-hidden flex items-center justify-center">
-          {loading && <span className="text-mc-slate text-sm">Generando...</span>}
+        <span className="text-xs font-bold uppercase tracking-eyebrow text-txt-secondary mb-2">Previsualización</span>
+        <div className="flex-1 min-h-0 rounded-2xl bg-dark-surface border border-bdr-subtle overflow-hidden flex items-center justify-center">
+          {loading && <span className="text-txt-muted text-sm">Generando...</span>}
           {!loading && preview && <img src={preview} alt="" className="w-full h-full object-contain" />}
-          {!loading && !preview && <span className="text-mc-dust text-sm">No disponible</span>}
+          {!loading && !preview && <span className="text-txt-muted text-sm">No disponible</span>}
         </div>
       </div>
     </div>
