@@ -1,7 +1,8 @@
 import React from 'react';
 
 interface ButtonProps {
-  variant?: 'primary' | 'secondary' | 'ghost';
+  variant?: 'primary' | 'secondary' | 'ghost' | 'danger';
+  size?: 'sm' | 'md' | 'lg';
   onClick?: () => void;
   disabled?: boolean;
   className?: string;
@@ -10,28 +11,35 @@ interface ButtonProps {
 
 export default function Button({
   variant = 'primary',
+  size = 'md',
   onClick,
   disabled = false,
   className = '',
   children,
 }: ButtonProps) {
-  const base = 'inline-flex items-center gap-2 px-4 py-2 rounded-btn text-sm font-medium transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed active:translate-y-[1px]';
-  const variants = {
-    primary: 'text-white shadow-md hover:shadow-glow',
-    secondary: 'bg-dark-elevated text-txt-secondary border border-bdr-medium hover:border-bdr-active hover:text-txt-primary',
-    ghost: 'bg-transparent text-txt-secondary hover:bg-dark-elevated hover:text-txt-primary',
+  const sizeClasses = {
+    sm: 'px-3 py-1.5 text-xs',
+    md: 'px-5 py-2 text-sm',
+    lg: 'px-7 py-3 text-base',
   };
 
-  const primaryStyle = variant === 'primary'
-    ? { background: 'linear-gradient(135deg, #FF6B2C, #FF8F5E)' }
-    : {};
+  const variants = {
+    primary: 'text-white font-medium',
+    secondary: 'bg-[#1A1A1A] text-[#A0A0A0] border border-[#222222] hover:text-white hover:border-[#444444]',
+    ghost: 'bg-transparent text-[#A0A0A0] hover:bg-[#1A1A1A] hover:text-white',
+    danger: 'bg-transparent text-[#EF4444] border border-[#EF4444]/30 hover:bg-[#EF4444]/10',
+  };
+
+  const isPrimary = variant === 'primary';
 
   return (
     <button
       onClick={onClick}
       disabled={disabled}
-      className={`${base} ${variants[variant]} ${className}`}
-      style={primaryStyle}
+      className={`inline-flex items-center justify-center gap-2 rounded-full transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed active:scale-[0.98] ${sizeClasses[size]} ${variants[variant]} ${className}`}
+      style={isPrimary ? { backgroundColor: disabled ? '#222222' : '#FF6B2C' } : undefined}
+      onMouseEnter={(e) => { if (isPrimary && !disabled) (e.currentTarget as HTMLButtonElement).style.backgroundColor = '#FF8F5E'; }}
+      onMouseLeave={(e) => { if (isPrimary && !disabled) (e.currentTarget as HTMLButtonElement).style.backgroundColor = '#FF6B2C'; }}
     >
       {children}
     </button>
