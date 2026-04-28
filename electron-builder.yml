@@ -1,0 +1,130 @@
+appId: com.hidroconvert.app
+productName: HidroConvert
+copyright: Copyright © 2026 HidroConvert
+directories:
+  output: dist-electron
+  buildResources: assets
+files:
+  - "!frontend/src/**/*"
+  - "!frontend/public/**/*"
+  - "!tests/**/*"
+  - "!backend/**/*"
+  - "!scripts/**/*"
+  - "!docs/**/*"
+  - "!data/**/*"
+  - "!build/**/*"
+  - "!dist/**/*"
+  - "!**/.git/**/*"
+  - "!**/.factory/**/*"
+  - "!**/.github/**/*"
+  - "!**/node_modules/.bin/**/*"
+  - "!**/node_modules/.cache/**/*"
+  - "!**/node_modules/**/*.map"
+  - "!**/node_modules/**/*.ts"
+  - "!**/node_modules/**/*.d.ts"
+  - "!**/node_modules/**/test/**/*"
+  - "!**/node_modules/**/tests/**/*"
+  - "!**/node_modules/**/docs/**/*"
+  - "!**/node_modules/**/examples/**/*"
+  - "!**/node_modules/**/README*"
+  - "!**/node_modules/**/CHANGELOG*"
+  - "!**/node_modules/**/LICENSE*"
+  - "!node_modules/@*/**/*"
+  - "!node_modules/concurrently/**/*"
+  - "!node_modules/wait-on/**/*"
+  - "!node_modules/electron/**/*"
+  - "!node_modules/electron-builder/**/*"
+  - "!node_modules/electron-builder-squirrel-windows/**/*"
+  - "!node_modules/app-builder-lib/**/*"
+  - "!node_modules/builder-util/**/*"
+  - "!node_modules/builder-util-runtime/**/*"
+  - "!node_modules/dmg-builder/**/*"
+  - "!node_modules/electron-publish/**/*"
+  - "!node_modules/electron-rebuild/**/*"
+  - "!node_modules/@electron/**/*"
+  - "frontend/dist/**/*"
+  - "electron/**/*"
+  - "assets/**/*"
+  - "node_modules/**/*"
+extraResources:
+  - from: assets
+    to: assets
+    filter: ["**/*"]
+  - from: dist
+    to: backend
+    filter: ["HidroConvertBackend*"]
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+    - target: portable
+      arch: [x64]
+  icon: assets/icon.ico
+  legalTrademarks: "HidroConvert"
+  requestedExecutionLevel: asInvoker
+  verifyUpdateCodeSignature: false
+  signtoolOptions:
+    signingHashAlgorithms:
+      - sha256
+mac:
+  target:
+    - target: dmg
+      arch: [x64, arm64]
+    - target: zip
+      arch: [x64, arm64]
+  category: public.app-category.utilities
+  icon: assets/icon.icns
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+linux:
+  target:
+    - AppImage
+    - deb
+    - rpm
+  category: Utility
+  icon: assets/icon.png
+  maintainer: "HidroConvert"
+  vendor: "HidroConvert"
+snap:
+  grade: stable
+  confinement: strict
+  summary: "Conversor y renombrador profesional de imágenes"
+  publish:
+    provider: snapStore
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  allowElevation: true
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+  shortcutName: HidroConvert
+  uninstallDisplayName: "HidroConvert"
+  installerIcon: assets/icon.ico
+  uninstallerIcon: assets/icon.ico
+  installerHeaderIcon: assets/icon.ico
+  artifactName: "HidroConvert-Setup-${version}.exe"
+  deleteAppDataOnUninstall: false
+  runAfterFinish: true
+  menuCategory: true
+  displayLanguageSelector: false
+portable:
+  artifactName: "HidroConvert-Portable-${version}.exe"
+dmg:
+  artifactName: "HidroConvert-${version}-${arch}.dmg"
+  icon: assets/icon.icns
+  sign: false
+  contents:
+    - x: 130
+      y: 220
+    - x: 410
+      y: 220
+      type: link
+      path: /Applications
+publish:
+  provider: github
+  owner: HIDROAA
+  repo: hidro_convert
+  releaseType: release
+asar: true
