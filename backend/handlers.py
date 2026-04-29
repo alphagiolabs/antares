@@ -373,10 +373,11 @@ class Handlers:
     @with_locale
     @validate_params('files', 'destino')
     def process_start(params: dict[str, Any]) -> dict[str, bool]:
-        if _state.running:
-            error_msg = "error.process_already_running"
-            _log(t(error_msg), "warn")
-            return {"started": False}
+        with _state._lock:
+            if _state.running:
+                error_msg = "error.process_already_running"
+                _log(t(error_msg), "warn")
+                return {"started": False}
         
         files = params.get("files", [])
         if not files or not isinstance(files, list) or len(files) == 0:
@@ -608,8 +609,8 @@ def _process_thread(params: dict[str, Any]) -> None:
         formato=formato,
         calidad=calidad,
         resize=str(resize) if resize else None,
-        ok_count=_state.ok_count,
-        err_count=_state.err_count,
+        ok_count=ok_count,
+        err_count=err_count,
     )
 
 
