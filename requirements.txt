@@ -1,9 +1,5 @@
-Pillow>=10.0.0
-pandas>=2.0.0
-openpyxl>=3.1.0
+# Dependencies are now managed in pyproject.toml
+# Install with: pip install -e ".[dev]"
 
-# Dev
-pytest>=8.0.0
-pytest-cov>=5.0.0
-mypy>=1.10.0
-ruff>=0.5.0
+# Keep this file for backwards compatibility
+-e .
