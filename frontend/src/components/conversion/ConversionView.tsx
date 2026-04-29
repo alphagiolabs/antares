@@ -1,8 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { api, onNotify } from '../../api';
-import { LogEntry, PreviewItem, ProcessStatus, RenamePattern } from '../../types';
-import { useToast } from '../../hooks/useToast';
-import { useDialog } from '../../hooks/useDialog';
+import { PreviewItem, ProcessStatus, RenamePattern } from '../../types';
 import Dropzone from './Dropzone';
 import FileGrid from './FileGrid';
 import OptionsCard from './OptionsCard';
@@ -36,8 +34,6 @@ const DEFAULT_FIELDS = ['codigo', 'nombre'];
 const DEFAULT_PATTERN = '{codigo}_{nombre}_{seq}{ext}';
 
 export default function ConversionView() {
-  const { addToast } = useToast();
-  const { confirm } = useDialog();
 
   const [files, setFiles] = useState<string[]>([]);
   const [destino, setDestino] = useState('');
@@ -61,7 +57,6 @@ export default function ConversionView() {
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
   const [running, setRunning] = useState(false);
   const [dragOver, setDragOver] = useState(false);
-  const [gridExpanded, setGridExpanded] = useState(true);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   const namingPresets = patterns.length > 0 ? patterns : buildDefaultPresets(fields);
@@ -293,23 +288,23 @@ export default function ConversionView() {
     : '';
 
   return (
-    <div className="space-y-6">
+    <div
+      className="space-y-6"
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+    >
       {running && status && <ProgressBar progress={status.progress} />}
 
       <Dropzone
         dragOver={dragOver}
-        onDragOver={onDragOver}
-        onDragLeave={onDragLeave}
-        onDrop={onDrop}
         onAddFiles={addFiles}
         onAddFolder={addFolder}
         fileCount={files.length}
-        expanded={gridExpanded}
-        onToggleExpand={() => setGridExpanded(!gridExpanded)}
         onClear={clearFiles}
       />
 
-      {files.length > 0 && gridExpanded && (
+      {files.length > 0 && (
         <FileGrid
           files={files}
           selectedFiles={selectedFiles}
@@ -341,7 +336,6 @@ export default function ConversionView() {
           <RenameCard
             files={files}
             usarRename={usarRename}
-            onToggleRename={(v) => { setUsarRename(v); if (!v) setPreview(null); }}
             namingMode={namingMode}
             onNamingModeChange={(mode) => {
               const preset = namingPresets.find((p) => p.id === mode);
