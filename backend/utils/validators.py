@@ -25,19 +25,35 @@ def es_imagen(ruta: Union[str, Path]) -> bool:
 
 def sanitizar_nombre(nombre: Union[str, Path]) -> str:
     """Elimina caracteres no válidos para nombres de archivo en Windows/Linux.
-
+    
+    Also prevents path traversal attacks.
+    
     Args:
         nombre: Nombre de archivo a sanitizar.
-
+        
     Returns:
         Nombre limpio con caracteres inválidos reemplazados por guiones bajos.
     """
-    nombre_limpio = str(nombre).strip()
+    nombre_str = str(nombre).strip()
+    
+    # First, check for path traversal attempts
+    if '../' in nombre_str or '..\\' in nombre_str:
+        # Extract just the filename without path
+        nombre_str = Path(nombre_str).name
+    
     # Caracteres no permitidos en Windows: < > : " / \ | ? *
-    nombre_limpio = re.sub(r'[<>\:"/\\|?*]', "_", nombre_limpio)
+    nombre_limpio = re.sub(r'[<>\:"/\\|?*]', "_", nombre_str)
+    
+    # Remove control characters (0x00-0x1F, 0x7F)
+    nombre_limpio = re.sub(r'[\x00-\x1F\x7F]', '', nombre_limpio)
+    
     # Eliminar espacios múltiples
     nombre_limpio = re.sub(r'\s+', " ", nombre_limpio)
-    return nombre_limpio.strip()
+    
+    # Prevent names starting with dots (hidden files on Unix)
+    nombre_limpio = nombre_limpio.lstrip('.')
+    
+    return nombre_limpio.strip("_. ")
 
 
 def obtener_codigo_desde_nombre(nombre_archivo: Union[str, Path]) -> str:
@@ -55,12 +71,11 @@ def obtener_codigo_desde_nombre(nombre_archivo: Union[str, Path]) -> str:
 def parse_filename_parts(nombre_archivo: Union[str, Path]) -> tuple[str, str]:
     """Extrae (grupo, secuencia) del nombre de archivo.
 
-    Formato esperado: '{grupo}_{secuencia}.ext'
+    Formato esperado: '{grupo}_{secuencia}.ext' o '{grupo}-{secuencia}.ext'
     Ejemplos:
-        '1_1.jpg'  -> ('1', '1')
-        '1_2.jpg'  -> ('1', '2')
-        '2_1.jpg'  -> ('2', '1')
-        'abc.jpg'  -> ('abc', '1')  # fallback sin secuencia
+        '1_1.jpg'        -> ('1', '1')
+        '69466481-1.jpg' -> ('69466481', '1')
+        'abc.jpg'        -> ('abc', '1')  # fallback sin secuencia
 
     Args:
         nombre_archivo: Nombre o ruta del archivo.
@@ -69,7 +84,7 @@ def parse_filename_parts(nombre_archivo: Union[str, Path]) -> tuple[str, str]:
         Tupla (grupo, secuencia). Si no se encuentra separador, secuencia='1'.
     """
     stem = Path(nombre_archivo).stem
-    idx = stem.rfind("_")
-    if idx > 0 and stem[idx + 1:].isdigit():
-        return stem[:idx], stem[idx + 1:]
+    match = re.match(r"^(.+)[_-](\d+)$", stem)
+    if match:
+        return match.group(1), match.group(2)
     return stem, "1"
