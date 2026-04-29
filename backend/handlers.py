@@ -5,8 +5,6 @@ from __future__ import annotations
 import json
 import logging
 import threading
-import tkinter.filedialog as fd
-import tkinter as tk
 from dataclasses import dataclass, field
 from functools import wraps
 from pathlib import Path
@@ -42,6 +40,7 @@ from backend.core.renamer import RenamerEngine
 from backend.utils.validators import parse_filename_parts
 from backend.ipc_protocol import send_notification
 from backend.utils.i18n import t, set_locale
+from backend.utils.dialogs import request_dialog
 from backend.version import __version__
 
 logger = logging.getLogger(__name__)
@@ -130,22 +129,6 @@ def _log(msg: str, tag: str = "info") -> None:
             _state.logs.pop()
 
 
-# ─── Helpers diálogo ────────────────────────────────────────────────────────
-
-def _run_dialog(func, *args, **kwargs) -> list[str]:
-    """Ejecuta un diálogo tkinter file/folder picker."""
-    root = tk.Tk()
-    root.withdraw()
-    root.attributes("-topmost", True)
-    res = func(*args, **kwargs)
-    root.destroy()
-    if isinstance(res, (tuple, list)):
-        return list(res)
-    if isinstance(res, str) and res.strip():
-        return [res.strip()]
-    return []
-
-
 # ─── Handlers ─────────────────────────────────────────────────────────────────
 
 class Handlers:
@@ -172,41 +155,29 @@ class Handlers:
         return {"formats": get_registry().list_formats()}
 
     # ─── Diálogos ────────────────────────────────────────────────────────────
+    # NOTE: These are now handled by Electron's native dialogs
+    # The frontend should use window.electronAPI for dialogs directly
 
     @staticmethod
     @with_locale
     def dialog_files(params: dict[str, Any]) -> dict[str, list[str]]:
-        from backend.core.converter import VIDEO_FORMATS
-        # Build filetypes for dialog
-        image_exts = []
-        for info in FORMATOS_SOPORTADOS.values():
-            image_exts.extend([e.lower() for e in info["ext"]])
-        image_exts = list(set(image_exts))
-        image_types = [("Imágenes", *image_exts)]
-
-        video_exts = list(VIDEO_FORMATS.values())
-        video_types = [("Videos", *video_exts)]
-
-        all_exts = image_exts + video_exts
-        all_types = [("Todos los archivos", *all_exts)]
-
-        filetypes = all_types + image_types + video_types
-        return {"paths": _run_dialog(fd.askopenfilenames, title="Seleccionar archivos", filetypes=filetypes)}
+        # DEPRECATED: Use Electron's dialog API directly from frontend
+        return {"paths": [], "deprecated": True, "message": "Use Electron dialog from frontend"}
 
     @staticmethod
     @with_locale
     def dialog_folder(params: dict[str, Any]) -> dict[str, list[str]]:
-        return {"paths": _run_dialog(fd.askdirectory, title="Seleccionar carpeta")}
+        return {"paths": [], "deprecated": True}
 
     @staticmethod
     @with_locale
     def dialog_dest(params: dict[str, Any]) -> dict[str, list[str]]:
-        return {"paths": _run_dialog(fd.askdirectory, title="Seleccionar destino")}
+        return {"paths": [], "deprecated": True}
 
     @staticmethod
     @with_locale
     def dialog_save(params: dict[str, Any]) -> dict[str, list[str]]:
-        return {"paths": _run_dialog(fd.asksaveasfilename, title="Guardar archivo")}
+        return {"paths": [], "deprecated": True}
 
     # ─── Base de datos ───────────────────────────────────────────────────────
 
