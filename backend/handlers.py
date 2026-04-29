@@ -2,48 +2,61 @@
 
 from __future__ import annotations
 
+import json
 import logging
-import os
+import threading
 import tkinter.filedialog as fd
 import tkinter as tk
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
-from backend.core.converter import FORMATOS_SOPORTADOS, procesar_lote
+from backend.core.converter import FORMATOS_SOPORTADOS, convertir_imagen
 from backend.core.database import (
     buscar_por_codigo,
-    buscar_por_indice,
     exportar_excel,
     generar_plantilla_excel,
     importar_excel,
-    init_db,
+    limpiar_base_datos,
     obtener_todos,
 )
 from backend.core.config_fields import (
     get_field_names,
     load_fields,
-    reset_to_defaults,
     save_fields,
 )
+from backend.core.config_patterns import (
+    load_patterns,
+    save_patterns,
+    reset_to_defaults as reset_patterns_defaults,
+)
 from backend.core.config_theme import (
-    DEFAULT_THEME,
     PRESETS,
-    get_preset_names,
     load_preset,
     load_theme,
     reset_theme,
     save_theme,
 )
 from backend.core.renamer import RenamerEngine
-from backend.utils.paths import resource_path, user_data_path
-from backend.utils.validators import parse_filename_parts, sanitizar_nombre, obtener_codigo_desde_nombre
+from backend.utils.validators import parse_filename_parts
 from backend.ipc_protocol import send_notification
 from backend.utils.i18n import t, set_locale
+from backend.version import __version__
 
 logger = logging.getLogger(__name__)
 
+# ─── Decorador para locale ──────────────────────────────────────────────────
+
+def with_locale(fn: Callable[..., Any]) -> Callable[..., Any]:
+    """Auto-set locale from params before executing handler."""
+    def wrapper(params: dict[str, Any]) -> Any:
+        set_locale(params.get("locale", "es"))
+        return fn(params)
+    return wrapper
+
 # ─── Estado de procesamiento ────────────────────────────────────────────────
 
+@dataclass
 class ProcessState:
     running: bool = False
     progress: int = 0
@@ -51,27 +64,30 @@ class ProcessState:
     current_file: str = ""
     ok_count: int = 0
     err_count: int = 0
-    logs: list[dict[str, str]] = []
+    logs: list[dict[str, str]] = field(default_factory=list)
     cancel_requested: bool = False
+    _lock: threading.Lock = field(default_factory=threading.Lock)
 
 _state = ProcessState()
 
 
 def _reset_state() -> None:
-    _state.running = False
-    _state.progress = 0
-    _state.total = 0
-    _state.current_file = ""
-    _state.ok_count = 0
-    _state.err_count = 0
-    _state.logs = []
-    _state.cancel_requested = False
+    with _state._lock:
+        _state.running = False
+        _state.progress = 0
+        _state.total = 0
+        _state.current_file = ""
+        _state.ok_count = 0
+        _state.err_count = 0
+        _state.logs = []
+        _state.cancel_requested = False
 
 
 def _log(msg: str, tag: str = "info") -> None:
-    _state.logs.insert(0, {"message": msg, "tag": tag})
-    if len(_state.logs) > 100:
-        _state.logs.pop()
+    with _state._lock:
+        _state.logs.insert(0, {"message": msg, "tag": tag})
+        if len(_state.logs) > 100:
+            _state.logs.pop()
 
 
 # ─── Helpers diálogo ────────────────────────────────────────────────────────
@@ -83,7 +99,11 @@ def _run_dialog(func, *args, **kwargs) -> list[str]:
     root.attributes("-topmost", True)
     res = func(*args, **kwargs)
     root.destroy()
-    return list(res) if isinstance(res, (tuple, list)) else ([res] if res else [])
+    if isinstance(res, (tuple, list)):
+        return list(res)
+    if isinstance(res, str) and res.strip():
+        return [res.strip()]
+    return []
 
 
 # ─── Handlers ─────────────────────────────────────────────────────────────────
@@ -96,137 +116,172 @@ class Handlers:
     # ─── Info ────────────────────────────────────────────────────────────────
 
     @staticmethod
+    @with_locale
     def version(params: dict[str, Any]) -> dict[str, str]:
-        set_locale(params.get("locale", "es"))
-        return {"version": "0.2.0"}
+        return {"version": __version__}
 
     @staticmethod
+    @with_locale
     def formats(params: dict[str, Any]) -> dict[str, list[str]]:
-        set_locale(params.get("locale", "es"))
         return {"formats": list(FORMATOS_SOPORTADOS.keys())}
 
     @staticmethod
+    @with_locale
     def plugin_formats(params: dict[str, Any]) -> dict[str, list[str]]:
-        set_locale(params.get("locale", "es"))
         from backend.core.format_registry import get_registry
         return {"formats": get_registry().list_formats()}
 
     # ─── Diálogos ────────────────────────────────────────────────────────────
 
     @staticmethod
+    @with_locale
     def dialog_files(params: dict[str, Any]) -> dict[str, list[str]]:
-        set_locale(params.get("locale", "es"))
         return {"paths": _run_dialog(fd.askopenfilenames, title="Seleccionar archivos")}
 
     @staticmethod
+    @with_locale
     def dialog_folder(params: dict[str, Any]) -> dict[str, list[str]]:
-        set_locale(params.get("locale", "es"))
         return {"paths": _run_dialog(fd.askdirectory, title="Seleccionar carpeta")}
 
     @staticmethod
+    @with_locale
     def dialog_dest(params: dict[str, Any]) -> dict[str, list[str]]:
-        set_locale(params.get("locale", "es"))
         return {"paths": _run_dialog(fd.askdirectory, title="Seleccionar destino")}
 
     @staticmethod
+    @with_locale
     def dialog_save(params: dict[str, Any]) -> dict[str, list[str]]:
-        set_locale(params.get("locale", "es"))
         return {"paths": _run_dialog(fd.asksaveasfilename, title="Guardar archivo")}
 
     # ─── Base de datos ───────────────────────────────────────────────────────
 
     @staticmethod
+    @with_locale
     def db_records(params: dict[str, Any]) -> dict[str, Any]:
-        set_locale(params.get("locale", "es"))
         return {"records": obtener_todos(), "fields": get_field_names()}
 
     @staticmethod
+    @with_locale
     def db_import(params: dict[str, Any]) -> dict[str, int]:
-        set_locale(params.get("locale", "es"))
         path = params.get("path", "")
         n = importar_excel(path)
         return {"imported": n}
 
     @staticmethod
+    @with_locale
     def db_export(params: dict[str, Any]) -> dict[str, int]:
-        set_locale(params.get("locale", "es"))
         path = params.get("path", "")
         n = exportar_excel(path)
         return {"exported": n}
 
     @staticmethod
+    @with_locale
+    def db_clear(params: dict[str, Any]) -> dict[str, int]:
+        n = limpiar_base_datos()
+        return {"cleared": n}
+
+    @staticmethod
+    @with_locale
     def db_template(params: dict[str, Any]) -> dict[str, Any]:
-        set_locale(params.get("locale", "es"))
         path = params.get("path", "")
+        # Ensure .xlsx extension
+        if path and not path.lower().endswith('.xlsx'):
+            path = path + '.xlsx'
         generar_plantilla_excel(path)
         return {"path": path}
 
     @staticmethod
+    @with_locale
     def scan_folder(params: dict[str, Any]) -> dict[str, list[str]]:
-        set_locale(params.get("locale", "es"))
         folder = params.get("folder", "")
         path = Path(folder)
         if not path.is_dir():
             return {"files": []}
-        exts = []
+        exts: set[str] = set()
         for info in FORMATOS_SOPORTADOS.values():
-            exts.extend([e.lower() for e in info["ext"]])
-            exts.extend([e.upper() for e in info["ext"]])
+            exts.update(e.lower() for e in info["ext"])
+            exts.update(e.upper() for e in info["ext"])
         files = [str(f.resolve()) for f in path.rglob("*") if f.is_file() and f.suffix in exts]
         return {"files": files}
 
     # ─── Campos ─────────────────────────────────────────────────────────────
 
     @staticmethod
+    @with_locale
     def db_fields(params: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
-        set_locale(params.get("locale", "es"))
         return {"fields": load_fields()}
 
     @staticmethod
+    @with_locale
     def db_fields_update(params: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
-        set_locale(params.get("locale", "es"))
         fields = params.get("fields", [])
-        return {"fields": save_fields(fields)}
+        result = save_fields(fields)
+        from backend.core.database import init_db
+        init_db()
+        return {"fields": result}
 
     @staticmethod
+    @with_locale
     def db_fields_reset(params: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
-        set_locale(params.get("locale", "es"))
-        from core.config_fields import reset_to_defaults
-        return {"fields": reset_to_defaults()}
+        from backend.core.config_fields import reset_to_defaults
+        result = reset_to_defaults()
+        from backend.core.database import init_db
+        init_db()
+        return {"fields": result}
+
+    # ─── Patrones de renombrado ────────────────────────────────────────────
+
+    @staticmethod
+    @with_locale
+    def rename_patterns_get(params: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
+        return {"patterns": load_patterns()}
+
+    @staticmethod
+    @with_locale
+    def rename_patterns_update(params: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
+        patterns = params.get("patterns", [])
+        result = save_patterns(patterns)
+        return {"patterns": result}
+
+    @staticmethod
+    @with_locale
+    def rename_patterns_reset(params: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
+        result = reset_patterns_defaults()
+        return {"patterns": result}
 
     # ─── Temas ───────────────────────────────────────────────────────────────
 
     @staticmethod
+    @with_locale
     def theme_get(params: dict[str, Any]) -> dict[str, str]:
-        set_locale(params.get("locale", "es"))
         return load_theme()
 
     @staticmethod
+    @with_locale
     def theme_save(params: dict[str, Any]) -> dict[str, str]:
-        set_locale(params.get("locale", "es"))
         return save_theme(params)
 
     @staticmethod
+    @with_locale
     def theme_presets(params: dict[str, Any]) -> dict[str, list[str]]:
-        set_locale(params.get("locale", "es"))
         return {"presets": list(PRESETS.keys())}
 
     @staticmethod
+    @with_locale
     def theme_preset(params: dict[str, Any]) -> dict[str, str]:
-        set_locale(params.get("locale", "es"))
         name = params.get("name", "")
         return load_preset(name)
 
     @staticmethod
+    @with_locale
     def theme_reset(params: dict[str, Any]) -> dict[str, str]:
-        set_locale(params.get("locale", "es"))
         return reset_theme()
 
     # ─── Proceso y Vista Previa ────────────────────────────────────────────
 
     @staticmethod
+    @with_locale
     def preview(params: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
-        set_locale(params.get("locale", "es"))
         files = params.get("files", [])
         patron = params.get("patron", "")
         secuencia = params.get("secuencia", 1)
@@ -251,48 +306,63 @@ class Handlers:
 
     @staticmethod
     def process_start(params: dict[str, Any]) -> dict[str, bool]:
-        set_locale(params.get("locale", "es"))
+        locale = params.get("locale", "es")
+        set_locale(locale)
         if _state.running:
+            error_msg = "error.process_already_running"
+            _log(t(error_msg), "warn")
             return {"started": False}
+        
+        files = params.get("files", [])
+        if not files or not isinstance(files, list) or len(files) == 0:
+            _log(t("error.no_files_to_process"), "error")
+            return {"started": False}
+        
+        destino = params.get("destino", "")
+        if not destino:
+            _log(t("error.no_destination"), "error")
+            return {"started": False}
+        
         _reset_state()
-        _state.running = True
-        _state.total = len(params.get("files", []))
+        with _state._lock:
+            _state.running = True
+            _state.total = len(files)
 
-        # Iniciar en un thread separado
-        import threading
-        t = threading.Thread(target=_process_thread, args=(params,), daemon=True)
-        t.start()
+        worker_thread = threading.Thread(target=_process_thread, args=(params,), daemon=True)
+        worker_thread.start()
         return {"started": True}
 
     @staticmethod
+    @with_locale
     def process_status(params: dict[str, Any]) -> dict[str, Any]:
-        set_locale(params.get("locale", "es"))
-        return {
-            "running": _state.running,
-            "progress": _state.progress,
-            "current_file": _state.current_file,
-            "ok_count": _state.ok_count,
-            "err_count": _state.err_count,
-            "logs": _state.logs,
-        }
+        with _state._lock:
+            return {
+                "running": _state.running,
+                "progress": _state.progress,
+                "current_file": _state.current_file,
+                "ok_count": _state.ok_count,
+                "err_count": _state.err_count,
+                "logs": _state.logs.copy(),
+            }
 
     @staticmethod
+    @with_locale
     def process_cancel(params: dict[str, Any]) -> dict[str, bool]:
-        set_locale(params.get("locale", "es"))
-        _state.cancel_requested = True
+        with _state._lock:
+            _state.cancel_requested = True
         _log(t("info.process_cancelled"), "warn")
         return {"cancelled": True}
 
     @staticmethod
+    @with_locale
     def history_list(params: dict[str, Any]) -> dict[str, Any]:
-        set_locale(params.get("locale", "es"))
         from backend.core.history import list_runs
         limit = params.get("limit", 50)
         return {"runs": list_runs(limit)}
 
     @staticmethod
+    @with_locale
     def history_get(params: dict[str, Any]) -> dict[str, Any]:
-        set_locale(params.get("locale", "es"))
         from backend.core.history import get_run
         run_id = params.get("id", 0)
         run = get_run(run_id)
@@ -302,22 +372,21 @@ class Handlers:
         return {"run": run}
 
     @staticmethod
+    @with_locale
     def history_delete(params: dict[str, Any]) -> dict[str, bool]:
-        set_locale(params.get("locale", "es"))
         from backend.core.history import delete_run
         run_id = params.get("id", 0)
         return {"deleted": delete_run(run_id)}
 
     @staticmethod
+    @with_locale
     def preview_image(params: dict[str, Any]) -> dict[str, str]:
-        set_locale(params.get("locale", "es"))
         from backend.core.converter import convertir_a_preview
         path = params.get("path", "")
         formato = params.get("formato", "PNG")
         calidad = params.get("calidad", 85)
         resize = params.get("resize")
-        preview = convertir_a_preview(path, formato, calidad, resize)
-        return {"preview": preview}
+        return convertir_a_preview(path, formato, calidad, resize)
 
 
 def _process_thread(params: dict[str, Any]) -> None:
@@ -342,50 +411,55 @@ def _process_thread(params: dict[str, Any]) -> None:
         resize = (int(resize_ancho), int(resize_alto))
 
     for i, fpath in enumerate(files):
-        if _state.cancel_requested:
+        with _state._lock:
+            cancel = _state.cancel_requested
+        if cancel:
             _log(t("info.process_cancelled"), "warn")
             break
 
         p = Path(fpath)
-        _state.progress = int(((i + 1) / len(files)) * 100)
-        _state.current_file = p.name
+        with _state._lock:
+            _state.progress = int(((i + 1) / len(files)) * 100)
+            _state.current_file = p.name
+            progress = _state.progress
+            current_file = _state.current_file
+            ok_count = _state.ok_count
+            err_count = _state.err_count
 
         send_notification("process.progress", {
-            "progress": _state.progress,
-            "current_file": _state.current_file,
-            "ok_count": _state.ok_count,
-            "err_count": _state.err_count,
+            "progress": progress,
+            "current_file": current_file,
+            "ok_count": ok_count,
+            "err_count": err_count,
         })
 
-        # Renombrado
+        ext_dest = FORMATOS_SOPORTADOS[formato]["ext"]
         if engine:
             codigo, seq = parse_filename_parts(p.name)
             datos = buscar_por_codigo(codigo)
             fseq = seq if use_filename_seq else None
             nuevo_nombre = engine.aplicar(p, datos_bd=datos, codigo_manual=codigo, file_seq=fseq)
-            out_path = Path(destino) / nuevo_nombre
+            out_path = (Path(destino) / nuevo_nombre).with_suffix(ext_dest)
         else:
-            ext = FORMATOS_SOPORTADOS[formato]["ext"]
-            out_path = Path(destino) / (p.stem + ext)
+            out_path = Path(destino) / (p.stem + ext_dest)
 
         try:
-            res = procesar_lote([fpath], Path(destino), formato, calidad, resize, keep_exif)
-            if res and isinstance(res[0], Path):
-                if engine and res[0].name != out_path.name:
-                    res[0].rename(out_path)
+            convertir_imagen(fpath, out_path, formato, calidad, resize, keep_exif)
+            with _state._lock:
                 _state.ok_count += 1
-                _log(f"Procesado: {out_path.name}", "ok")
-            else:
-                _state.err_count += 1
-                _log(f"Error: {res[0]}", "error")
+            _log(f"Procesado: {out_path.name}", "ok")
         except Exception as e:
-            _state.err_count += 1
+            with _state._lock:
+                _state.err_count += 1
             _log(t("error.process_failed", file=p.name, error=e), "error")
 
-    _state.running = False
-    _state.progress = 100
-    _log(t("info.process_complete", ok=_state.ok_count, err=_state.err_count), "info")
-    send_notification("process.complete", {"ok_count": _state.ok_count, "err_count": _state.err_count})
+    with _state._lock:
+        _state.running = False
+        _state.progress = 100
+        ok_count = _state.ok_count
+        err_count = _state.err_count
+    _log(t("info.process_complete", ok=ok_count, err=err_count), "info")
+    send_notification("process.complete", {"ok_count": ok_count, "err_count": err_count})
     from backend.core.history import save_run
     save_run(
         files=[str(f) for f in files],
@@ -413,10 +487,14 @@ HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
     "db_import": Handlers.db_import,
     "db_export": Handlers.db_export,
     "db_template": Handlers.db_template,
+    "db_clear": Handlers.db_clear,
     "scan_folder": Handlers.scan_folder,
     "db_fields": Handlers.db_fields,
     "db_fields_update": Handlers.db_fields_update,
     "db_fields_reset": Handlers.db_fields_reset,
+    "rename_patterns_get": Handlers.rename_patterns_get,
+    "rename_patterns_update": Handlers.rename_patterns_update,
+    "rename_patterns_reset": Handlers.rename_patterns_reset,
     "theme_get": Handlers.theme_get,
     "theme_save": Handlers.theme_save,
     "theme_presets": Handlers.theme_presets,
