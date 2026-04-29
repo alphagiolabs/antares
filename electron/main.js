@@ -1,27 +1,14 @@
 const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
+const fs = require('fs');
 const { spawn } = require('child_process');
 const { autoUpdater } = require('electron-updater');
+const { getBackendCommand } = require('./backend-command');
 
 const isDev = !app.isPackaged;
 
 let mainWindow;
 let pythonProcess = null;
-
-function getBackendCommand() {
-  if (isDev) {
-    const pythonPath = process.platform === 'win32'
-      ? path.join(__dirname, '..', 'venv312', 'Scripts', 'python.exe')
-      : path.join(__dirname, '..', 'venv312', 'bin', 'python');
-    const script = path.join(__dirname, '..', 'backend', 'main.py');
-    return { cmd: pythonPath, args: [script] };
-  }
-  // Production: use PyInstaller bundled executable
-  const exePath = process.platform === 'win32'
-    ? path.join(process.resourcesPath, 'backend', 'HidroConvertBackend.exe')
-    : path.join(process.resourcesPath, 'backend', 'HidroConvertBackend');
-  return { cmd: exePath, args: [] };
-}
 
 async function startPythonBackend(attempt = 1) {
   try {
@@ -43,7 +30,23 @@ async function startPythonBackend(attempt = 1) {
 }
 
 function _startPythonBackend() {
-  const { cmd, args } = getBackendCommand();
+  let { cmd, args } = getBackendCommand(isDev, process.platform, __dirname);
+  
+  // Validate executable exists (for production) or is accessible (for dev)
+  if (!isDev) {
+    // In production, verify exe exists
+    if (!fs.existsSync(cmd)) {
+      throw new Error(`Backend executable not found: ${cmd}`);
+    }
+  } else {
+    // In dev, check if venv exists, fallback to system python
+    const venvPath = cmd;
+    if (!fs.existsSync(venvPath)) {
+      console.warn(`Venv Python not found at ${venvPath}, trying system python...`);
+      const systemPython = process.platform === 'win32' ? 'python.exe' : 'python3';
+      cmd = systemPython;
+    }
+  }
   
   pythonProcess = spawn(cmd, args, {
     stdio: ['pipe', 'pipe', 'pipe'],
@@ -188,8 +191,7 @@ function createWindow() {
     height: height,
     show: false,
     frame: true,
-    fullscreen: true,
-    titleBarStyle: 'hiddenInset',
+    titleBarStyle: 'default',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
