@@ -19,9 +19,14 @@ Aplicación de escritorio construida con:
 
 - **Electron** — Shell nativo de escritorio (Windows, macOS, Linux)
 - **React + TypeScript + Vite** — Frontend con TailwindCSS para estilos
-- **Python (FastAPI-style IPC)** — Backend de procesamiento de imágenes
+- **Python (JSON-RPC over stdin/stdout)** — Backend de procesamiento de imágenes (no FastAPI)
 - **SQLite** — Base de datos embebida para catálogo de archivos
-- **JSON-RPC over stdin/stdout** — Comunicación segura entre Electron y Python
+- **JSON-RPC over stdin/stdout** — Comunicación segura entre Electron y Python (no HTTP)
+
+### Diferencias con aplicaciones web típicas:
+- No hay servidor HTTP (se eliminó FastAPI)
+- Comunicación directa por procesos via stdin/stdout
+- El backend se ejecuta como proceso hijo de Electron
 
 ### Estructura del proyecto
 
