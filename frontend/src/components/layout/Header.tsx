@@ -1,5 +1,3 @@
-import React from 'react';
-
 interface HeaderProps {
   title: string;
   onSearchClick: () => void;
@@ -15,7 +13,7 @@ function SearchIcon({ className }: { className?: string }) {
 
 export default function Header({ title, onSearchClick }: HeaderProps) {
   return (
-    <header className="h-12 shrink-0 flex items-center justify-between px-6 border-b border-[#1A1A1A] bg-[#0A0A0A]/80 backdrop-blur-sm">
+    <header className="h-12 shrink-0 flex items-center justify-between px-6 border-b border-[#1A1A1A] bg-[#0A0A0A]/80 backdrop-blur-sm select-none">
       <span className="text-[13px] text-[#A0A0A0] font-medium">{title}</span>
       <button
         onClick={onSearchClick}

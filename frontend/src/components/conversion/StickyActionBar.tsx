@@ -1,4 +1,3 @@
-import React from 'react';
 import Button from '../ui/Button';
 
 interface StickyActionBarProps {
@@ -16,7 +15,7 @@ export default function StickyActionBar({
 }: StickyActionBarProps) {
   return (
     <div className="sticky bottom-0 left-0 right-0 z-30 bg-[#0A0A0A]/90 backdrop-blur-xl border-t border-[#222222]">
-      <div className="max-w-[900px] mx-auto px-6 py-4 flex items-center justify-between gap-4">
+      <div className="w-full px-6 py-4 flex items-center justify-between gap-4">
         <button
           onClick={onSelectDest}
           className="flex-1 flex items-center gap-3 min-w-0 text-left px-4 py-2.5 rounded-xl bg-[#111111] border border-[#1A1A1A] hover:border-[#333333] transition-colors"

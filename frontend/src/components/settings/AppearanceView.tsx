@@ -47,7 +47,7 @@ export default function AppearanceView() {
   );
 
   return (
-    <div className="max-w-[600px] mx-auto py-8 space-y-8">
+    <div className="max-w-4xl w-full mx-auto py-8 space-y-8">
       <div>
         <h2 className="text-xl font-semibold text-white">{t('appearance.title')}</h2>
         <p className="text-sm text-[#666666] mt-1">Personaliza la apariencia de HidroConvert</p>

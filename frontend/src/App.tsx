@@ -40,17 +40,19 @@ function AppContent() {
 
   return (
     <div className="flex h-screen w-screen bg-[#0A0A0A] text-white overflow-hidden">
-      <Sidebar activeTab={activeTab} onTabChange={(t) => setActiveTab(t as TabId)} />
-      <div className="flex-1 flex flex-col min-w-0">
+      <Sidebar
+        activeTab={activeTab}
+        onTabChange={(t) => setActiveTab(t as TabId)}
+        onSearchClick={() => setCommandOpen(true)}
+      />
+      <div className="flex-1 flex flex-col min-w-0 min-h-0">
         <Header title={tabTitles[activeTab]} onSearchClick={() => setCommandOpen(true)} />
         <main className="flex-1 overflow-hidden relative">
-          <div className="h-full overflow-y-auto">
-            <div className="max-w-[900px] mx-auto px-6 pt-8 pb-32">
-              {activeTab === 'convert' && <ConversionView />}
-              {activeTab === 'db' && <DatabaseView />}
-              {activeTab === 'history' && <HistoryView />}
-              {activeTab === 'appearance' && <AppearanceView />}
-            </div>
+          <div className="h-full overflow-y-auto px-6 py-6">
+            {activeTab === 'convert' && <ConversionView />}
+            {activeTab === 'db' && <DatabaseView />}
+            {activeTab === 'history' && <HistoryView />}
+            {activeTab === 'appearance' && <AppearanceView />}
           </div>
         </main>
       </div>

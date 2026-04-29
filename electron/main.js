@@ -70,13 +70,14 @@ function _startPythonBackend() {
     const onData = (data) => {
       buffer += data.toString();
       const lines = buffer.split('\n');
-      buffer = lines.pop();
+      buffer = lines.pop() || '';
       for (const line of lines) {
         if (!line.trim()) continue;
         try {
           const msg = JSON.parse(line);
           if (msg.method === 'ready') {
             pythonProcess.stdout.off('data', onData);
+            setupNotificationListener();
             resolve();
             return;
           }
@@ -90,6 +91,30 @@ function _startPythonBackend() {
   });
 }
 
+// Single permanent notification listener for Python stdout
+function setupNotificationListener() {
+  let notifyBuffer = '';
+  pythonProcess.stdout.on('data', (data) => {
+    notifyBuffer += data.toString();
+    const lines = notifyBuffer.split('\n');
+    notifyBuffer = lines.pop() || '';
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      try {
+        const msg = JSON.parse(line);
+        // Notifications have method + params but no id
+        if (msg.method && msg.params && msg.id === undefined) {
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('ipc-notify', msg.method, msg.params);
+          }
+        }
+      } catch {
+        // Not a notification, ignore
+      }
+    }
+  });
+}
+
 // IPC bridge: frontend -> main -> Python -> main -> frontend
 ipcMain.handle('ipc-call', async (event, method, params) => {
   if (!pythonProcess || pythonProcess.killed) {
@@ -98,20 +123,20 @@ ipcMain.handle('ipc-call', async (event, method, params) => {
 
   const id = Math.random().toString(36).slice(2);
   const request = { jsonrpc: '2.0', id, method, params };
-  
+
   return new Promise((resolve, reject) => {
     let buffer = '';
     const onData = (data) => {
       buffer += data.toString();
       const lines = buffer.split('\n');
-      buffer = lines.pop();
+      buffer = lines.pop() || '';
       for (const line of lines) {
         if (!line.trim()) continue;
         try {
           const msg = JSON.parse(line);
-          // Ignore notifications without id
           if (msg.id === id) {
             pythonProcess.stdout.off('data', onData);
+            clearTimeout(timeoutId);
             if (msg.error) {
               reject(new Error(msg.error.message || msg.error));
             } else {
@@ -120,39 +145,16 @@ ipcMain.handle('ipc-call', async (event, method, params) => {
             return;
           }
         } catch {
-          // Not JSON, ignore
+          // Not JSON or not our response, ignore
         }
       }
     };
     pythonProcess.stdout.on('data', onData);
-    
-    // Also collect notifications in a separate buffer for the frontend
-    const onNotify = (data) => {
-      let buf = data.toString();
-      const lines = buf.split('\n');
-      for (const line of lines) {
-        if (!line.trim()) continue;
-        try {
-          const msg = JSON.parse(line);
-          if (msg.method && msg.params && msg.id === undefined) {
-            // Notification
-            if (mainWindow && !mainWindow.isDestroyed()) {
-              mainWindow.webContents.send('ipc-notify', msg.method, msg.params);
-            }
-          }
-        } catch {
-          // ignore
-        }
-      }
-    };
-    // Attach notification listener once
-    pythonProcess.stdout.on('data', onNotify);
-    
+
     pythonProcess.stdin.write(JSON.stringify(request) + '\n');
 
-    setTimeout(() => {
+    const timeoutId = setTimeout(() => {
       pythonProcess.stdout.off('data', onData);
-      pythonProcess.stdout.off('data', onNotify);
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send('ipc-notify', 'ipc.error', { message: 'IPC timeout: backend no responde' });
       }
@@ -186,6 +188,7 @@ function createWindow() {
     height: height,
     show: false,
     frame: true,
+    fullscreen: true,
     titleBarStyle: 'hiddenInset',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -195,7 +198,6 @@ function createWindow() {
     },
   });
 
-  // Maximize para ocupar toda la pantalla sin bordes
   mainWindow.maximize();
 
   if (isDev) {

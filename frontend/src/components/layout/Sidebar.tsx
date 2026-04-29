@@ -1,16 +1,16 @@
-import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { useState } from 'react';
 
 interface SidebarProps {
   activeTab: string;
   onTabChange: (tab: string) => void;
+  onSearchClick: () => void;
 }
 
 const tabs = [
-  { id: 'convert', icon: LightningIcon, shortcut: '1' },
-  { id: 'db', icon: DatabaseIcon, shortcut: '2' },
-  { id: 'history', icon: HistoryIcon, shortcut: '3' },
-  { id: 'appearance', icon: PaletteIcon, shortcut: '4' },
+  { id: 'convert', icon: LightningIcon, label: 'Conversión', shortcut: '1' },
+  { id: 'db', icon: DatabaseIcon, label: 'Base de datos', shortcut: '2' },
+  { id: 'history', icon: HistoryIcon, label: 'Historial', shortcut: '3' },
+  { id: 'appearance', icon: PaletteIcon, label: 'Apariencia', shortcut: '4' },
 ];
 
 function LightningIcon({ className }: { className?: string }) {
@@ -63,53 +63,98 @@ function SearchIcon({ className }: { className?: string }) {
   );
 }
 
-export default function Sidebar({ activeTab, onTabChange }: SidebarProps) {
-  const [hoveredTab, setHoveredTab] = useState<string | null>(null);
+export default function Sidebar({ activeTab, onTabChange, onSearchClick }: SidebarProps) {
+  const [expanded, setExpanded] = useState(false);
 
   return (
-    <aside className="w-16 shrink-0 flex flex-col items-center bg-[#0A0A0A] border-r border-[#1A1A1A] py-4">
-      <div className="flex flex-col gap-1 flex-1 w-full items-center">
+    <aside
+      className="shrink-0 flex flex-col bg-[#0A0A0A] border-r border-[#1A1A1A] transition-all duration-300 ease-out overflow-hidden"
+      style={{ width: expanded ? 224 : 64 }}
+      onMouseEnter={() => setExpanded(true)}
+      onMouseLeave={() => setExpanded(false)}
+    >
+      {/* App branding — visible when expanded */}
+      <div
+        className="flex items-center gap-2.5 px-4 shrink-0 overflow-hidden transition-all duration-300"
+        style={{ height: expanded ? 52 : 0, opacity: expanded ? 1 : 0, marginTop: expanded ? 12 : 0, marginBottom: expanded ? 8 : 0 }}
+      >
+        <div className="w-7 h-7 rounded-lg bg-[#FF6B2C] flex items-center justify-center shrink-0">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+          </svg>
+        </div>
+        <span className="text-[13px] font-bold text-white whitespace-nowrap tracking-tight">HidroConvert</span>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex flex-col gap-0.5 flex-1 py-2 px-2 min-h-0">
         {tabs.map((t) => {
           const isActive = activeTab === t.id;
           const Icon = t.icon;
           return (
-            <div key={t.id} className="relative w-full flex justify-center">
-              <button
-                onClick={() => onTabChange(t.id)}
-                onMouseEnter={() => setHoveredTab(t.id)}
-                onMouseLeave={() => setHoveredTab(null)}
-                className={`relative flex items-center justify-center w-10 h-10 rounded-xl transition-all duration-200 ${
-                  isActive ? 'text-white' : 'text-[#555555] hover:text-[#A0A0A0]'
-                }`}
-              >
+            <button
+              key={t.id}
+              onClick={() => onTabChange(t.id)}
+              title={!expanded ? t.label : undefined}
+              className={`relative flex items-center gap-3 px-2 py-2.5 rounded-xl transition-all duration-200 w-full ${
+                isActive
+                  ? 'bg-[#1E1E1E] text-white'
+                  : 'text-[#555555] hover:text-[#A0A0A0] hover:bg-[#141414]'
+              }`}
+            >
+              <span className={`shrink-0 flex items-center justify-center ${expanded ? '' : 'mx-auto'}`}>
                 <Icon className={isActive ? 'text-white' : ''} />
-                {isActive && (
-                  <span className="absolute -bottom-1 w-1 h-1 rounded-full bg-[#FF6B2C]" />
-                )}
-              </button>
-              <AnimatePresence>
-                {hoveredTab === t.id && (
-                  <motion.div
-                    initial={{ opacity: 0, x: -4 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -4 }}
-                    transition={{ duration: 0.1 }}
-                    className="absolute left-14 top-1/2 -translate-y-1/2 z-50 whitespace-nowrap bg-[#1A1A1A] text-white text-xs px-3 py-1.5 rounded-lg border border-[#333333] shadow-lg"
-                  >
-                    {t.id === 'convert' ? 'Conversión' : t.id === 'db' ? 'Base de Datos' : t.id === 'history' ? 'Historial' : 'Apariencia'}
-                    <span className="ml-2 text-[#666666]">Ctrl+{t.shortcut}</span>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
+              </span>
+              <span
+                className="text-[13px] font-medium whitespace-nowrap overflow-hidden transition-all duration-300"
+                style={{ width: expanded ? 'auto' : 0, opacity: expanded ? 1 : 0 }}
+              >
+                {t.label}
+              </span>
+              {expanded && isActive && (
+                <span className="absolute right-2 w-1.5 h-1.5 rounded-full bg-[#FF6B2C]" />
+              )}
+              {!expanded && isActive && (
+                <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-r-full bg-[#FF6B2C]" />
+              )}
+            </button>
           );
         })}
       </div>
 
-      <div className="w-full flex flex-col items-center gap-1 pt-4 border-t border-[#1A1A1A]">
-        <button className="flex items-center justify-center w-10 h-10 rounded-xl text-[#555555] hover:text-[#A0A0A0] transition-colors">
-          <SearchIcon />
+      {/* Bottom: Search + shortcuts info */}
+      <div className="flex flex-col gap-1 px-2 py-3 border-t border-[#1A1A1A]">
+        <button
+          onClick={onSearchClick}
+          title={!expanded ? 'Buscar' : undefined}
+          className="flex items-center gap-3 px-2 py-2.5 rounded-xl text-[#555555] hover:text-[#A0A0A0] hover:bg-[#141414] transition-all duration-200 w-full"
+        >
+          <span className={`shrink-0 flex items-center justify-center ${expanded ? '' : 'mx-auto'}`}>
+            <SearchIcon />
+          </span>
+          <span
+            className="text-[13px] font-medium whitespace-nowrap overflow-hidden transition-all duration-300"
+            style={{ width: expanded ? 'auto' : 0, opacity: expanded ? 1 : 0 }}
+          >
+            Buscar
+          </span>
+          {expanded && (
+            <kbd className="ml-auto text-[10px] bg-[#222222] px-1.5 py-0.5 rounded border border-[#333333] text-[#666666] font-mono">
+              Ctrl+K
+            </kbd>
+          )}
         </button>
+        {expanded && (
+          <div className="px-2 pt-2 flex flex-col gap-0.5">
+            <span className="text-[10px] text-[#444444] uppercase tracking-wider font-semibold">Atajos</span>
+            {tabs.map((t) => (
+              <div key={t.id} className="flex items-center justify-between text-[11px] text-[#555555]">
+                <span>{t.label}</span>
+                <kbd className="text-[10px] bg-[#1A1A1A] px-1.5 py-0.5 rounded text-[#666666] font-mono">Ctrl+{t.shortcut}</kbd>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </aside>
   );

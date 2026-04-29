@@ -217,7 +217,7 @@ export default function DatabaseView() {
             </div>
           )
         ) : (
-          <div className="space-y-6 max-w-2xl">
+          <div className="space-y-6 max-w-4xl w-full">
             {/* Add field */}
             <div className="bg-[#111111] rounded-xl border border-[#1A1A1A] p-4 flex items-end gap-3">
               <div className="flex-1">
@@ -253,7 +253,7 @@ export default function DatabaseView() {
                   </tr>
                 </thead>
                 <tbody>
-                  {allFields.map((f, i) => (
+                  {allFields.map((f) => (
                     <tr key={f.name} className="border-b border-[#1A1A1A] hover:bg-[#111111] transition-colors">
                       <td className="px-4 py-3 text-sm text-white font-medium">{f.name}</td>
                       <td className="px-4 py-3 text-xs text-[#A0A0A0] font-mono">{f.type}</td>

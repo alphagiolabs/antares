@@ -66,7 +66,7 @@ export default function Dropzone({
           ? 'border-[#FF6B2C] bg-[#FF6B2C]/5 scale-[1.01] shadow-[0_0_30px_rgba(255,107,44,0.1)]'
           : fileCount > 0
           ? 'border-[#2A2A2A] bg-[#111111] py-6'
-          : 'border-[#2A2A2A] bg-[#111111] min-h-[calc(100vh-160px)]'
+          : 'border-[#2A2A2A] bg-[#111111] min-h-[50vh]'
       }`}
     >
       <div className={`${fileCount > 0 ? 'mb-2' : 'mb-6'}`}>
