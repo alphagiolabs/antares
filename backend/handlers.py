@@ -8,10 +8,11 @@ import threading
 import tkinter.filedialog as fd
 import tkinter as tk
 from dataclasses import dataclass, field
+from functools import wraps
 from pathlib import Path
 from typing import Any, Callable
 
-from backend.core.converter import FORMATOS_SOPORTADOS, convertir_imagen
+from backend.core.converter import FORMATOS_SOPORTADOS, convertir_imagen, es_video, copiar_video, VIDEO_FORMATS
 from backend.core.database import (
     buscar_por_codigo,
     exportar_excel,
@@ -53,6 +54,45 @@ def with_locale(fn: Callable[..., Any]) -> Callable[..., Any]:
         set_locale(params.get("locale", "es"))
         return fn(params)
     return wrapper
+
+
+# ─── Decorador de validación ──────────────────────────────────────────────
+
+def validate_params(*required_params):
+    """Decorator to validate required parameters."""
+    def decorator(fn):
+        @wraps(fn)
+        def wrapper(params: dict[str, Any]) -> Any:
+            # Check required params
+            for param in required_params:
+                if param not in params or params[param] is None:
+                    raise ValueError(f"Missing required parameter: {param}")
+            
+            # Validate file paths if present
+            for key in ['files', 'destino', 'path', 'folder']:
+                if key in params and params[key]:
+                    if isinstance(params[key], list):
+                        for f in params[key]:
+                            _validate_path(f)
+                    else:
+                        _validate_path(params[key])
+            
+            return fn(params)
+        return wrapper
+    return decorator
+
+
+def _validate_path(path: str) -> None:
+    """Validate that path doesn't contain traversal attempts."""
+    import re
+    if not path or not isinstance(path, str):
+        raise ValueError(f"Invalid path: {path}")
+    
+    # Check for traversal
+    if '..' in path or path.startswith('/') or ':' in path[1:] if len(path) > 1 else False:
+        # Allow Windows drive letters but not traversal
+        if re.search(r'\.\.[\\/]', path):
+            raise ValueError(f"Path traversal detected: {path}")
 
 # ─── Estado de procesamiento ────────────────────────────────────────────────
 
@@ -136,7 +176,22 @@ class Handlers:
     @staticmethod
     @with_locale
     def dialog_files(params: dict[str, Any]) -> dict[str, list[str]]:
-        return {"paths": _run_dialog(fd.askopenfilenames, title="Seleccionar archivos")}
+        from backend.core.converter import VIDEO_FORMATS
+        # Build filetypes for dialog
+        image_exts = []
+        for info in FORMATOS_SOPORTADOS.values():
+            image_exts.extend([e.lower() for e in info["ext"]])
+        image_exts = list(set(image_exts))
+        image_types = [("Imágenes", *image_exts)]
+
+        video_exts = list(VIDEO_FORMATS.values())
+        video_types = [("Videos", *video_exts)]
+
+        all_exts = image_exts + video_exts
+        all_types = [("Todos los archivos", *all_exts)]
+
+        filetypes = all_types + image_types + video_types
+        return {"paths": _run_dialog(fd.askopenfilenames, title="Seleccionar archivos", filetypes=filetypes)}
 
     @staticmethod
     @with_locale
@@ -162,6 +217,7 @@ class Handlers:
 
     @staticmethod
     @with_locale
+    @validate_params('path')
     def db_import(params: dict[str, Any]) -> dict[str, int]:
         path = params.get("path", "")
         n = importar_excel(path)
@@ -169,6 +225,7 @@ class Handlers:
 
     @staticmethod
     @with_locale
+    @validate_params('path')
     def db_export(params: dict[str, Any]) -> dict[str, int]:
         path = params.get("path", "")
         n = exportar_excel(path)
@@ -182,6 +239,7 @@ class Handlers:
 
     @staticmethod
     @with_locale
+    @validate_params('path')
     def db_template(params: dict[str, Any]) -> dict[str, Any]:
         path = params.get("path", "")
         # Ensure .xlsx extension
@@ -192,15 +250,21 @@ class Handlers:
 
     @staticmethod
     @with_locale
+    @validate_params('folder')
     def scan_folder(params: dict[str, Any]) -> dict[str, list[str]]:
         folder = params.get("folder", "")
         path = Path(folder)
         if not path.is_dir():
             return {"files": []}
         exts: set[str] = set()
+        # Incluir extensiones de imágenes
         for info in FORMATOS_SOPORTADOS.values():
             exts.update(e.lower() for e in info["ext"])
             exts.update(e.upper() for e in info["ext"])
+        # Incluir extensiones de video
+        for ext in VIDEO_FORMATS.values():
+            exts.add(ext.lower())
+            exts.add(ext.upper())
         files = [str(f.resolve()) for f in path.rglob("*") if f.is_file() and f.suffix in exts]
         return {"files": files}
 
@@ -281,6 +345,7 @@ class Handlers:
 
     @staticmethod
     @with_locale
+    @validate_params('files')
     def preview(params: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
         files = params.get("files", [])
         patron = params.get("patron", "")
@@ -305,9 +370,9 @@ class Handlers:
         return {"preview": preview}
 
     @staticmethod
+    @with_locale
+    @validate_params('files', 'destino')
     def process_start(params: dict[str, Any]) -> dict[str, bool]:
-        locale = params.get("locale", "es")
-        set_locale(locale)
         if _state.running:
             error_msg = "error.process_already_running"
             _log(t(error_msg), "warn")
@@ -388,6 +453,63 @@ class Handlers:
         resize = params.get("resize")
         return convertir_a_preview(path, formato, calidad, resize)
 
+    @staticmethod
+    @with_locale
+    def is_video(params: dict[str, Any]) -> dict[str, bool]:
+        path = params.get("path", "")
+        return {"is_video": es_video(path)}
+
+    # ─── Formatos PDF ──────────────────────────────────────────────────────────
+
+    @staticmethod
+    @with_locale
+    def formatos_list(params: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
+        from backend.core.formatos import list_formats
+        return {"formats": list_formats()}
+
+    @staticmethod
+    @with_locale
+    def formatos_generate(params: dict[str, Any]) -> dict[str, str]:
+        from backend.core.formatos import generate_pdf
+        fmt_id = params.get("format_id", "")
+        desde = int(params.get("desde", 1))
+        hasta = int(params.get("hasta", 1))
+        pdf_bytes, filename = generate_pdf(fmt_id, desde, hasta)
+        import base64
+        return {"pdf_base64": base64.b64encode(pdf_bytes).decode("ascii"), "filename": filename}
+
+    @staticmethod
+    @with_locale
+    def formatos_upload(params: dict[str, Any]) -> dict[str, Any]:
+        from backend.core.formatos import add_uploaded_format
+        nombre = params.get("nombre", "")
+        filename = params.get("filename", "")
+        content_b64 = params.get("content_b64", "")
+        persisted = params.get("persisted", True)
+        filename_pattern = params.get("filename_pattern")
+        import base64
+        content = base64.b64decode(content_b64)
+        entry = add_uploaded_format(nombre, filename, content, bool(persisted), filename_pattern)
+        return {"format": entry}
+
+    @staticmethod
+    @with_locale
+    def formatos_delete(params: dict[str, Any]) -> dict[str, bool]:
+        from backend.core.formatos import delete_format
+        fmt_id = params.get("format_id", "")
+        return {"deleted": delete_format(fmt_id)}
+
+    @staticmethod
+    @with_locale
+    def formatos_update_mapping(params: dict[str, Any]) -> dict[str, Any]:
+        from backend.core.formatos import update_mapping
+        fmt_id = params.get("format_id", "")
+        mapping = params.get("mapping", {})
+        entry = update_mapping(fmt_id, mapping)
+        if entry is None:
+            raise ValueError("Formato no encontrado")
+        return {"format": entry}
+
 
 def _process_thread(params: dict[str, Any]) -> None:
     """Thread de procesamiento en background."""
@@ -433,21 +555,39 @@ def _process_thread(params: dict[str, Any]) -> None:
             "err_count": err_count,
         })
 
+        # Detectar si es video para solo renombrar
+        is_video = es_video(p)
         ext_dest = FORMATOS_SOPORTADOS[formato]["ext"]
+
         if engine:
             codigo, seq = parse_filename_parts(p.name)
             datos = buscar_por_codigo(codigo)
             fseq = seq if use_filename_seq else None
             nuevo_nombre = engine.aplicar(p, datos_bd=datos, codigo_manual=codigo, file_seq=fseq)
-            out_path = (Path(destino) / nuevo_nombre).with_suffix(ext_dest)
+            # Para videos, mantener la extensión original
+            if is_video:
+                out_path = Path(destino) / nuevo_nombre
+            else:
+                out_path = (Path(destino) / nuevo_nombre).with_suffix(ext_dest)
         else:
-            out_path = Path(destino) / (p.stem + ext_dest)
+            if is_video:
+                out_path = Path(destino) / p.name
+            else:
+                out_path = Path(destino) / (p.stem + ext_dest)
 
         try:
-            convertir_imagen(fpath, out_path, formato, calidad, resize, keep_exif)
-            with _state._lock:
-                _state.ok_count += 1
-            _log(f"Procesado: {out_path.name}", "ok")
+            if is_video:
+                # Solo copiar el video sin conversión
+                copiar_video(fpath, out_path)
+                with _state._lock:
+                    _state.ok_count += 1
+                _log(f"Video renombrado: {out_path.name}", "ok")
+            else:
+                # Convertir imagen
+                convertir_imagen(fpath, out_path, formato, calidad, resize, keep_exif)
+                with _state._lock:
+                    _state.ok_count += 1
+                _log(f"Procesado: {out_path.name}", "ok")
         except Exception as e:
             with _state._lock:
                 _state.err_count += 1
@@ -508,4 +648,10 @@ HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
     "history_get": Handlers.history_get,
     "history_delete": Handlers.history_delete,
     "preview_image": Handlers.preview_image,
+    "is_video": Handlers.is_video,
+    "formatos_list": Handlers.formatos_list,
+    "formatos_generate": Handlers.formatos_generate,
+    "formatos_upload": Handlers.formatos_upload,
+    "formatos_delete": Handlers.formatos_delete,
+    "formatos_update_mapping": Handlers.formatos_update_mapping,
 }

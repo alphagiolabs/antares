@@ -8,12 +8,33 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import sys
 import traceback
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 logger = logging.getLogger(__name__)
+
+
+def validate_method(method: str) -> bool:
+    """Validate that method name is alphanumeric with underscores only."""
+    if not method or not isinstance(method, str):
+        return False
+    return bool(re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', method))
+
+
+def validate_params(params: dict) -> bool:
+    """Validate params dict for basic safety."""
+    if not isinstance(params, dict):
+        return False
+    
+    # Check for path traversal attempts
+    params_str = json.dumps(params)
+    if '../' in params_str or '..\\' in params_str:
+        return False
+    
+    return True
 
 # ─── IPC Protocol ────────────────────────────────────────────────────────────
 
@@ -24,6 +45,12 @@ class IPCMessage:
         self.id: str | int = raw.get("id", "")
         self.method: str = raw.get("method", "")
         self.params: dict[str, Any] = raw.get("params", {})
+        
+        # Validate
+        if not validate_method(self.method):
+            raise ValueError(f"Invalid method name: {self.method}")
+        if not validate_params(self.params):
+            raise ValueError("Invalid params: possible path traversal detected")
 
     def __repr__(self) -> str:
         return f"IPCMessage(id={self.id}, method={self.method})"
