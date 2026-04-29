@@ -424,7 +424,8 @@ class Handlers:
     def history_list(params: dict[str, Any]) -> dict[str, Any]:
         from backend.core.history import list_runs
         limit = params.get("limit", 50)
-        return {"runs": list_runs(limit)}
+        offset = params.get("offset", 0)
+        return {"runs": list_runs(limit, offset)}
 
     @staticmethod
     @with_locale

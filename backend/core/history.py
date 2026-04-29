@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import sqlite3
 from datetime import datetime
-from pathlib import Path
 from typing import Any
 
 from backend.core.database import get_db_path
@@ -65,17 +64,18 @@ def save_run(
             ),
         )
         conn.commit()
-        return cursor.lastrowid
+        return cursor.lastrowid or 0
 
 
-def list_runs(limit: int = 50) -> list[dict[str, Any]]:
+def list_runs(limit: int = 50, offset: int = 0) -> list[dict[str, Any]]:
     """List recent processing runs, newest first."""
     _ensure_table()
     db = get_db_path()
     with sqlite3.connect(str(db)) as conn:
         conn.row_factory = sqlite3.Row
         rows = conn.execute(
-            "SELECT * FROM historial ORDER BY timestamp DESC LIMIT ?", (limit,)
+            "SELECT * FROM historial ORDER BY timestamp DESC LIMIT ? OFFSET ?",
+            (limit, offset)
         ).fetchall()
     return [dict(r) for r in rows]
 
