@@ -7,6 +7,7 @@ Incluye un mecanismo de handshake para reportar "ready" al proceso padre (Electr
 from __future__ import annotations
 
 import json
+import locale
 import logging
 import signal
 import sys
@@ -61,8 +62,45 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+def _validate_encoding():
+    """Validate that system supports required encoding."""
+    try:
+        # Check if UTF-8 is available
+        'test'.encode('utf-8')
+        
+        # Set environment variables for child processes
+        import os
+        os.environ['PYTHONIOENCODING'] = 'utf-8'
+        os.environ['PYTHONUTF8'] = '1'
+        
+        # Try to set locale if possible
+        try:
+            locale.setlocale(locale.LC_ALL, 'C.UTF-8')
+        except locale.Error:
+            try:
+                locale.setlocale(locale.LC_ALL, 'en_US.UTF-8')
+            except locale.Error:
+                logger.warning("Could not set UTF-8 locale, using system default")
+        
+        logger.info(f"System encoding: {locale.getpreferredencoding()}")
+        
+    except Exception as e:
+        logger.error(f"Encoding validation failed: {e}")
+        raise
+
+
+# Call at startup
+_validate_encoding()
+
+
 def main() -> None:
     """Bucle principal IPC."""
+    try:
+        _validate_encoding()
+    except Exception as e:
+        print(f"FATAL: Encoding validation failed: {e}")
+        sys.exit(1)
+    
     # Handshake: report ready so Electron knows the pipe is open
     print(json.dumps({"jsonrpc": "2.0", "method": "ready", "params": {}}))
     sys.stdout.flush()
