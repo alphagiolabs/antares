@@ -8,10 +8,17 @@ from __future__ import annotations
 
 import json
 import logging
+import signal
 import sys
 import traceback
+import warnings
 from pathlib import Path
-from typing import Any
+
+from backend.core.database import init_db
+from backend.core.plugins import load_plugins_from_dir
+from backend.handlers import HANDLERS
+from backend.ipc_protocol import read_message, send_response, send_notification
+from backend.utils.i18n import t
 
 # Ensure backend is on path
 _backend = Path(__file__).resolve().parent
@@ -19,20 +26,31 @@ if str(_backend) not in sys.path:
     sys.path.insert(0, str(_backend))
 
 # Silence tkinter deprecation warning on macOS
-import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 # Init DB before handling requests
-from backend.core.database import init_db
 init_db()
-
-# Load format plugins from user data directory
-from backend.core.plugins import load_plugins_from_dir
 load_plugins_from_dir()
 
-from ipc_protocol import IPCMessage, read_message, send_response
-from handlers import HANDLERS
-from backend.utils.i18n import t
+
+def _signal_handler(signum, frame):
+    """Handle termination signals gracefully."""
+    logger.info(f"Received signal {signum}, shutting down...")
+    # Send a final message to Electron
+    send_notification("backend.shutdown", {"reason": "signal", "signal": signum})
+    sys.exit(0)
+
+
+# Register signal handlers
+if hasattr(signal, 'SIGTERM'):
+    signal.signal(signal.SIGTERM, _signal_handler)
+if hasattr(signal, 'SIGINT'):
+    signal.signal(signal.SIGINT, _signal_handler)
+
+# Windows doesn't have SIGHUP
+if hasattr(signal, 'SIGHUP'):
+    signal.signal(signal.SIGHUP, _signal_handler)
+
 
 # Logging to stderr so stdout stays clean for IPC
 logging.basicConfig(
@@ -51,23 +69,26 @@ def main() -> None:
 
     logger.info(t("info.backend_ready"))
 
-    while True:
-        msg = read_message()
-        if msg is None:
-            break
+    try:
+        while True:
+            msg = read_message()
+            if msg is None:
+                break
 
-        if msg.method in HANDLERS:
-            try:
-                result = HANDLERS[msg.method](msg.params)
-                send_response(result, msg.id)
-            except Exception as exc:
-                error_msg = f"{type(exc).__name__}: {exc}"
-                logger.error("Error en %s: %s\n%s", msg.method, error_msg, traceback.format_exc())
-                send_response(None, msg.id, error=error_msg)
-        else:
-            send_response(None, msg.id, error=f"Método desconocido: {msg.method}")
-
-    logger.info(t("info.backend_shutdown"))
+            if msg.method in HANDLERS:
+                try:
+                    result = HANDLERS[msg.method](msg.params)
+                    send_response(result, msg.id)
+                except Exception as exc:
+                    error_msg = f"{type(exc).__name__}: {exc}"
+                    logger.error("Error en %s: %s\n%s", msg.method, error_msg, traceback.format_exc())
+                    send_response(None, msg.id, error=error_msg)
+            else:
+                send_response(None, msg.id, error=f"Método desconocido: {msg.method}")
+    except KeyboardInterrupt:
+        logger.info("Keyboard interrupt received")
+    finally:
+        logger.info(t("info.backend_shutdown"))
 
 
 if __name__ == "__main__":
