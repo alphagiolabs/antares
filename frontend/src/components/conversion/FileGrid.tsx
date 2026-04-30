@@ -92,6 +92,10 @@ export default function FileGrid({ files, selectedFiles, selectedFile, onFileCli
             overscanCount={3}
             cellComponent={FileGridCell}
             cellProps={cellProps}
+            itemKey={({ columnIndex, rowIndex, data }) => {
+              const idx = rowIndex * data.columnCount + columnIndex;
+              return data.files[idx] || `${rowIndex}-${columnIndex}`;
+            }}
           />
         )}
       </div>

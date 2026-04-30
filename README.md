@@ -103,7 +103,31 @@ npm run build:frontend
 npm run build:backend
 ```
 
-El ejecutable resultante estará en `dist-electron/COSMO-Setup-<version>.exe`.
+El instalador resultante estará en `dist-electron/COSMO-Setup-<version>.exe`.
+La versión portable estará en `dist-electron/COSMO-Portable-<version>.exe`.
+
+### Pruebas y lint
+
+```bash
+# Ejecutar todas las pruebas (Python + Electron/Node.js)
+npm run test
+
+# Pruebas Python individualmente
+cd backend && python -m pytest ../tests -v
+
+# Pruebas Node.js individualmente
+node tests/test-electron-path.js
+node tests/test-electron-dialogs.js
+
+# Lint Python con Ruff
+npm run lint:python
+
+# Auto-fix lint
+npm run lint:fix
+
+# Type-check frontend TypeScript
+npm run typecheck:frontend
+```
 
 ## Diseño
 
@@ -133,7 +157,10 @@ Ver `docs/superpowers/specs/2026-04-29-brand-identity-refresh-design.md` para la
 | `npm run build:frontend` | Compilar React → producción |
 | `npm run build:backend` | Compilar Python → .exe (PyInstaller) |
 | `npm run build:win` | Build completo para Windows |
-| `npm run test` | Ejecutar pruebas Python |
+| `npm run build:mac` | Build completo para macOS |
+| `npm run build:linux` | Build completo para Linux |
+| `npm run build:all` | Build para Windows + macOS + Linux |
+| `npm run test` | Ejecutar pruebas Python y Node.js |
 | `npm run lint:python` | Lint con Ruff |
 | `npm run lint:fix` | Auto-fix con Ruff |
 

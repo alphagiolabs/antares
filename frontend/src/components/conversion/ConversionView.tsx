@@ -212,6 +212,21 @@ export default function ConversionView() {
     setVideoFiles(videoSet);
   }, [files]);
 
+  // Sync selectedFiles when files change (remove entries no longer in files)
+  useEffect(() => {
+    setSelectedFiles((prev) => {
+      const next = new Set(prev);
+      let changed = false;
+      for (const f of next) {
+        if (!files.includes(f)) {
+          next.delete(f);
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [files]);
+
   const doProcess = async () => {
     if (!allReady) return;
     const body = {

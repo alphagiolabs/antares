@@ -29,7 +29,6 @@ files:
   - "!**/node_modules/**/README*"
   - "!**/node_modules/**/CHANGELOG*"
   - "!**/node_modules/**/LICENSE*"
-  - "!node_modules/@*/**/*"
   - "!node_modules/concurrently/**/*"
   - "!node_modules/wait-on/**/*"
   - "!node_modules/electron/**/*"

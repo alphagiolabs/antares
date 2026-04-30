@@ -101,7 +101,9 @@ def _ensure_mode(img: Image.Image, target_modes: tuple[str, ...]) -> Image.Image
     if img.mode in target_modes:
         return img
     # Manejar transparencia -> fondo blanco
-    if img.mode in ("RGBA", "LA", "P") and "RGBA" not in target_modes:
+    if img.mode in ("RGBA", "LA", "P", "1") and "RGBA" not in target_modes:
+        if img.mode == "1":
+            return img.convert("RGB")
         fondo = Image.new("RGB", img.size, (255, 255, 255))
         if img.mode == "P":
             img = img.convert("RGBA")

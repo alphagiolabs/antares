@@ -23,7 +23,7 @@
     "build:all": "npm run build:backend && npm run build:frontend && electron-builder --win --mac --linux",
     "dist": "npm run build:backend && npm run build:frontend && electron-builder",
     "dist:dir": "npm run build:backend && npm run build:frontend && electron-builder --dir",
-    "test": "cd backend && python -m pytest ../tests -v",
+    "test": "cd backend && python -m pytest ../tests -v && node ../tests/test-electron-path.js && node ../tests/test-electron-dialogs.js",
     "lint:python": "cd backend && ruff check .",
     "lint:fix": "cd backend && ruff check . --fix",
     "typecheck:frontend": "cd frontend && npx tsc --noEmit",

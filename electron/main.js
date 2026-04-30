@@ -46,6 +46,12 @@ function _startPythonBackend() {
       console.warn(`Venv Python not found at ${venvPath}, trying system python...`);
       const systemPython = process.platform === 'win32' ? 'python.exe' : 'python3';
       cmd = systemPython;
+      // Verify system python is available in PATH
+      try {
+        require('child_process').execSync(`${cmd} --version`, { stdio: 'ignore' });
+      } catch {
+        throw new Error(`Python no encontrado: ni el entorno virtual (${venvPath}) ni Python del sistema (${cmd}) están disponibles. Instala Python o configura el entorno virtual.`);
+      }
     }
   }
   
@@ -65,7 +71,11 @@ function _startPythonBackend() {
 
   pythonProcess.on('error', (err) => {
     console.error('Failed to start Python backend:', err);
-    dialog.showErrorBox('Backend Error', `No se pudo iniciar el backend Python:\n${err.message}`);
+    const isNotFound = err.code === 'ENOENT';
+    const message = isNotFound
+      ? `Python no encontrado: verifica que el entorno virtual o Python del sistema esté instalado.\n${err.message}`
+      : `No se pudo iniciar el backend Python:\n${err.message}`;
+    dialog.showErrorBox('Backend Error', message);
     app.quit();
   });
 

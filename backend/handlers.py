@@ -6,11 +6,11 @@ import json
 import logging
 import os
 import threading
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import CancelledError, ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from functools import wraps
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from backend.core.converter import FORMATOS_SOPORTADOS, convertir_imagen, es_video, copiar_video, VIDEO_FORMATS
 from backend.core.database import (
@@ -557,17 +557,29 @@ def _process_thread(params: dict[str, Any]) -> None:
         except Exception as e:
             return (False, p.name, str(e))
 
-    with ThreadPoolExecutor(max_workers=max_workers) as pool:
-        futures = {pool.submit(_process_one, task): task for task in tasks}
+    pool = ThreadPoolExecutor(max_workers=max_workers)
+    futures = [pool.submit(_process_one, task) for task in tasks]
+    cancelled = False
 
+    try:
         for future in as_completed(futures):
-            with _state._lock:
-                if _state.cancel_requested:
-                    pool.shutdown(wait=False, cancel_futures=True)
-                    _log(t("info.process_cancelled"), "warn")
-                    break
+            if not cancelled:
+                with _state._lock:
+                    if _state.cancel_requested:
+                        cancelled = True
+                        _log(t("info.process_cancelled"), "warn")
+                        for f in futures:
+                            if not f.done():
+                                f.cancel()
 
-            success, name, error = future.result()
+            if future.cancelled():
+                continue
+
+            try:
+                success, name, error = future.result()
+            except CancelledError:
+                continue
+
             completed += 1
 
             with _state._lock:
@@ -591,13 +603,18 @@ def _process_thread(params: dict[str, Any]) -> None:
                 "ok_count": ok_count,
                 "err_count": err_count,
             })
+    finally:
+        pool.shutdown(wait=True)
 
     with _state._lock:
         _state.running = False
-        _state.progress = 100
+        _state.progress = 100 if not cancelled else _state.progress
         ok_count = _state.ok_count
         err_count = _state.err_count
-    _log(t("info.process_complete", ok=ok_count, err=err_count), "info")
+    if cancelled:
+        _log(t("info.process_cancelled"), "warn")
+    else:
+        _log(t("info.process_complete", ok=ok_count, err=err_count), "info")
     send_notification("process.complete", {"ok_count": ok_count, "err_count": err_count})
     from backend.core.history import save_run
     save_run(
