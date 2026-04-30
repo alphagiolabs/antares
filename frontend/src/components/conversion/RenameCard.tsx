@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import Card from '../ui/Card';
 import Badge from '../ui/Badge';
 import Input from '../ui/Input';
@@ -8,7 +8,6 @@ import type { RenamePattern, PreviewItem } from '../../types';
 interface RenameCardProps {
   files: string[];
   usarRename: boolean;
-  onToggleRename: (v: boolean) => void;
   namingMode: string;
   onNamingModeChange: (mode: string) => void;
   patron: string;
@@ -21,6 +20,7 @@ interface RenameCardProps {
   preview: PreviewItem[] | null;
   fields: string[];
   onInsertVar: (v: string) => void;
+  hasVideos?: boolean;
 }
 
 const fileNameFromPath = (path: string) => path.split(/[\\/]/).pop() || path;
@@ -36,9 +36,10 @@ const exampleFromPattern = (pattern: string, fields: string[], firstFile?: strin
 };
 
 export default function RenameCard({
-  files, usarRename, onToggleRename, namingMode, onNamingModeChange,
+  files, usarRename, namingMode, onNamingModeChange,
   patron, onPatronChange, secuencia, onSecuenciaChange,
   useFilenameSeq, onToggleFilenameSeq, namingPresets, preview, fields, onInsertVar,
+  hasVideos = false,
 }: RenameCardProps) {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const namingExample = exampleFromPattern(usarRename ? patron : '', fields, files[0]);
@@ -47,6 +48,13 @@ export default function RenameCard({
   return (
     <Card>
       <div className="eyebrow mb-4">NOMBRES</div>
+      {hasVideos && (
+        <div className="mb-4 p-3 bg-[#3B82F6]/10 border border-[#3B82F6]/30 rounded-lg">
+          <p className="text-xs text-[#3B82F6]">
+            ℹ️ Los videos mantendrán su extensión original al renombrarse.
+          </p>
+        </div>
+      )}
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4">
         {namingPresets.map((preset) => {
@@ -57,7 +65,7 @@ export default function RenameCard({
               onClick={() => onNamingModeChange(preset.id)}
               className={`text-left px-4 py-3 rounded-xl border transition-all ${
                 active
-                  ? 'bg-[#FF6B2C] text-white border-[#FF6B2C]'
+                  ? 'bg-[#5E6AD2] text-white border-[#5E6AD2]'
                   : 'bg-[#1A1A1A] text-[#A0A0A0] border-[#222222] hover:border-[#444444] hover:text-white'
               }`}
             >
@@ -73,7 +81,7 @@ export default function RenameCard({
       <div className="flex items-center justify-between mb-4">
         <button
           onClick={() => setShowAdvanced(!showAdvanced)}
-          className="text-[13px] text-[#FF6B2C] hover:underline font-medium"
+          className="text-[13px] text-[#5E6AD2] hover:underline font-medium"
         >
           {showAdvanced ? 'Ocultar patrón avanzado' : 'Editar patrón avanzado'}
         </button>
@@ -92,11 +100,11 @@ export default function RenameCard({
           />
           <div className="flex flex-wrap gap-2">
             {fields.map((f) => (
-              <button key={f} onClick={() => onInsertVar(`{${f}}`)} className="px-3 py-1.5 rounded-lg bg-[#1A1A1A] text-white text-xs font-mono border border-[#222222] hover:bg-[#FF6B2C] hover:text-white hover:border-[#FF6B2C] transition-colors">
+              <button key={f} onClick={() => onInsertVar(`{${f}}`)} className="px-3 py-1.5 rounded-lg bg-[#1A1A1A] text-white text-xs font-mono border border-[#222222] hover:bg-[#5E6AD2] hover:text-white hover:border-[#5E6AD2] transition-colors">
                 {`{${f}}`}
               </button>
             ))}
-            <button onClick={() => onInsertVar('{seq}')} className="px-3 py-1.5 rounded-lg bg-[#FF6B2C]/10 text-[#FF6B2C] text-xs font-mono border border-[#FF6B2C]/30 hover:bg-[#FF6B2C] hover:text-white transition-colors">{'{seq}'}</button>
+            <button onClick={() => onInsertVar('{seq}')} className="px-3 py-1.5 rounded-lg bg-[#5E6AD2]/10 text-[#5E6AD2] text-xs font-mono border border-[#5E6AD2]/30 hover:bg-[#5E6AD2] hover:text-white transition-colors">{'{seq}'}</button>
             <button onClick={() => onInsertVar('{ext}')} className="px-3 py-1.5 rounded-lg bg-[#3B82F6]/10 text-[#3B82F6] text-xs font-mono border border-[#3B82F6]/30 hover:bg-[#3B82F6] hover:text-white transition-colors">{'{ext}'}</button>
           </div>
           {usesSeq && (

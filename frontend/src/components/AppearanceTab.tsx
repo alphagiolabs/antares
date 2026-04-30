@@ -3,9 +3,11 @@ import { useTranslation } from 'react-i18next';
 import { api } from '../api';
 import { ThemeConfig } from '../types';
 import Button from './ui/Button';
+import { useToast } from '../hooks/useToast';
 
 export default function AppearanceTab() {
   const { t, i18n } = useTranslation();
+  const { addToast } = useToast();
 
   const editableKeys = [
     { label: t('appearance.bg'), key: 'bg' },
@@ -21,7 +23,7 @@ export default function AppearanceTab() {
   ];
 
   const themeNameKey: Record<string, string> = {
-    'Mastercard Cream': 'theme.mastercardCream',
+    'Precision Linear': 'theme.precisionLinear',
   };
 
   const [theme, setTheme] = useState<ThemeConfig | null>(null);
@@ -78,7 +80,7 @@ export default function AppearanceTab() {
     if (!theme) return;
     await api.saveTheme(theme);
     applyThemeToCSS(theme);
-    alert(t('appearance.savedAlert') || 'Tema guardado');
+    addToast({ message: t('appearance.savedAlert') || 'Tema guardado', type: 'success' });
   };
 
   const reset = async () => {
@@ -122,7 +124,7 @@ export default function AppearanceTab() {
             >
               <span
                 className="w-3 h-3 rounded-full shrink-0 border border-bdr-medium"
-                style={{ backgroundColor: themeVal('accent') || '#CF4500' }}
+                style={{ backgroundColor: themeVal('accent') || '#5E6AD2' }}
               />
               {themeNameKey[name] ? t(themeNameKey[name]) : name}
             </button>

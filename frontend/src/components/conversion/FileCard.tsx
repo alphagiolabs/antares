@@ -1,6 +1,6 @@
 import React from 'react';
-import { motion } from 'framer-motion';
 import Thumbnail from '../Thumbnail';
+import Badge from '../ui/Badge';
 
 interface FileCardProps {
   path: string;
@@ -9,34 +9,36 @@ interface FileCardProps {
   onClick: (e: React.MouseEvent) => void;
   onRemove: (e: React.MouseEvent) => void;
   index: number;
+  isVideo?: boolean;
 }
 
-export default function FileCard({ path, selected, isPrimary, onClick, onRemove, index }: FileCardProps) {
+export default function FileCard({ path, selected, isPrimary, onClick, onRemove, isVideo = false }: FileCardProps) {
   const filename = path.split(/[\\/]/).pop() || path;
 
   return (
-    <motion.div
-      layout
-      initial={{ opacity: 0, scale: 0.95 }}
-      animate={{ opacity: 1, scale: 1 }}
-      exit={{ opacity: 0, scale: 0.95 }}
-      transition={{ duration: 0.2, delay: index * 0.02 }}
+    <div
       onClick={onClick}
       className={`group relative cursor-pointer rounded-lg overflow-hidden border transition-all duration-200 ${
         isPrimary
-          ? 'border-[#FF6B2C] shadow-[0_0_0_4px_rgba(255,107,44,0.15)]'
+          ? 'border-[#5E6AD2] shadow-[0_0_0_4px_rgba(94,106,210,0.15)]'
           : selected
-          ? 'border-[#FF6B2C]/40'
+          ? 'border-[#5E6AD2]/40'
           : 'border-transparent hover:border-[#333333] hover:scale-[1.02]'
       }`}
     >
       <div className="relative aspect-square bg-[#1A1A1A]">
         <Thumbnail path={path} variant="card" />
+        {/* Video badge */}
+        {isVideo && (
+          <Badge variant="warning" className="absolute left-2 top-2 text-[10px] font-bold">
+            VIDEO
+          </Badge>
+        )}
         {/* Checkbox */}
         <div
           className={`absolute left-2 top-2 flex h-5 w-5 items-center justify-center rounded-full border-2 transition-all ${
-            selected ? 'bg-[#FF6B2C] border-[#FF6B2C]' : 'bg-black/40 border-white/30 group-hover:border-white/60'
-          }`}
+            selected ? 'bg-[#5E6AD2] border-[#5E6AD2]' : 'bg-black/40 border-white/30 group-hover:border-white/60'
+          } ${isVideo ? 'left-auto right-2' : ''}`}
         >
           {selected && (
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
@@ -55,6 +57,6 @@ export default function FileCard({ path, selected, isPrimary, onClick, onRemove,
       <div className="px-2 py-2">
         <p className="text-[11px] font-medium text-white truncate">{filename}</p>
       </div>
-    </motion.div>
+    </div>
   );
 }

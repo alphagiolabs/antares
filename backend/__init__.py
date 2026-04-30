@@ -1,1 +1,1 @@
-"""Backend IPC nativo para HidroConvert."""
+"""Backend IPC nativo para COSMO."""

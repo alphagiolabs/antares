@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-label="COSMO logo">
+  <defs>
+    <linearGradient id="hcBg" x1="24" y1="16" x2="232" y2="244" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#5E6AD2"/>
+      <stop offset="0.55" stop-color="#27304E"/>
+      <stop offset="1" stop-color="#0A0D12"/>
+    </linearGradient>
+    <linearGradient id="hcStroke" x1="18" y1="12" x2="238" y2="246" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#8B93FF"/>
+      <stop offset="1" stop-color="#22C7A9"/>
+    </linearGradient>
+    <filter id="softShadow" x="-18%" y="-18%" width="136%" height="136%">
+      <feDropShadow dx="0" dy="18" stdDeviation="18" flood-color="#02030A" flood-opacity="0.42"/>
+    </filter>
+  </defs>
+  <rect width="256" height="256" rx="56" fill="#070A0F"/>
+  <rect x="25" y="25" width="206" height="206" rx="52" fill="url(#hcBg)" filter="url(#softShadow)"/>
+  <rect x="25" y="25" width="206" height="206" rx="52" fill="none" stroke="url(#hcStroke)" stroke-width="8"/>
+  <path d="M71 78v100M71 128h50M121 78v100" fill="none" stroke="#FFFFFF" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M188 87c-12-8-25-12-40-12c-29 0-53 24-53 53s24 53 53 53c16 0 31-7 41-17" fill="none" stroke="#6EE7D8" stroke-width="16" stroke-linecap="round"/>
+  <path d="M177 62l20 25l-29 10" fill="none" stroke="#6EE7D8" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

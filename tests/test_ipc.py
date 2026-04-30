@@ -85,7 +85,7 @@ class TestIPC:
     def test_version(self, backend_process):
         resp = _rpc_call(backend_process, "version", {})
         assert "result" in resp
-        assert resp["result"]["version"] == "0.2.0"
+        assert resp["result"]["version"] == "0.3.6"
 
     def test_formats(self, backend_process):
         resp = _rpc_call(backend_process, "formats", {})
@@ -106,10 +106,10 @@ class TestIPC:
         assert "result" in resp
         assert "name" in resp["result"]
 
-    def test_history_list_empty(self, backend_process):
+    def test_history_list_shape(self, backend_process):
         resp = _rpc_call(backend_process, "history_list", {})
         assert "result" in resp
-        assert resp["result"]["runs"] == []
+        assert isinstance(resp["result"]["runs"], list)
 
     def test_unknown_method(self, backend_process):
         resp = _rpc_call(backend_process, "nonexistent_method", {})

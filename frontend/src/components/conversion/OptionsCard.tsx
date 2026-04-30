@@ -1,4 +1,3 @@
-import React from 'react';
 import Card from '../ui/Card';
 import Dropdown from '../ui/Dropdown';
 import Slider from '../ui/Slider';
@@ -19,6 +18,7 @@ interface OptionsCardProps {
   onResizeAltoChange: (v: string) => void;
   keepExif: boolean;
   onToggleExif: (v: boolean) => void;
+  hasVideos?: boolean;
 }
 
 export default function OptionsCard({
@@ -27,10 +27,18 @@ export default function OptionsCard({
   resizeEnabled, onToggleResize,
   resizeAncho, resizeAlto, onResizeAnchoChange, onResizeAltoChange,
   keepExif, onToggleExif,
+  hasVideos = false,
 }: OptionsCardProps) {
   return (
     <Card>
       <div className="eyebrow mb-4">CONVERSIÓN</div>
+      {hasVideos && (
+        <div className="mb-4 p-3 bg-[#5E6AD2]/10 border border-[#5E6AD2]/30 rounded-lg">
+          <p className="text-xs text-[#5E6AD2]">
+            ⚠️ Los videos se copiarán sin conversión. Solo se aplicará el renombrado.
+          </p>
+        </div>
+      )}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div>
           <label className="block text-xs text-[#666666] mb-2">Formato</label>
@@ -43,7 +51,7 @@ export default function OptionsCard({
             label={
               <div className="flex justify-between text-xs text-[#666666] mb-1">
                 <span>Calidad</span>
-                <span className="text-[#FF6B2C] font-medium">{calidad}%</span>
+                <span className="text-[#5E6AD2] font-medium">{calidad}%</span>
               </div>
             }
           />

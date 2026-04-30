@@ -21,11 +21,11 @@ def resource_path(relative_path: str) -> Path:
 def user_data_path(relative_path: str) -> Path:
     """
     Resuelve una ruta writable para datos de usuario (BD, logs, etc.).
-    En Windows: %LOCALAPPDATA%\\HidroConvert
-    En macOS: ~/Library/Application Support/HidroConvert
-    En Linux: ~/.local/share/HidroConvert
+    En Windows: %LOCALAPPDATA%\\COSMO
+    En macOS: ~/Library/Application Support/COSMO
+    En Linux: ~/.local/share/COSMO
     """
-    app_name = "HidroConvert"
+    app_name = "COSMO"
     if sys.platform == "win32":
         local = Path(os.environ.get("LOCALAPPDATA", os.path.expanduser("~"))) / app_name
     elif sys.platform == "darwin":

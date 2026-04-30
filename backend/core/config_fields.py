@@ -112,8 +112,8 @@ def save_fields(fields: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "required": bool(f.get("required", False)),
                 "unique": bool(f.get("unique", False)),
             })
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump({"fields": validated}, f, indent=2, ensure_ascii=False)
+    with open(path, "w", encoding="utf-8") as file:
+        json.dump({"fields": validated}, file, indent=2, ensure_ascii=False)
     return validated
 
 

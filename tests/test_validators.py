@@ -1,7 +1,7 @@
 """Tests para utilidades de validación."""
 
 import pytest
-from backend.utils.validators import es_imagen, sanitizar_nombre, obtener_codigo_desde_nombre
+from backend.utils.validators import es_imagen, sanitizar_nombre, obtener_codigo_desde_nombre, parse_filename_parts
 
 
 class TestEsImagen:
@@ -53,3 +53,11 @@ class TestObtenerCodigoDesdeNombre:
 
     def test_ruta_completa(self):
         assert obtener_codigo_desde_nombre("C:/carpeta/archivo_01.png") == "archivo_01"
+
+
+class TestParseFilenameParts:
+    def test_extrae_base_y_secuencia_con_guion(self):
+        assert parse_filename_parts("69466481-1.jpg") == ("69466481", "1")
+
+    def test_extrae_base_y_secuencia_con_guion_bajo(self):
+        assert parse_filename_parts("69466481_2.jpg") == ("69466481", "2")

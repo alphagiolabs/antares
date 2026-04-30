@@ -6,16 +6,20 @@
   --text-primary: #FFFFFF;
   --text-secondary: #A0A0A0;
   --text-muted: #666666;
-  --accent-orange: #FF6B2C;
-  --accent-orange-hover: #FF8F5E;
-  --accent-orange-glow: rgba(255, 107, 44, 0.25);
+  --accent-primary: #5E6AD2;
+  --accent-primary-hover: #8B93FF;
+  --accent-primary-glow: rgba(94, 106, 210, 0.28);
+  --accent-secondary: #22C7A9;
+  --accent-orange: var(--accent-primary);
+  --accent-orange-hover: var(--accent-primary-hover);
+  --accent-orange-glow: var(--accent-primary-glow);
   --accent-blue: #3B82F6;
   --accent-green: #22C55E;
   --accent-red: #EF4444;
   --accent-yellow: #F59E0B;
   --border-subtle: #1A1A1A;
   --border-medium: #2A2A2A;
-  --border-active: #FF6B2C;
+  --border-active: var(--accent-primary);
   --ease-smooth: cubic-bezier(0.25, 0.1, 0.25, 1);
 
   --mc-canvas: #0A0A0A;
@@ -28,9 +32,9 @@
   --mc-granite: #333333;
   --mc-graphite: #A0A0A0;
   --mc-dust: #333333;
-  --mc-signal: #FF6B2C;
-  --mc-signalLight: #FF8F5E;
-  --mc-clay: #FF6B2C;
+  --mc-signal: var(--accent-primary);
+  --mc-signalLight: var(--accent-primary-hover);
+  --mc-clay: #4D57BE;
   --mc-linkBlue: #3B82F6;
   --mc-red: #EF4444;
   --mc-yellow: #F59E0B;
@@ -69,7 +73,7 @@
     background: rgba(255, 255, 255, 0.25);
   }
   ::selection {
-    background: rgba(255, 107, 44, 0.35);
+    background: rgba(94, 106, 210, 0.35);
     color: #fff;
   }
 }
@@ -105,7 +109,7 @@
   }
   .input-base:focus {
     border-color: var(--accent-orange);
-    box-shadow: 0 0 0 3px rgba(255, 107, 44, 0.15);
+    box-shadow: 0 0 0 3px rgba(94, 106, 210, 0.16);
   }
   .input-base::placeholder {
     @apply text-[#555555];

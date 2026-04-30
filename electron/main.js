@@ -4,6 +4,7 @@ const fs = require('fs');
 const { spawn } = require('child_process');
 const { autoUpdater } = require('electron-updater');
 const { getBackendCommand } = require('./backend-command');
+const { handleDialogCall } = require('./dialog-handlers');
 
 const isDev = !app.isPackaged;
 
@@ -50,7 +51,7 @@ function _startPythonBackend() {
   
   pythonProcess = spawn(cmd, args, {
     stdio: ['pipe', 'pipe', 'pipe'],
-    env: { ...process.env, PYTHONIOENCODING: 'utf-8' },
+    env: { ...process.env, PYTHONIOENCODING: 'utf-8', PYTHONUTF8: '1' },
   });
 
   pythonProcess.stderr.on('data', (data) => {
@@ -120,6 +121,11 @@ function setupNotificationListener() {
 
 // IPC bridge: frontend -> main -> Python -> main -> frontend
 ipcMain.handle('ipc-call', async (event, method, params) => {
+  const dialogResult = await handleDialogCall(method, params, dialog, mainWindow);
+  if (dialogResult.handled) {
+    return dialogResult.result;
+  }
+
   if (!pythonProcess || pythonProcess.killed) {
     throw new Error('Backend no disponible');
   }

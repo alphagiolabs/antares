@@ -8,7 +8,7 @@ const Input = forwardRef<HTMLInputElement, InputProps>(({ className = '', ...pro
   return (
     <input
       ref={ref}
-      className={`bg-[#1A1A1A] text-white border border-[#222222] rounded-lg px-3 py-2 text-sm outline-none transition-all duration-200 placeholder:text-[#555555] focus:border-[#FF6B2C] focus:shadow-[0_0_0_3px_rgba(255,107,44,0.15)] ${className}`}
+      className={`bg-[#1A1A1A] text-white border border-[#222222] rounded-lg px-3 py-2 text-sm outline-none transition-all duration-200 placeholder:text-[#555555] focus:border-[#5E6AD2] focus:shadow-[0_0_0_3px_rgba(94,106,210,0.15)] ${className}`}
       {...props}
     />
   );

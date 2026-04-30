@@ -1,66 +1,144 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { api } from '../api';
-import { DBField, DBRecord } from '../types';
+import type { DBField, DBRecord } from '../types';
 import Button from './ui/Button';
 import Badge from './ui/Badge';
+import { useToast } from '../hooks/useToast';
+import { useDialog } from '../hooks/useDialog';
+import EmptyState from './ui/EmptyState';
+
+function useDbError(addToast: (t: { message: string; type: 'error' }) => void) {
+  return (action: string, err: unknown) => {
+    const msg = err instanceof Error ? err.message : String(err);
+    addToast({ message: `Error ${action}: ${msg}`, type: 'error' });
+  };
+}
 
 export default function DatabaseTab() {
+  const { addToast } = useToast();
+  const { confirm } = useDialog();
   const [records, setRecords] = useState<DBRecord[]>([]);
   const [fields, setFields] = useState<string[]>([]);
   const [allFields, setAllFields] = useState<DBField[]>([]);
   const [newField, setNewField] = useState({ name: '', type: 'TEXT', required: false, unique: false });
   const [activeSection, setActiveSection] = useState<'records' | 'schema'>('records');
+  const [searchQuery, setSearchQuery] = useState('');
 
-  const refresh = async () => {
-    const r = await api.getRecords();
-    setRecords(r.records);
-    setFields(r.fields);
-    const f = await api.getFields();
-    setAllFields(f.fields);
-  };
+  const filteredRecords = useMemo(() => {
+    if (!searchQuery.trim()) return records;
+    const q = searchQuery.toLowerCase();
+    return records.filter((r) =>
+      fields.some((f) => String(r[f] ?? '').toLowerCase().includes(q))
+    );
+  }, [records, fields, searchQuery]);
 
-  useEffect(() => { refresh(); }, []);
+  const alertError = useDbError(addToast);
+
+  const refresh = useCallback(async () => {
+    try {
+      const r = await api.getRecords();
+      setRecords(r.records);
+      setFields(r.fields);
+      const f = await api.getFields();
+      setAllFields(f.fields);
+    } catch (err) {
+      alertError('refrescando datos', err);
+    }
+  }, [alertError]);
+
+  useEffect(() => { refresh(); }, [refresh]);
 
   const importExcel = async () => {
     const d = await api.dialogFiles();
     if (!d.paths.length) return;
-    await api.importExcel(d.paths[0]);
-    await refresh();
+    try {
+      await api.importExcel(d.paths[0]);
+      await refresh();
+    } catch (err) {
+      alertError('importando Excel', err);
+    }
   };
 
   const exportExcel = async () => {
     const d = await api.dialogSave();
     if (!d.paths.length) return;
-    await api.exportExcel(d.paths[0]);
+    try {
+      await api.exportExcel(d.paths[0]);
+    } catch (err) {
+      alertError('exportando Excel', err);
+    }
   };
 
   const template = async () => {
     const d = await api.dialogSave();
     if (!d.paths.length) return;
-    await api.generateTemplate(d.paths[0]);
+    try {
+      await api.generateTemplate(d.paths[0]);
+    } catch (err) {
+      alertError('generando plantilla', err);
+    }
   };
 
   const addField = async () => {
     const name = newField.name.trim().toLowerCase();
-    if (!name || !name.replace('_', '').match(/^[a-z0-9]+$/)) { alert('Nombre inválido'); return; }
-    const updated = [...allFields, { ...newField, name }];
-    await api.updateFields(updated);
-    setNewField({ name: '', type: 'TEXT', required: false, unique: false });
-    await refresh();
+    if (!name.match(/^[a-z_][a-z0-9_]*$/)) {
+      addToast({ message: 'Nombre inválido. Use solo letras minúsculas, números y guiones bajos. Debe empezar con letra o guion bajo.', type: 'warning' });
+      return;
+    }
+    if (allFields.some(f => f.name === name)) {
+      addToast({ message: 'El campo ya existe', type: 'warning' });
+      return;
+    }
+    try {
+      const updated = [...allFields, { ...newField, name }];
+      await api.updateFields(updated);
+      setNewField({ name: '', type: 'TEXT', required: false, unique: false });
+      await refresh();
+      addToast({ message: 'Campo agregado correctamente', type: 'success' });
+    } catch (err) {
+      alertError('agregando campo', err);
+    }
   };
 
   const removeField = async (name: string) => {
-    if (allFields.length <= 1) return alert('Debe quedar al menos un campo');
-    if (!confirm(`¿Eliminar campo '${name}'?`)) return;
-    const updated = allFields.filter((f) => f.name !== name);
-    await api.updateFields(updated);
-    await refresh();
+    if (allFields.length <= 1) {
+      addToast({ message: 'Debe quedar al menos un campo', type: 'warning' });
+      return;
+    }
+    const ok = await confirm({ title: 'Eliminar campo', description: `¿Eliminar campo '${name}'?`, type: 'destructive', confirmLabel: 'Eliminar' });
+    if (!ok) return;
+    try {
+      const updated = allFields.filter((f) => f.name !== name);
+      await api.updateFields(updated);
+      await refresh();
+      addToast({ message: 'Campo eliminado', type: 'success' });
+    } catch (err) {
+      alertError('eliminando campo', err);
+    }
   };
 
   const resetFields = async () => {
-    if (!confirm('¿Restaurar campos por defecto?')) return;
-    await api.resetFields();
-    await refresh();
+    const ok = await confirm({ title: 'Restaurar campos', description: '¿Restaurar campos por defecto?' });
+    if (!ok) return;
+    try {
+      await api.resetFields();
+      await refresh();
+      addToast({ message: 'Campos restaurados', type: 'success' });
+    } catch (err) {
+      alertError('restaurando campos', err);
+    }
+  };
+
+  const clearDatabase = async () => {
+    const ok = await confirm({ title: 'Limpiar base de datos', description: '¿Eliminar TODOS los registros de la base de datos? Esta acción no se puede deshacer.', type: 'destructive', confirmLabel: 'Eliminar todo' });
+    if (!ok) return;
+    try {
+      const res = await api.clearDatabase();
+      addToast({ message: `Se eliminaron ${res.cleared} registros.`, type: 'success' });
+      await refresh();
+    } catch (err) {
+      alertError('limpiando base de datos', err);
+    }
   };
 
   return (
@@ -95,6 +173,7 @@ export default function DatabaseTab() {
           <Button variant="ghost" className="text-txt-secondary hover:text-txt-primary" onClick={template}>Plantilla</Button>
           <Button variant="secondary" onClick={importExcel}>Importar</Button>
           <Button variant="secondary" onClick={exportExcel}>Exportar</Button>
+          <Button variant="danger" onClick={clearDatabase}>Limpiar</Button>
         </div>
       </div>
 
@@ -105,22 +184,50 @@ export default function DatabaseTab() {
             <div className="flex items-center justify-between mb-4">
               <div>
                 <p className="text-txt-muted text-xs uppercase tracking-wider mb-1">Visor de datos</p>
-                <h3 className="text-xl font-semibold text-txt-primary">{records.length} registros en base de datos</h3>
+                <h3 className="text-xl font-semibold text-txt-primary">
+                  {filteredRecords.length}{searchQuery ? ' de ' + records.length : ''} registros
+                </h3>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="relative">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="absolute left-3 top-1/2 -translate-y-1/2 text-txt-muted">
+                    <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                  </svg>
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Buscar en todos los campos..."
+                    className="w-64 pl-9 pr-3 py-2 bg-dark-input border border-bdr-medium rounded-btn text-sm text-txt-primary placeholder:text-txt-muted focus:border-accent focus:outline-none"
+                  />
+                  {searchQuery && (
+                    <button onClick={() => setSearchQuery('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-txt-muted hover:text-txt-primary">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
 
             <div className="flex-1 bg-dark-surface rounded-lg border border-bdr-subtle flex flex-col overflow-hidden">
               {records.length === 0 ? (
-                <div className="flex-1 flex flex-col items-center justify-center text-center">
-                  <div className="w-16 h-16 rounded-full bg-dark-elevated flex items-center justify-center mb-4">
-                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" className="text-txt-muted" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <EmptyState
+                  icon={
+                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-txt-muted">
                       <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
                       <polyline points="14 2 14 8 20 8" />
                     </svg>
-                  </div>
-                  <p className="text-txt-primary font-semibold text-lg">Sin registros</p>
-                  <p className="text-txt-muted text-sm mt-1">Importa un archivo Excel para comenzar</p>
-                </div>
+                  }
+                  title="Sin registros"
+                  description="Importa un archivo Excel para comenzar"
+                  action={{ label: 'Importar Excel', onClick: importExcel }}
+                />
+              ) : filteredRecords.length === 0 ? (
+                <EmptyState
+                  title="Sin coincidencias"
+                  description={`No se encontraron resultados para "${searchQuery}"`}
+                  action={{ label: 'Limpiar búsqueda', onClick: () => setSearchQuery('') }}
+                />
               ) : (
                 <div className="flex-1 flex flex-col">
                   <div className="px-4 py-2.5 bg-dark-elevated border-b border-bdr-subtle flex items-center gap-3 shrink-0">
@@ -130,7 +237,7 @@ export default function DatabaseTab() {
                   </div>
                   <div className="flex-1 p-2 overflow-y-auto">
                     <div className="grid gap-1">
-                      {records.map((r, i) => (
+                      {filteredRecords.map((r, i) => (
                         <div key={i} className={`flex items-center gap-3 px-4 py-2.5 rounded-lg text-[13px] transition-colors border ${i % 2 === 0 ? 'bg-dark-elevated/50 border-bdr-subtle/50' : 'bg-transparent border-transparent hover:border-bdr-subtle/50 hover:bg-dark-elevated/30'}`}>
                           {fields.map((f) => (
                             <span key={f} className="flex-1 min-w-0 truncate text-txt-secondary">{String(r[f] ?? '')}</span>

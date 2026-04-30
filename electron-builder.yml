@@ -1,6 +1,6 @@
-appId: com.hidroconvert.app
-productName: HidroConvert
-copyright: Copyright © 2026 HidroConvert
+appId: com.cosmo.app
+productName: COSMO
+copyright: Copyright © 2026 COSMO
 directories:
   output: dist-electron
   buildResources: assets
@@ -56,7 +56,7 @@ extraResources:
     filter: ["**/*"]
   - from: dist
     to: backend
-    filter: ["HidroConvertBackend*"]
+    filter: ["CosmoBackend*"]
 win:
   target:
     - target: nsis
@@ -64,7 +64,7 @@ win:
     - target: portable
       arch: [x64]
   icon: assets/icon.ico
-  legalTrademarks: "HidroConvert"
+  legalTrademarks: "COSMO"
   requestedExecutionLevel: asInvoker
   verifyUpdateCodeSignature: true
   signtoolOptions:
@@ -89,8 +89,8 @@ linux:
     - rpm
   category: Utility
   icon: assets/icon.png
-  maintainer: "HidroConvert"
-  vendor: "HidroConvert"
+  maintainer: "COSMO"
+  vendor: "COSMO"
 snap:
   grade: stable
   confinement: strict
@@ -103,20 +103,20 @@ nsis:
   allowElevation: true
   createDesktopShortcut: always
   createStartMenuShortcut: true
-  shortcutName: HidroConvert
-  uninstallDisplayName: "HidroConvert"
+  shortcutName: COSMO
+  uninstallDisplayName: "COSMO"
   installerIcon: assets/icon.ico
   uninstallerIcon: assets/icon.ico
   installerHeaderIcon: assets/icon.ico
-  artifactName: "HidroConvert-Setup-${version}.exe"
+  artifactName: "COSMO-Setup-${version}.exe"
   deleteAppDataOnUninstall: false
   runAfterFinish: true
   menuCategory: true
   displayLanguageSelector: false
 portable:
-  artifactName: "HidroConvert-Portable-${version}.exe"
+  artifactName: "COSMO-Portable-${version}.exe"
 dmg:
-  artifactName: "HidroConvert-${version}-${arch}.dmg"
+  artifactName: "COSMO-${version}-${arch}.dmg"
   icon: assets/icon.icns
   sign: false
   contents:

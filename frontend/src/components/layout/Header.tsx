@@ -13,15 +13,15 @@ function SearchIcon({ className }: { className?: string }) {
 
 export default function Header({ title, onSearchClick }: HeaderProps) {
   return (
-    <header className="h-12 shrink-0 flex items-center justify-between px-6 border-b border-[#1A1A1A] bg-[#0A0A0A]/80 backdrop-blur-sm select-none">
-      <span className="text-[13px] text-[#A0A0A0] font-medium">{title}</span>
+    <header className="h-12 shrink-0 flex items-center justify-between px-6 border-b border-[var(--border-subtle)] bg-[var(--bg-base)]/80 backdrop-blur-sm select-none">
+      <span className="text-[13px] text-[var(--text-secondary)] font-medium">{title}</span>
       <button
         onClick={onSearchClick}
-        className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#1A1A1A] border border-[#222222] text-xs text-[#666666] hover:text-white hover:border-[#444444] transition-all"
+        className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:border-[var(--border-medium)] transition-all"
       >
         <SearchIcon />
         <span>Buscar</span>
-        <span className="text-[10px] bg-[#222222] px-1.5 py-0.5 rounded border border-[#333333]">Ctrl+K</span>
+        <span className="text-[10px] bg-[var(--bg-input)] px-1.5 py-0.5 rounded border border-[var(--border-medium)]">Ctrl+K</span>
       </button>
     </header>
   );

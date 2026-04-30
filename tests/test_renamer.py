@@ -29,7 +29,7 @@ class TestRenamerEngine:
         assert resultado == "1_2454514245.jpg"
 
     def test_aplicar_fallback_codigo_para_campo_principal(self, monkeypatch, tmp_path):
-        """Si el primer campo no está en BD, usa el código como fallback."""
+        """Si faltan campos secundarios, elimina separadores sobrantes."""
         monkeypatch.setattr(
             "backend.core.renamer.get_field_names",
             lambda: ["codigo", "nombre"],
@@ -41,7 +41,7 @@ class TestRenamerEngine:
 
         resultado = engine.aplicar(archivo, codigo_manual="1")
 
-        assert resultado == "1_.jpg"
+        assert resultado == "1.jpg"
 
     def test_aplicar_otros_campos_vacios_si_no_estan_en_bd(self, monkeypatch, tmp_path):
         """Campos distintos al primero quedan vacíos si no hay BD."""
@@ -56,7 +56,7 @@ class TestRenamerEngine:
 
         resultado = engine.aplicar(archivo, codigo_manual="1", datos_bd={"codigo": "1"})
 
-        assert resultado == "1_.jpg"
+        assert resultado == "1.jpg"
 
     def test_aplicar_no_propaga_stem_como_dato(self, monkeypatch, tmp_path):
         """Bugfix: el stem del archivo NO debe usarse como fallback para campos secundarios.
@@ -75,9 +75,24 @@ class TestRenamerEngine:
 
         resultado = engine.aplicar(archivo, codigo_manual="1")
 
-        # El código es "1", nombre no está en BD → vacío → "1_.jpg"
-        assert resultado == "1_.jpg"
+        # El código es "1", nombre no está en BD → vacío → "1.jpg"
+        assert resultado == "1.jpg"
         assert "1_1_1_1" not in resultado
+
+    def test_limpia_separadores_repetidos_al_faltar_datos(self, monkeypatch, tmp_path):
+        """Los campos vacíos no deben dejar guiones o espacios colgando."""
+        monkeypatch.setattr(
+            "backend.core.renamer.get_field_names",
+            lambda: ["codigo", "nombre", "categoria"],
+        )
+
+        engine = RenamerEngine("{codigo} - {nombre} - {categoria}{ext}", secuencia_inicial=1)
+        archivo = tmp_path / "1.jpg"
+        archivo.write_text("dummy")
+
+        resultado = engine.aplicar(archivo, codigo_manual="1", datos_bd={"codigo": "1"})
+
+        assert resultado == "1.jpg"
 
     def test_secuencia_autoincremental(self, monkeypatch, tmp_path):
         """Cada llamada a aplicar incrementa {seq}."""
@@ -160,3 +175,17 @@ class TestRenamerEngine:
         archivo.write_text("dummy")
 
         assert engine.patron == "{codigo}_{nombre}{ext}"
+
+    def test_patron_por_defecto_sin_campos_usa_secuencia(self, monkeypatch, tmp_path):
+        """Sin campos configurados usa un patrón secuencial simple."""
+        monkeypatch.setattr(
+            "backend.core.renamer.get_field_names",
+            lambda: [],
+        )
+
+        engine = RenamerEngine(patron=None, secuencia_inicial=1)
+        archivo = tmp_path / "a.jpg"
+        archivo.write_text("dummy")
+
+        assert engine.patron == "img_{seq}{ext}"
+        assert engine.aplicar(archivo) == "img_001.jpg"

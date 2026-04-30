@@ -1,9 +1,10 @@
 """Format registry for extensible image format support."""
 
 from __future__ import annotations
+from pathlib import Path
 from typing import Any, Callable
 
-FormatEncoder = Callable[[Any, Any, str, Any], None]
+FormatEncoder = Callable[[Any, Path, str, dict[str, Any]], None]
 
 
 class FormatRegistry:
@@ -19,7 +20,11 @@ class FormatRegistry:
         modes: tuple[str, ...],
         encoder: FormatEncoder | None = None,
     ) -> None:
-        """Register a new image format."""
+        """Register a new image format.
+
+        Custom encoders receive the prepared PIL image, destination path,
+        registered format name, and save options.
+        """
         self._formats[name.upper()] = {
             "ext": ext,
             "modes": modes,

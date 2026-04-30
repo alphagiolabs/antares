@@ -64,7 +64,7 @@ export default function HistoryView() {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Buscar en historial..."
-            className="w-56 pl-9 pr-3 py-2 bg-[#1A1A1A] border border-[#222222] rounded-full text-sm text-white placeholder:text-[#555555] focus:border-[#FF6B2C] focus:outline-none focus:shadow-[0_0_0_3px_rgba(255,107,44,0.15)]"
+            className="w-56 pl-9 pr-3 py-2 bg-[#1A1A1A] border border-[#222222] rounded-full text-sm text-white placeholder:text-[#555555] focus:border-[#5E6AD2] focus:outline-none focus:shadow-[0_0_0_3px_rgba(94,106,210,0.15)]"
           />
         </div>
       </div>

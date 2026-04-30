@@ -15,7 +15,7 @@ import traceback
 import warnings
 from pathlib import Path
 
-from backend.core.database import init_db
+from backend.core.database import close_connection, init_db
 from backend.core.plugins import load_plugins_from_dir
 from backend.handlers import HANDLERS
 from backend.ipc_protocol import read_message, send_response, send_notification
@@ -126,6 +126,7 @@ def main() -> None:
     except KeyboardInterrupt:
         logger.info("Keyboard interrupt received")
     finally:
+        close_connection()
         logger.info(t("info.backend_shutdown"))
 
 

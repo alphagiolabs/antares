@@ -66,7 +66,8 @@ def send_response(result: Any, msg_id: str | int, *, error: str | None = None) -
         payload["error"] = {"code": -32000, "message": error}
     else:
         payload["result"] = result
-    print(json.dumps(payload, ensure_ascii=False, default=_json_default))
+    json_str = json.dumps(payload, ensure_ascii=False, default=_json_default)
+    sys.stdout.write(json_str + '\n')
     sys.stdout.flush()
 
 

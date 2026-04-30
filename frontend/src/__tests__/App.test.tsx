@@ -1,21 +1,27 @@
 import { describe, it, expect } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import App from '../App';
 
 describe('App', () => {
-  it('renders without crashing', () => {
+  it('renders without crashing', async () => {
     render(<App />);
-    expect(screen.getByText('Conversión')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getAllByText('Conversión').length).toBeGreaterThan(0);
+    });
   });
 
-  it('shows conversion tab by default', () => {
+  it('shows conversion tab by default', async () => {
     render(<App />);
-    expect(screen.getByText('Arrastra imágenes aquí')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText('Arrastra imágenes aquí')).toBeInTheDocument();
+    });
   });
 
-  it('keeps start disabled until files and destination are ready', () => {
+  it('keeps start disabled until files and destination are ready', async () => {
     render(<App />);
-    expect(screen.getByRole('button', { name: /Iniciar conversión/i })).toBeDisabled();
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Iniciar conversión/i })).toBeDisabled();
+    });
   });
 
   it('has sidebar with navigation buttons', () => {

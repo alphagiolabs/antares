@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from functools import wraps
 from pathlib import Path
@@ -463,7 +465,10 @@ class Handlers:
         import base64
         content = base64.b64decode(content_b64)
         entry = add_uploaded_format(nombre, filename, content, bool(persisted), filename_pattern)
-        return {"format": entry}
+        # Ensure has_mapping field is included
+        result = dict(entry)
+        result["has_mapping"] = result.get("mapping") is not None
+        return {"format": result}
 
     @staticmethod
     @with_locale
@@ -481,11 +486,14 @@ class Handlers:
         entry = update_mapping(fmt_id, mapping)
         if entry is None:
             raise ValueError("Formato no encontrado")
-        return {"format": entry}
+        # Ensure has_mapping field is included
+        result = dict(entry)
+        result["has_mapping"] = result.get("mapping") is not None
+        return {"format": result}
 
 
 def _process_thread(params: dict[str, Any]) -> None:
-    """Thread de procesamiento en background."""
+    """Thread de procesamiento en background con conversión paralela."""
     set_locale(params.get("locale", "es"))
     files = params.get("files", [])
     destino = params.get("destino", "")
@@ -505,66 +513,84 @@ def _process_thread(params: dict[str, Any]) -> None:
     if resize_ancho and resize_alto:
         resize = (int(resize_ancho), int(resize_alto))
 
-    for i, fpath in enumerate(files):
-        with _state._lock:
-            cancel = _state.cancel_requested
-        if cancel:
-            _log(t("info.process_cancelled"), "warn")
-            break
+    ext_dest = FORMATOS_SOPORTADOS[formato]["ext"]
+    total = len(files)
 
+    # Pre-compute output paths (rename lookup needs DB access — do sequentially)
+    tasks: list[tuple[str, Path, bool]] = []
+    for fpath in files:
         p = Path(fpath)
-        with _state._lock:
-            _state.progress = int(((i + 1) / len(files)) * 100)
-            _state.current_file = p.name
-            progress = _state.progress
-            current_file = _state.current_file
-            ok_count = _state.ok_count
-            err_count = _state.err_count
-
-        send_notification("process.progress", {
-            "progress": progress,
-            "current_file": current_file,
-            "ok_count": ok_count,
-            "err_count": err_count,
-        })
-
-        # Detectar si es video para solo renombrar
-        is_video = es_video(p)
-        ext_dest = FORMATOS_SOPORTADOS[formato]["ext"]
+        is_video_file = es_video(p)
 
         if engine:
             codigo, seq = parse_filename_parts(p.name)
             datos = buscar_por_codigo(codigo)
             fseq = seq if use_filename_seq else None
             nuevo_nombre = engine.aplicar(p, datos_bd=datos, codigo_manual=codigo, file_seq=fseq)
-            # Para videos, mantener la extensión original
-            if is_video:
+            if is_video_file:
                 out_path = Path(destino) / nuevo_nombre
             else:
                 out_path = (Path(destino) / nuevo_nombre).with_suffix(ext_dest)
         else:
-            if is_video:
+            if is_video_file:
                 out_path = Path(destino) / p.name
             else:
                 out_path = Path(destino) / (p.stem + ext_dest)
 
+        tasks.append((fpath, out_path, is_video_file))
+
+    # Process files in parallel using ThreadPoolExecutor
+    # Pillow releases the GIL during C-level image operations (resize, save, convert)
+    max_workers = min(os.cpu_count() or 2, 4)
+    completed = 0
+
+    def _process_one(task: tuple[str, Path, bool]) -> tuple[bool, str, str]:
+        """Process a single file. Returns (success, filename, error_msg)."""
+        fpath, out_path, is_video_file = task
+        p = Path(fpath)
         try:
-            if is_video:
-                # Solo copiar el video sin conversión
+            if is_video_file:
                 copiar_video(fpath, out_path)
-                with _state._lock:
-                    _state.ok_count += 1
-                _log(f"Video renombrado: {out_path.name}", "ok")
             else:
-                # Convertir imagen
                 convertir_imagen(fpath, out_path, formato, calidad, resize, keep_exif)
-                with _state._lock:
-                    _state.ok_count += 1
-                _log(f"Procesado: {out_path.name}", "ok")
+            return (True, out_path.name, "")
         except Exception as e:
+            return (False, p.name, str(e))
+
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
+        futures = {pool.submit(_process_one, task): task for task in tasks}
+
+        for future in as_completed(futures):
             with _state._lock:
-                _state.err_count += 1
-            _log(t("error.process_failed", file=p.name, error=e), "error")
+                if _state.cancel_requested:
+                    pool.shutdown(wait=False, cancel_futures=True)
+                    _log(t("info.process_cancelled"), "warn")
+                    break
+
+            success, name, error = future.result()
+            completed += 1
+
+            with _state._lock:
+                if success:
+                    _state.ok_count += 1
+                    _log(f"Procesado: {name}", "ok")
+                else:
+                    _state.err_count += 1
+                    _log(t("error.process_failed", file=name, error=error), "error")
+
+                _state.progress = int((completed / total) * 100)
+                _state.current_file = name
+                progress = _state.progress
+                current_file = _state.current_file
+                ok_count = _state.ok_count
+                err_count = _state.err_count
+
+            send_notification("process.progress", {
+                "progress": progress,
+                "current_file": current_file,
+                "ok_count": ok_count,
+                "err_count": err_count,
+            })
 
     with _state._lock:
         _state.running = False

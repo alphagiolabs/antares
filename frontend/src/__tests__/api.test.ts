@@ -16,12 +16,12 @@ beforeEach(() => {
 
 describe('API Client', () => {
   it('should call version endpoint', async () => {
-    mockInvoke.mockResolvedValue({ version: '0.3.2' });
+    mockInvoke.mockResolvedValue({ version: '0.3.6' });
     
     const result = await api.version();
     
     expect(mockInvoke).toHaveBeenCalledWith('version', undefined);
-    expect(result.version).toBe('0.3.2');
+    expect(result.version).toBe('0.3.6');
   });
 
   it('should handle IPC errors', async () => {

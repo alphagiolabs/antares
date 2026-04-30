@@ -37,9 +37,9 @@ export default function Button({
       onClick={onClick}
       disabled={disabled}
       className={`inline-flex items-center justify-center gap-2 rounded-full transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed active:scale-[0.98] ${sizeClasses[size]} ${variants[variant]} ${className}`}
-      style={isPrimary ? { backgroundColor: disabled ? '#222222' : '#FF6B2C' } : undefined}
-      onMouseEnter={(e) => { if (isPrimary && !disabled) (e.currentTarget as HTMLButtonElement).style.backgroundColor = '#FF8F5E'; }}
-      onMouseLeave={(e) => { if (isPrimary && !disabled) (e.currentTarget as HTMLButtonElement).style.backgroundColor = '#FF6B2C'; }}
+      style={isPrimary ? { backgroundColor: disabled ? '#222222' : 'var(--accent-primary)' } : undefined}
+      onMouseEnter={(e) => { if (isPrimary && !disabled) (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'var(--accent-primary-hover)'; }}
+      onMouseLeave={(e) => { if (isPrimary && !disabled) (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'var(--accent-primary)'; }}
     >
       {children}
     </button>

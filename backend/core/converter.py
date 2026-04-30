@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import base64
+import io
 from pathlib import Path
 from typing import Callable, Union
 
 from PIL import Image
 
-from backend.core.format_registry import FormatRegistry, get_registry
+from backend.core.format_registry import get_registry
 
 # Initialize default formats in the global registry
 _registry = get_registry()
@@ -20,6 +22,21 @@ _registry.add_format("TIFF", ".tiff", ("RGB", "RGBA", "L", "CMYK"))
 _registry.add_format("GIF", ".gif", ("P", "RGB", "L"))
 _registry.add_format("ICO", ".ico", ("RGB", "RGBA", "L"))
 _registry.add_format("PDF", ".pdf", ("RGB", "RGBA", "L", "P"))
+
+# Video formats (for rename-only support)
+VIDEO_FORMATS = {
+    "MP4": ".mp4",
+    "AVI": ".avi",
+    "MOV": ".mov",
+    "MKV": ".mkv",
+    "WMV": ".wmv",
+    "FLV": ".flv",
+    "WEBM": ".webm",
+    "M4V": ".m4v",
+    "3GP": ".3gp",
+    "MPG": ".mpg",
+    "MPEG": ".mpeg",
+}
 
 # Backward compatibility alias
 FORMATOS_SOPORTADOS = _registry
@@ -35,6 +52,77 @@ ProgresoCallback = Callable[[int, int, Path], None]
 def obtener_formatos() -> list[str]:
     """Retorna lista de formatos soportados."""
     return get_registry().list_formats()
+
+
+def es_video(ruta: Union[str, Path]) -> bool:
+    """Detecta si un archivo es un video basado en su extensión."""
+    ruta = Path(ruta)
+    ext = ruta.suffix.lower()
+    return ext in VIDEO_FORMATS.values()
+
+
+def obtener_formatos_video() -> list[str]:
+    """Retorna lista de formatos de video soportados para renombrado."""
+    return list(VIDEO_FORMATS.keys())
+
+
+def copiar_video(
+    ruta_origen: Union[str, Path],
+    ruta_destino: Union[str, Path],
+) -> Path:
+    """Copia un archivo de video sin conversión (solo renombrado).
+
+    Args:
+        ruta_origen: Ruta del video origen.
+        ruta_destino: Ruta de salida.
+
+    Returns:
+        Path del archivo generado.
+
+    Raises:
+        FileNotFoundError: Si el video origen no existe.
+    """
+    import shutil
+
+    ruta_origen = Path(ruta_origen)
+    ruta_destino = Path(ruta_destino)
+
+    if not ruta_origen.exists():
+        raise FileNotFoundError(f"No se encontró el video: {ruta_origen}")
+
+    ruta_destino.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(ruta_origen, ruta_destino)
+
+    return ruta_destino
+
+
+def _ensure_mode(img: Image.Image, target_modes: tuple[str, ...]) -> Image.Image:
+    """Convierte la imagen al modo compatible con el formato destino."""
+    if img.mode in target_modes:
+        return img
+    # Manejar transparencia -> fondo blanco
+    if img.mode in ("RGBA", "LA", "P") and "RGBA" not in target_modes:
+        fondo = Image.new("RGB", img.size, (255, 255, 255))
+        if img.mode == "P":
+            img = img.convert("RGBA")
+        if img.mode in ("RGBA", "LA"):
+            fondo.paste(img, mask=img.split()[-1] if img.mode in ("RGBA", "LA") else None)
+            return fondo
+        return img.convert("RGB")
+    target_mode = "RGB" if "RGB" in target_modes else target_modes[0]
+    return img.convert(target_mode)
+
+
+def _build_save_kwargs(formato: str, calidad: int, keep_exif: bool, img: Image.Image) -> dict:
+    """Construye kwargs para img.save según el formato."""
+    kwargs: dict = {}
+    upper_fmt = formato.upper()
+    if upper_fmt in ("JPEG", "JPG", "WEBP"):
+        kwargs["quality"] = max(1, min(100, int(calidad)))
+        kwargs["optimize"] = True
+    if keep_exif and "exif" in img.info:
+        kwargs["exif"] = img.info["exif"]
+    return kwargs
 
 
 def convertir_imagen(
@@ -72,36 +160,23 @@ def convertir_imagen(
     if formato not in FORMATOS_SOPORTADOS:
         raise ValueError(f"Formato no soportado: {formato_salida}")
 
-    with Image.open(ruta_origen) as img:
-        # Modo de color compatible
+    calidad = max(1, min(100, int(calidad)))
+
+    with Image.open(ruta_origen) as source_img:
         info = FORMATOS_SOPORTADOS[formato]
-        if img.mode not in info["modes"]:
-            if img.mode in ("RGBA", "LA", "P") and "RGBA" not in info["modes"]:
-                # Convertir a RGB con fondo blanco si el formato no soporta transparencia
-                fondo = Image.new("RGB", img.size, (255, 255, 255))
-                if img.mode == "P":
-                    img = img.convert("RGBA")
-                if img.mode in ("RGBA", "LA"):
-                    fondo.paste(img, mask=img.split()[-1] if img.mode in ("RGBA", "LA") else None)
-                    img = fondo
-                else:
-                    img = img.convert("RGB")
-            else:
-                target_mode = "RGB" if "RGB" in info["modes"] else info["modes"][0]
-                img = img.convert(target_mode)
+        img: Image.Image = _ensure_mode(source_img, info["modes"])
 
-        # Redimensionar si se solicita
         if resize and isinstance(resize, (tuple, list)) and len(resize) == 2:
-            img = img.resize((int(resize[0]), int(resize[1])), Image.LANCZOS)
+            img = img.resize((int(resize[0]), int(resize[1])), getattr(Image, "Resampling", Image).LANCZOS)
 
-        # Guardar
         ruta_destino.parent.mkdir(parents=True, exist_ok=True)
-        save_kwargs = {}
-        if formato in ("JPEG", "WEBP"):
-            save_kwargs["quality"] = max(1, min(100, int(calidad)))
-            save_kwargs["optimize"] = True
-        if keep_exif and "exif" in img.info:
-            save_kwargs["exif"] = img.info["exif"]
+        save_kwargs = _build_save_kwargs(formato, calidad, keep_exif, img)
+
+        encoder = info.get("encoder")
+        if encoder is not None:
+            save_kwargs.setdefault("quality", calidad)
+            encoder(img, ruta_destino, formato, save_kwargs)
+            return ruta_destino
 
         pil_formato = PIL_FORMAT_MAP.get(formato, formato)
         img.save(ruta_destino, format=pil_formato, **save_kwargs)
@@ -134,7 +209,10 @@ def procesar_lote(
     """
     carpeta_destino = Path(carpeta_destino)
     carpeta_destino.mkdir(parents=True, exist_ok=True)
-    ext = FORMATOS_SOPORTADOS[formato.upper()]["ext"]
+    formato_upper = formato.upper()
+    if formato_upper not in FORMATOS_SOPORTADOS:
+        raise ValueError(f"Formato no soportado: {formato}")
+    ext = FORMATOS_SOPORTADOS[formato_upper]["ext"]
     resultados: list[Union[Path, str]] = []
 
     for i, ruta in enumerate(origenes, 1):
@@ -153,49 +231,65 @@ def procesar_lote(
     return resultados
 
 
-import base64
-import tempfile
-
-
 def convertir_a_preview(
     ruta_origen: Union[str, Path],
     formato_salida: str = "PNG",
     calidad: int = 85,
     resize: Union[tuple[int, int], list[int], None] = None,
-) -> str:
-    """Converts image to a small preview and returns base64 PNG data URI.
+) -> dict[str, str]:
+    """Genera una vista previa en el formato seleccionado y retorna metadata.
 
     Args:
-        ruta_origen: Path to the original image.
-        formato_salida: Output format (used only for color mode compatibility).
-        calidad: Quality (used for compatibility with convertir_imagen params).
-        resize: Optional resize tuple.
+        ruta_origen: Path de la imagen origen.
+        formato_salida: Formato destino para la preview (JPEG, PNG, WEBP, etc.).
+        calidad: Calidad 1-100 para formatos con pérdida.
+        resize: Tupla (ancho, alto) opcional.
 
     Returns:
-        Base64 data URI string: "data:image/png;base64,..."
+        Diccionario con:
+            - preview: Base64 data URI string
+            - width: Ancho original
+            - height: Alto original
+            - orig_size_kb: Tamaño original en KB
     """
     ruta_origen = Path(ruta_origen)
     if not ruta_origen.exists():
         raise FileNotFoundError(f"No se encontró: {ruta_origen}")
 
-    with Image.open(ruta_origen) as img:
+    formato = formato_salida.upper()
+    pil_formato = PIL_FORMAT_MAP.get(formato, formato)
+
+    with Image.open(ruta_origen) as source_img:
+        orig_w, orig_h = source_img.size
+        orig_size_kb = round(ruta_origen.stat().st_size / 1024, 1)
+
         # Max preview size 400px on longest side
         max_size = 400
-        ratio = min(max_size / max(img.size), 1.0)
-        preview_size = (int(img.width * ratio), int(img.height * ratio))
-        img = img.resize(preview_size, Image.LANCZOS)
+        ratio = min(max_size / max(source_img.size), 1.0)
+        preview_size = (int(source_img.width * ratio), int(source_img.height * ratio))
+        img: Image.Image = source_img.resize(preview_size, getattr(Image, "Resampling", Image).LANCZOS)
 
-        # Convert to RGB for preview consistency
-        if img.mode in ("RGBA", "LA", "P"):
-            img = img.convert("RGB")
+        # Aplicar modo y calidad según formato
+        if formato in FORMATOS_SOPORTADOS:
+            info = FORMATOS_SOPORTADOS[formato]
+            img = _ensure_mode(img, info["modes"])
         elif img.mode != "RGB":
             img = img.convert("RGB")
 
-        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
-            img.save(tmp.name, format="PNG", optimize=True)
-            tmp_path = tmp.name
+        # Aplicar resize de preview si se proporciona
+        if resize and isinstance(resize, (tuple, list)) and len(resize) == 2:
+            img = img.resize((int(resize[0]), int(resize[1])), getattr(Image, "Resampling", Image).LANCZOS)
 
-    with open(tmp_path, "rb") as f:
-        data = base64.b64encode(f.read()).decode("ascii")
-    Path(tmp_path).unlink(missing_ok=True)
-    return f"data:image/png;base64,{data}"
+        buffer = io.BytesIO()
+        save_kwargs = _build_save_kwargs(formato, calidad, False, img)
+        img.save(buffer, format=pil_formato, **save_kwargs)
+        buffer.seek(0)
+        data = base64.b64encode(buffer.read()).decode("ascii")
+
+    mime = "image/png" if pil_formato == "PNG" else f"image/{pil_formato.lower()}"
+    return {
+        "preview": f"data:{mime};base64,{data}",
+        "width": str(orig_w),
+        "height": str(orig_h),
+        "orig_size_kb": str(orig_size_kb),
+    }

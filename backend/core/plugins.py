@@ -6,7 +6,6 @@ import importlib.util
 import logging
 import sys
 from pathlib import Path
-from typing import Any
 
 from backend.core.format_registry import FormatRegistry, get_registry
 from backend.utils.paths import user_data_path

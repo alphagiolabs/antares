@@ -5,10 +5,10 @@ build-backend = "setuptools.backends.legacy:build"
 
 [project]
 name = "hidro-convert-backend"
-version = "0.3.2"
-description = "Backend for HidroConvert - Image conversion and renaming"
+version = "0.3.6"
+description = "Backend for COSMO - Image conversion and renaming"
 authors = [
-    {name = "HidroConvert", email = "dev@hidroconvert.com"},
+    {name = "COSMO", email = "dev@cosmo.app"},
 ]
 readme = "README.md"
 requires-python = ">=3.10"

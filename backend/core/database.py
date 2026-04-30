@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import re
 import sqlite3
+import threading
 import unicodedata
 from pathlib import Path
 from typing import Any
@@ -14,6 +15,45 @@ from backend.core.config_fields import load_fields, get_field_names, save_fields
 from backend.core.exceptions import DatabaseError
 
 logger = logging.getLogger(__name__)
+
+# ─── Connection pool with WAL mode ──────────────────────────────────────────
+
+_db_lock = threading.RLock()
+_db_conn: sqlite3.Connection | None = None
+_db_conn_path: str | None = None
+
+
+def _get_connection() -> sqlite3.Connection:
+    """Retorna una conexión persistente con WAL mode (thread-safe via lock).
+    Automatically reconnects if db_path changes (e.g. during tests).
+    """
+    global _db_conn, _db_conn_path
+    with _db_lock:
+        current_path = str(get_db_path())
+        if _db_conn is None or _db_conn_path != current_path:
+            if _db_conn is not None:
+                try:
+                    _db_conn.close()
+                except Exception:
+                    pass
+            db_path = Path(current_path)
+            db_path.parent.mkdir(parents=True, exist_ok=True)
+            _db_conn = sqlite3.connect(current_path, check_same_thread=False)
+            _db_conn.execute("PRAGMA journal_mode=WAL")
+            _db_conn.execute("PRAGMA synchronous=NORMAL")
+            _db_conn.row_factory = sqlite3.Row
+            _db_conn_path = current_path
+        return _db_conn
+
+
+def close_connection() -> None:
+    """Close the pooled connection (call on shutdown or when path changes)."""
+    global _db_conn, _db_conn_path
+    with _db_lock:
+        if _db_conn is not None:
+            _db_conn.close()
+            _db_conn = None
+            _db_conn_path = None
 
 
 def _normalize_excel_column_name(name: Any, fallback: str) -> str:
@@ -90,9 +130,8 @@ def _create_indexes(cursor: sqlite3.Cursor, fields: list[dict[str, Any]]) -> Non
 def init_db() -> None:
     """Inicializa la base de datos SQLite con la tabla principal según campos configurados."""
     fields = load_fields()
-    db_path = get_db_path()
-    db_path.parent.mkdir(parents=True, exist_ok=True)
-    with sqlite3.connect(str(db_path)) as conn:
+    conn = _get_connection()
+    with _db_lock:
         cursor = conn.cursor()
 
         cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='imagenes'")
@@ -112,7 +151,6 @@ def init_db() -> None:
             cursor.execute("DROP TABLE imagenes")
             cursor.execute(_build_schema(fields))
             if old_rows:
-                # Build INSERT with all columns, providing defaults for new ones
                 new_cols = [f["name"] for f in fields]
                 placeholders = ", ".join(["?"] * len(new_cols))
                 col_names = ", ".join(new_cols)
@@ -130,9 +168,7 @@ def init_db() -> None:
                             values.append(None)
                     cursor.execute(f"INSERT INTO imagenes ({col_names}) VALUES ({placeholders})", values)
 
-        # Always ensure indexes exist (CREATE INDEX IF NOT EXISTS is idempotent)
         _create_indexes(cursor, fields)
-
         conn.commit()
 
 
@@ -187,81 +223,62 @@ def importar_excel(excel_path: str) -> int:
             f"Columnas encontradas: {list(df.columns)}"
         )
 
-    conn = sqlite3.connect(str(get_db_path()))
-    cursor = conn.cursor()
+    with _db_lock:
+        conn = _get_connection()
+        cursor = conn.cursor()
 
-    try:
-        # Limpiar tabla anterior para reemplazar
-        cursor.execute("DELETE FROM imagenes")
+        try:
+            cursor.execute("DELETE FROM imagenes")
 
-        placeholders = ", ".join(["?"] * len(field_names))
-        col_names = ", ".join(field_names)
-        sql = f"INSERT INTO imagenes ({col_names}) VALUES ({placeholders})"
+            placeholders = ", ".join(["?"] * len(field_names))
+            col_names = ", ".join(field_names)
+            sql = f"INSERT INTO imagenes ({col_names}) VALUES ({placeholders})"
 
-        inserted = 0
-        for _, row in df.iterrows():
-            values: list[Any] = []
-            valid = True
-            for fn in field_names:
-                val = row.get(fn)
-                if pd.notna(val) and str(val).strip():
-                    values.append(str(val).strip())
-                elif fn in required:
-                    # Campo requerido vacío → saltar fila
-                    valid = False
-                    break
-                else:
-                    values.append(None)
-            if valid:
-                cursor.execute(sql, values)
-                inserted += 1
+            inserted = 0
+            for _, row in df.iterrows():
+                values: list[Any] = []
+                valid = True
+                for fn in field_names:
+                    val = row.get(fn)
+                    if pd.notna(val) and str(val).strip():
+                        values.append(str(val).strip())
+                    elif fn in required:
+                        valid = False
+                        break
+                    else:
+                        values.append(None)
+                if valid:
+                    cursor.execute(sql, values)
+                    inserted += 1
 
-        conn.commit()
-        return inserted
-    except sqlite3.Error as exc:
-        conn.rollback()
-        raise DatabaseError(f"Error importando datos: {exc}") from exc
-    finally:
-        conn.close()
+            conn.commit()
+            return inserted
+        except sqlite3.Error as exc:
+            conn.rollback()
+            raise DatabaseError(f"Error importando datos: {exc}") from exc
 
 
 def exportar_excel(excel_path: str) -> int:
-    """Exporta los datos actuales de SQLite a un archivo Excel.
-
-    Args:
-        excel_path: Ruta de salida del archivo Excel.
-
-    Returns:
-        Cantidad de registros exportados.
-    """
+    """Exporta los datos actuales de SQLite a un archivo Excel."""
     try:
         import pandas as pd  # type: ignore
     except ImportError as exc:
         raise ImportError("pandas no está instalado.") from exc
 
-    conn = sqlite3.connect(str(get_db_path()))
-    try:
+    with _db_lock:
+        conn = _get_connection()
         field_names = get_field_names()
         cols = ", ".join(field_names)
         df = pd.read_sql_query(f"SELECT {cols} FROM imagenes", conn)
-    finally:
-        conn.close()
 
     df.to_excel(excel_path, index=False)
     return int(len(df))
 
 
 def buscar_por_codigo(codigo: str) -> dict[str, Any] | None:
-    """Busca un registro por código o por cualquier campo de texto exacto.
-
-    Args:
-        codigo: Código a buscar.
-
-    Returns:
-        Diccionario con los datos del registro, o None si no existe.
-    """
-    with sqlite3.connect(str(get_db_path())) as conn:
-        conn.row_factory = sqlite3.Row
+    """Busca un registro por código o por cualquier campo de texto exacto."""
+    with _db_lock:
+        conn = _get_connection()
         cursor = conn.cursor()
         field_names = get_field_names()
         if not field_names:
@@ -282,18 +299,11 @@ def buscar_por_codigo(codigo: str) -> dict[str, Any] | None:
 
 
 def buscar_por_indice(indice: int) -> dict[str, Any] | None:
-    """Busca un registro por su posición (1-based) en la tabla.
-
-    Args:
-        indice: Posición del registro (1 = primer registro).
-
-    Returns:
-        Diccionario con los datos del registro, o None si no existe.
-    """
+    """Busca un registro por su posición (1-based) en la tabla."""
     if indice < 1:
         return None
-    with sqlite3.connect(str(get_db_path())) as conn:
-        conn.row_factory = sqlite3.Row
+    with _db_lock:
+        conn = _get_connection()
         cursor = conn.cursor()
         field_names = get_field_names()
         cols = ", ".join(field_names)
@@ -304,8 +314,8 @@ def buscar_por_indice(indice: int) -> dict[str, Any] | None:
 
 def obtener_todos() -> list[dict[str, Any]]:
     """Retorna todos los registros como lista de diccionarios."""
-    with sqlite3.connect(str(get_db_path())) as conn:
-        conn.row_factory = sqlite3.Row
+    with _db_lock:
+        conn = _get_connection()
         cursor = conn.cursor()
         field_names = get_field_names()
         cols = ", ".join(field_names)
@@ -315,15 +325,12 @@ def obtener_todos() -> list[dict[str, Any]]:
 
 
 def limpiar_base_datos() -> int:
-    """Elimina todos los registros de la tabla imagenes.
-
-    Returns:
-        Cantidad de registros eliminados.
-    """
+    """Elimina todos los registros de la tabla imagenes."""
     db_path = get_db_path()
     if not db_path.exists():
         return 0
-    with sqlite3.connect(str(db_path)) as conn:
+    with _db_lock:
+        conn = _get_connection()
         cursor = conn.cursor()
         cursor.execute("SELECT COUNT(*) FROM imagenes")
         count = cursor.fetchone()[0]

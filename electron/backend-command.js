@@ -34,9 +34,9 @@ function getBackendCommand(isDev, platform, dir) {
   }
   
   // Production: use PyInstaller bundled executable
-  const exeName = platform === 'win32' 
-    ? 'HidroConvertBackend.exe' 
-    : 'HidroConvertBackend';
+  const exeName = platform === 'win32'
+    ? 'CosmoBackend.exe'
+    : 'CosmoBackend';
   
   // In production, resourcesPath would be provided; for testing, use a default
   const resourcesPath = typeof process !== 'undefined' && process.resourcesPath 

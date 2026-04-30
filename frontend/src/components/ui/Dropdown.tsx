@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface DropdownProps<T extends string> {
@@ -44,7 +44,7 @@ export default function Dropdown<T extends string>({ value, options, onChange }:
                 key={opt}
                 onClick={() => { onChange(opt); setOpen(false); }}
                 className={`w-full text-left px-4 py-2.5 text-sm transition-colors ${
-                  opt === value ? 'text-[#FF6B2C] bg-[#FF6B2C]/10' : 'text-[#A0A0A0] hover:bg-[#222222] hover:text-white'
+                  opt === value ? 'text-[#5E6AD2] bg-[#5E6AD2]/10' : 'text-[#A0A0A0] hover:bg-[#222222] hover:text-white'
                 }`}
               >
                 {opt}

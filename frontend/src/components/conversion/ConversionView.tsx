@@ -33,6 +33,12 @@ const DEFAULT_FORMATS = ['JPEG', 'PNG', 'WEBP', 'TIFF'];
 const DEFAULT_FIELDS = ['codigo', 'nombre'];
 const DEFAULT_PATTERN = '{codigo}_{nombre}_{seq}{ext}';
 
+const VIDEO_EXTENSIONS = new Set(['.mp4', '.avi', '.mov', '.mkv', '.wmv', '.flv', '.webm', '.m4v', '.3gp', '.mpg', '.mpeg']);
+const isVideoByExt = (path: string) => {
+  const ext = path.slice(path.lastIndexOf('.')).toLowerCase();
+  return VIDEO_EXTENSIONS.has(ext);
+};
+
 export default function ConversionView() {
 
   const [files, setFiles] = useState<string[]>([]);
@@ -58,6 +64,7 @@ export default function ConversionView() {
   const [running, setRunning] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [videoFiles, setVideoFiles] = useState<Set<string>>(new Set());
 
   const namingPresets = patterns.length > 0 ? patterns : buildDefaultPresets(fields);
   const resizeWidth = resizeEnabled ? parsePositiveInt(resizeAncho) : null;
@@ -114,8 +121,8 @@ export default function ConversionView() {
       if (r.patterns && r.patterns.length > 0) setPatterns(r.patterns);
     }).catch(() => {});
 
-    const iv = setInterval(pollStatus, 1000);
-    return () => clearInterval(iv);
+    // Fetch status once on mount to recover previous state, then rely on push notifications
+    pollStatus();
   }, []);
 
   const pollStatus = async () => {
@@ -126,9 +133,16 @@ export default function ConversionView() {
     } catch { /* ignore */ }
   };
 
+  // Use push notifications instead of polling — backend sends process.progress and process.complete
   useEffect(() => {
-    const unsub = onNotify((method) => {
-      if (method === 'process.progress' || method === 'process.complete') pollStatus();
+    const unsub = onNotify((method, params) => {
+      const p = params as Record<string, unknown>;
+      if (method === 'process.progress') {
+        setStatus((prev) => prev ? { ...prev, ...p } as ProcessStatus : null);
+      } else if (method === 'process.complete') {
+        setStatus((prev) => prev ? { ...prev, running: false, progress: 100, ...p } as ProcessStatus : null);
+        setRunning(false);
+      }
     });
     return unsub;
   }, []);
@@ -188,6 +202,15 @@ export default function ConversionView() {
     }, 250);
     return () => { cancelled = true; window.clearTimeout(timer); };
   }, [files, patron, secuencia, useFilenameSeq, usarRename]);
+
+  // Detect videos (client-side by extension — no IPC needed)
+  useEffect(() => {
+    const videoSet = new Set<string>();
+    for (const file of files) {
+      if (isVideoByExt(file)) videoSet.add(file);
+    }
+    setVideoFiles(videoSet);
+  }, [files]);
 
   const doProcess = async () => {
     if (!allReady) return;
@@ -283,8 +306,10 @@ export default function ConversionView() {
     return () => window.removeEventListener('keydown', onKey);
   }, [selectedFiles]);
 
+  const videoCount = videoFiles.size;
+  const imageCount = files.length - videoCount;
   const summary = files.length > 0
-    ? `${files.length} imagen${files.length !== 1 ? 'es' : ''} → ${formato} · ${calidad}% · ${usarRename ? fileNameFromPath(patron) : 'Sin cambios'}`
+    ? `${imageCount} imagen${imageCount !== 1 ? 'es' : ''}${videoCount > 0 ? ` + ${videoCount} video${videoCount !== 1 ? 's' : ''}` : ''} → ${formato} · ${calidad}% · ${usarRename ? fileNameFromPath(patron) : 'Sin cambios'}`
     : '';
 
   return (
@@ -300,7 +325,8 @@ export default function ConversionView() {
         dragOver={dragOver}
         onAddFiles={addFiles}
         onAddFolder={addFolder}
-        fileCount={files.length}
+        fileCount={files.length - videoFiles.size}
+        videoCount={videoFiles.size}
         onClear={clearFiles}
       />
 
@@ -312,6 +338,7 @@ export default function ConversionView() {
           onFileClick={handleFileClick}
           onRemoveFile={removeFile}
           onSelectAll={selectAllFiles}
+          videoFiles={videoFiles}
         />
       )}
 
@@ -331,6 +358,7 @@ export default function ConversionView() {
             onResizeAltoChange={setResizeAlto}
             keepExif={keepExif}
             onToggleExif={setKeepExif}
+            hasVideos={videoFiles.size > 0}
           />
 
           <RenameCard
@@ -352,6 +380,7 @@ export default function ConversionView() {
             preview={preview}
             fields={fields}
             onInsertVar={insertVar}
+            hasVideos={videoFiles.size > 0}
           />
         </>
       )}

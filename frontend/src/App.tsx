@@ -1,10 +1,6 @@
-import { useState } from 'react';
+import React, { useState, Suspense } from 'react';
 import Sidebar from './components/layout/Sidebar';
 import Header from './components/layout/Header';
-import ConversionView from './components/conversion/ConversionView';
-import DatabaseView from './components/database/DatabaseView';
-import HistoryView from './components/history/HistoryView';
-import AppearanceView from './components/settings/AppearanceView';
 import { ToastProvider } from './hooks/useToast';
 import { DialogProvider } from './hooks/useDialog';
 import { useKeyboardShortcut } from './hooks/useKeyboardShortcut';
@@ -12,14 +8,25 @@ import ToastContainer from './components/ui/Toast';
 import Dialog from './components/ui/Dialog';
 import CommandPalette from './components/ui/CommandPalette';
 
+const ConversionView = React.lazy(() => import('./components/conversion/ConversionView'));
+const DatabaseView = React.lazy(() => import('./components/database/DatabaseView'));
+const FormatosView = React.lazy(() => import('./components/formatos/FormatosView'));
+const PadronView = React.lazy(() => import('./components/padron/PadronView'));
+const VolantesView = React.lazy(() => import('./components/volantes/VolantesView'));
+const HistoryView = React.lazy(() => import('./components/history/HistoryView'));
+const AppearanceView = React.lazy(() => import('./components/settings/AppearanceView'));
+
 const tabTitles: Record<string, string> = {
   convert: 'Conversión',
   db: 'Base de Datos',
+  formatos: 'Formatos PDF',
+  padron: 'Generar Padrones',
+  volantes: 'Generar Volantes',
   history: 'Historial',
   appearance: 'Apariencia',
 };
 
-type TabId = 'convert' | 'db' | 'history' | 'appearance';
+type TabId = 'convert' | 'db' | 'formatos' | 'padron' | 'volantes' | 'history' | 'appearance';
 
 function AppContent() {
   const [activeTab, setActiveTab] = useState<TabId>('convert');
@@ -28,18 +35,24 @@ function AppContent() {
   useKeyboardShortcut('k', () => setCommandOpen(true), { ctrl: true, preventDefault: true });
   useKeyboardShortcut('1', () => setActiveTab('convert'), { ctrl: true, preventDefault: true });
   useKeyboardShortcut('2', () => setActiveTab('db'), { ctrl: true, preventDefault: true });
-  useKeyboardShortcut('3', () => setActiveTab('history'), { ctrl: true, preventDefault: true });
-  useKeyboardShortcut('4', () => setActiveTab('appearance'), { ctrl: true, preventDefault: true });
+  useKeyboardShortcut('3', () => setActiveTab('formatos'), { ctrl: true, preventDefault: true });
+  useKeyboardShortcut('4', () => setActiveTab('padron'), { ctrl: true, preventDefault: true });
+  useKeyboardShortcut('5', () => setActiveTab('volantes'), { ctrl: true, preventDefault: true });
+  useKeyboardShortcut('6', () => setActiveTab('history'), { ctrl: true, preventDefault: true });
+  useKeyboardShortcut('7', () => setActiveTab('appearance'), { ctrl: true, preventDefault: true });
 
   const commandItems = [
     { id: 'tab-convert', label: 'Ir a Conversión', shortcut: 'Ctrl+1', action: () => setActiveTab('convert') },
     { id: 'tab-db', label: 'Ir a Base de Datos', shortcut: 'Ctrl+2', action: () => setActiveTab('db') },
-    { id: 'tab-history', label: 'Ir a Historial', shortcut: 'Ctrl+3', action: () => setActiveTab('history') },
-    { id: 'tab-appearance', label: 'Ir a Apariencia', shortcut: 'Ctrl+4', action: () => setActiveTab('appearance') },
+    { id: 'tab-formatos', label: 'Ir a Formatos PDF', shortcut: 'Ctrl+3', action: () => setActiveTab('formatos') },
+    { id: 'tab-padron', label: 'Ir a Generar Padrones', shortcut: 'Ctrl+4', action: () => setActiveTab('padron') },
+    { id: 'tab-volantes', label: 'Ir a Generar Volantes', shortcut: 'Ctrl+5', action: () => setActiveTab('volantes') },
+    { id: 'tab-history', label: 'Ir a Historial', shortcut: 'Ctrl+6', action: () => setActiveTab('history') },
+    { id: 'tab-appearance', label: 'Ir a Apariencia', shortcut: 'Ctrl+7', action: () => setActiveTab('appearance') },
   ];
 
   return (
-    <div className="flex h-screen w-screen bg-[#0A0A0A] text-white overflow-hidden">
+    <div className="flex h-screen w-screen overflow-hidden bg-[var(--bg-base)] text-[var(--text-primary)]">
       <Sidebar
         activeTab={activeTab}
         onTabChange={(t) => setActiveTab(t as TabId)}
@@ -48,12 +61,17 @@ function AppContent() {
       <div className="flex-1 flex flex-col min-w-0 min-h-0">
         <Header title={tabTitles[activeTab]} onSearchClick={() => setCommandOpen(true)} />
         <main className="flex-1 overflow-hidden relative">
-          <div className="h-full overflow-y-auto px-6 py-6">
-            {activeTab === 'convert' && <ConversionView />}
-            {activeTab === 'db' && <DatabaseView />}
-            {activeTab === 'history' && <HistoryView />}
-            {activeTab === 'appearance' && <AppearanceView />}
-          </div>
+          <Suspense fallback={<div className="flex h-full items-center justify-center text-sm text-[var(--text-muted)]">Cargando...</div>}>
+            <div className={`h-full overflow-y-auto ${activeTab === 'padron' || activeTab === 'volantes' ? '' : 'px-6 py-6'}`}>
+              {activeTab === 'convert' && <ConversionView />}
+              {activeTab === 'db' && <DatabaseView />}
+              {activeTab === 'formatos' && <FormatosView />}
+              {activeTab === 'padron' && <PadronView />}
+              {activeTab === 'volantes' && <VolantesView />}
+              {activeTab === 'history' && <HistoryView />}
+              {activeTab === 'appearance' && <AppearanceView />}
+            </div>
+          </Suspense>
         </main>
       </div>
       <CommandPalette isOpen={commandOpen} onClose={() => setCommandOpen(false)} items={commandItems} />

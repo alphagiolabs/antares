@@ -1,21 +1,21 @@
-"""Excepciones personalizadas del dominio de HidroConvert."""
+"""Excepciones personalizadas del dominio de COSMO."""
 
 
-class HidroConvertError(Exception):
+class CosmoError(Exception):
     """Base para todas las excepciones de la aplicación."""
 
 
-class ConfigError(HidroConvertError):
+class ConfigError(CosmoError):
     """Error al leer o escribir configuración persistente."""
 
 
-class DatabaseError(HidroConvertError):
+class DatabaseError(CosmoError):
     """Error relacionado con operaciones de base de datos."""
 
 
-class ConversionError(HidroConvertError):
+class ConversionError(CosmoError):
     """Error durante la conversión de una imagen."""
 
 
-class ValidationError(HidroConvertError):
+class ValidationError(CosmoError):
     """Error de validación de entrada del usuario o datos."""

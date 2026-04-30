@@ -11,7 +11,6 @@ from backend.core.converter import (
     obtener_formatos,
     convertir_imagen,
     procesar_lote,
-    FORMATOS_SOPORTADOS,
 )
 
 
@@ -90,6 +89,27 @@ class TestConvertirImagen:
     def test_formato_no_soportado(self, imagen_rgb, tmp_path):
         with pytest.raises(ValueError, match="Formato no soportado"):
             convertir_imagen(imagen_rgb, tmp_path / "out.xyz", "XYZ")
+
+    def test_usa_encoder_registrado_por_plugin(self, imagen_rgb, tmp_path, monkeypatch):
+        from backend.core import converter
+        from backend.core.format_registry import FormatRegistry
+
+        registry = FormatRegistry()
+
+        def encoder(img, destino, formato, save_kwargs):
+            Path(destino).write_text(
+                f"{formato}:{img.mode}:{img.size[0]}x{img.size[1]}:{save_kwargs['quality']}",
+                encoding="utf-8",
+            )
+
+        registry.add_format("TXTIMG", ".txt", ("RGB",), encoder=encoder)
+        monkeypatch.setattr(converter, "FORMATOS_SOPORTADOS", registry)
+
+        salida = tmp_path / "salida.txt"
+        resultado = convertir_imagen(imagen_rgb, salida, "TXTIMG", calidad=77)
+
+        assert resultado == salida
+        assert salida.read_text(encoding="utf-8") == "TXTIMG:RGB:100x100:77"
 
 
 class TestProcesarLote:

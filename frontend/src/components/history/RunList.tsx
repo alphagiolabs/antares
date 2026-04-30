@@ -1,4 +1,3 @@
-import React from 'react';
 import Badge from '../ui/Badge';
 
 export interface HistoryRun {
@@ -51,7 +50,7 @@ export default function RunList({ runs, selected, onSelect }: RunListProps) {
             onClick={() => onSelect(run)}
             className={`w-full text-left px-5 py-4 text-sm transition-all border-l-2 ${
               isSelected
-                ? 'bg-[#111111] border-[#FF6B2C]'
+                ? 'bg-[#111111] border-[#5E6AD2]'
                 : 'bg-transparent border-transparent hover:bg-[#111111]'
             }`}
           >

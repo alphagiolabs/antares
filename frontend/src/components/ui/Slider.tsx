@@ -16,7 +16,7 @@ export default function Slider({ value, min = 1, max = 100, onChange, label }: S
       <div className="relative h-1 w-full rounded-full bg-[#222222]">
         <div
           className="absolute left-0 top-0 h-full rounded-full"
-          style={{ width: `${pct}%`, backgroundColor: '#FF6B2C' }}
+          style={{ width: `${pct}%`, backgroundColor: '#5E6AD2' }}
         />
         <input
           type="range"

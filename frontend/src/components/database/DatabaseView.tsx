@@ -149,7 +149,7 @@ export default function DatabaseView() {
           <h2 className="text-lg font-semibold text-white">Base de Datos</h2>
           <button
             onClick={() => setShowSchema(!showSchema)}
-            className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${showSchema ? 'bg-[#FF6B2C] text-white border-[#FF6B2C]' : 'bg-[#1A1A1A] text-[#A0A0A0] border-[#222222] hover:text-white'}`}
+            className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${showSchema ? 'bg-[#5E6AD2] text-white border-[#5E6AD2]' : 'bg-[#1A1A1A] text-[#A0A0A0] border-[#222222] hover:text-white'}`}
           >
             {showSchema ? 'Ver registros' : 'Ver esquema'}
           </button>
@@ -175,7 +175,7 @@ export default function DatabaseView() {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Buscar registros..."
-              className="w-full pl-9 pr-3 py-2 bg-[#1A1A1A] border border-[#222222] rounded-full text-sm text-white placeholder:text-[#555555] focus:border-[#FF6B2C] focus:outline-none focus:shadow-[0_0_0_3px_rgba(255,107,44,0.15)]"
+              className="w-full pl-9 pr-3 py-2 bg-[#1A1A1A] border border-[#222222] rounded-full text-sm text-white placeholder:text-[#555555] focus:border-[#5E6AD2] focus:outline-none focus:shadow-[0_0_0_3px_rgba(94,106,210,0.15)]"
             />
           </div>
         </div>
@@ -227,7 +227,7 @@ export default function DatabaseView() {
               <div className="w-32">
                 <label className="block text-xs text-[#666666] mb-1.5">Tipo</label>
                 <select
-                  className="w-full bg-[#1A1A1A] text-white border border-[#222222] rounded-lg px-3 py-2 text-sm appearance-none cursor-pointer focus:border-[#FF6B2C] focus:outline-none"
+                  className="w-full bg-[#1A1A1A] text-white border border-[#222222] rounded-lg px-3 py-2 text-sm appearance-none cursor-pointer focus:border-[#5E6AD2] focus:outline-none"
                   value={newField.type}
                   onChange={(e) => setNewField({ ...newField, type: e.target.value })}
                 >

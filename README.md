@@ -1,4 +1,4 @@
-# HidroConvert
+# COSMO
 
 > Conversor y renombrador profesional de imágenes — aplicación de escritorio nativa.
 
@@ -8,7 +8,7 @@
 - **Renombrado automático**: Motor basado en patrones que integra con base de datos SQLite para renombrar archivos automáticamente
 - **Procesamiento por lotes**: Procesa múltiples archivos simultáneamente con barra de progreso en tiempo real
 - **Gestión de base de datos**: Importar/exportar datos desde Excel (.xlsx), campos personalizados configurables
-- **Interfaz moderna**: Diseño inspirado en Mastercard con colores cálidos, bordes redondeados y tipografía editorial
+- **Interfaz moderna**: Identidad Precision Linear con base oscura, acentos indigo/teal y una sensación técnica profesional
 - **Historial completo**: Registro de todas las ejecuciones con opción de re-ejecutar configuraciones previas
 - **Auto-actualizaciones**: Sistema de actualización automática integrado (GitHub Releases)
 - **Vista previa de imágenes**: Previsualización de conversiones antes de procesar
@@ -103,26 +103,27 @@ npm run build:frontend
 npm run build:backend
 ```
 
-El ejecutable resultante estará en `dist-electron/HidroConvert-Setup-<version>.exe`.
+El ejecutable resultante estará en `dist-electron/COSMO-Setup-<version>.exe`.
 
 ## Diseño
 
-La aplicación utiliza un sistema de diseño inspirado en **Mastercard**:
+La aplicación utiliza una identidad **Precision Linear**:
 
 | Elemento | Valor | Uso |
 |----------|-------|-----|
-| Canvas Cream | `#F3F0EE` | Fondo principal |
-| Ink Black | `#141413` | Texto, botones primarios, footer |
-| Signal Orange | `#CF4500` | Acentos, consentimiento |
-| Light Signal Orange | `#F37338` | Indicadores decorativos |
-| Lifted Cream | `#FCFBFA` | Superficies elevadas |
-| Slate Gray | `#696969` | Texto secundario |
+| Graphite Base | `#0A0D12` | Fondo principal |
+| Elevated Graphite | `#111522` | Superficies elevadas |
+| Precision Indigo | `#5E6AD2` | Acciones primarias, selección, progreso |
+| Linear Indigo | `#8B93FF` | Estados hover e indicadores |
+| Conversion Teal | `#22C7A9` | Éxito, continuidad y profundidad del logo |
+| Utility Gray | `#7C8494` | Texto secundario |
 
-- **Bordes**: Radius agresivos — 20px (botones), 40px (contenedores), 999px (pills)
-- **Tipografía**: Sofia Sans (fallback: Inter, Arial) con pesos 450/500/700
-- **Sombras**: Elevaciones suaves con spread amplio (`rgba(0,0,0,0.04) 0px 4px 24px`)
+- **Logo**: Monograma `HC` con pista sutil de conversión, diseñado para app icon y sidebar.
+- **Bordes**: Radius compactos en controles y superficies para una herramienta de escritorio profesional.
+- **Tipografía**: Inter/system stack con pesos limpios y alta legibilidad.
+- **Sombras**: Elevaciones contenidas y glow indigo solo en estados activos.
 
-Ver `DESIGN.md` para documentación completa del sistema de diseño.
+Ver `docs/superpowers/specs/2026-04-29-brand-identity-refresh-design.md` para la especificación de marca.
 
 ## Scripts disponibles
 

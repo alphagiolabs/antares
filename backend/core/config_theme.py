@@ -12,27 +12,27 @@ from backend.utils.paths import user_data_path
 logger = logging.getLogger(__name__)
 
 DEFAULT_THEME: dict[str, str] = {
-    "name": "Mastercard Cream",
-    "bg": "#F3F0EE",
-    "bg_secondary": "#FCFBFA",
-    "fg": "#141413",
-    "fg_muted": "#696969",
+    "name": "Precision Linear",
+    "bg": "#0A0D12",
+    "bg_secondary": "#111522",
+    "fg": "#FFFFFF",
+    "fg_muted": "#7C8494",
     "fg_secondary": "#555555",
     "fg_tertiary": "#565656",
-    "accent": "#CF4500",
-    "accent_light": "#F37338",
-    "accent_hover": "#9A3A0A",
-    "accent_dark": "#9A3A0A",
-    "border": "#D1CDC7",
-    "blue_hover": "#3860BE",
+    "accent": "#5E6AD2",
+    "accent_light": "#8B93FF",
+    "accent_hover": "#4D57BE",
+    "accent_dark": "#343B8F",
+    "border": "#27304E",
+    "blue_hover": "#22C7A9",
     "error": "#EB001B",
     "warning": "#F79E1B",
     "success": "#76b900",
-    "orange": "#F37338",
+    "orange": "#8B93FF",
 }
 
 PRESETS: dict[str, dict[str, str]] = {
-    "Mastercard Cream": dict(DEFAULT_THEME),
+    "Precision Linear": dict(DEFAULT_THEME),
     "NVIDIA Dark": {
         "name": "NVIDIA Dark",
         "bg": "#000000",

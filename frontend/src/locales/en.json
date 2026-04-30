@@ -1,5 +1,5 @@
 {
-  "app.title": "HidroConvert",
+  "app.title": "COSMO",
   "app.subtitle": "Professional image converter and renamer",
   "tab.convert": "Conversion",
   "tab.db": "Database",
@@ -76,7 +76,7 @@
   "history.delete": "Delete",
   "history.empty": "Select a run to view details",
   "history.noRuns": "No recorded executions",
-  "theme.mastercardCream": "Mastercard Cream",
+  "theme.precisionLinear": "Precision Linear",
   "theme.nvidiaDark": "NVIDIA Dark",
   "theme.professionalLight": "Professional Light",
   "theme.midnightBlue": "Midnight Blue",

@@ -31,7 +31,7 @@ class RenamerEngine:
             default = (
                 "_".join([f"{{{f}}}" for f in fields[:2]]) + "{ext}"
                 if len(fields) >= 2
-                else f"{{{fields[0]}}}{{ext}}"
+                else (f"{{{fields[0]}}}{{ext}}" if fields else "img_{seq}{ext}")
             )
             patron = default
         self.patron: str = patron
@@ -87,8 +87,9 @@ class RenamerEngine:
         for key, val in mapping.items():
             nombre_salida = nombre_salida.replace(f"{{{key}}}", val)
 
-        # Limpiar dobles guiones bajos o espacios y sanitizar
+        # Limpiar separadores que quedan cuando faltan datos de la BD.
         nombre_salida = re.sub(r"_+", "_", nombre_salida)
+        nombre_salida = re.sub(r"[_\s-]+(?=\.)", "", nombre_salida)
         nombre_salida = re.sub(r"\s+", " ", nombre_salida)
         nombre_salida = nombre_salida.strip("_. ")
         nombre_salida = sanitizar_nombre(nombre_salida)
