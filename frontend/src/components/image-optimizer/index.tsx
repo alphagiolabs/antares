@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { ChevronDown, FileDown, Loader2, Sparkles, Trash2, Upload } from 'lucide-react';
 import CropEditor from './CropEditor';
 import PreviewWorkspace from './PreviewWorkspace';
@@ -43,9 +44,34 @@ export default function ImageOptimizer() {
   const [cropEditorItemId, setCropEditorItemId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'grid' | 'single'>('grid');
   const [downloadMenuOpen, setDownloadMenuOpen] = useState(false);
+  const [downloadMenuPosition, setDownloadMenuPosition] = useState<{ top: number; right: number } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const downloadMenuAnchorRef = useRef<HTMLDivElement>(null);
   const itemsRef = useRef<ImageItem[]>([]);
   const settingsRef = useRef<BatchSettings>(settings);
+
+  const updateDownloadMenuPosition = useCallback(() => {
+    const anchor = downloadMenuAnchorRef.current;
+    if (!anchor) return;
+    const rect = anchor.getBoundingClientRect();
+    setDownloadMenuPosition({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
+  }, []);
+
+  const closeDownloadMenu = useCallback(() => {
+    setDownloadMenuOpen(false);
+    setDownloadMenuPosition(null);
+  }, []);
+
+  const toggleDownloadMenu = useCallback(() => {
+    setDownloadMenuOpen((open) => {
+      if (open) {
+        setDownloadMenuPosition(null);
+        return false;
+      }
+      updateDownloadMenuPosition();
+      return true;
+    });
+  }, [updateDownloadMenuPosition]);
 
   useEffect(() => {
     itemsRef.current = items;
@@ -56,17 +82,24 @@ export default function ImageOptimizer() {
   }, [settings]);
 
   useEffect(() => {
-    if (isProcessing) setDownloadMenuOpen(false);
-  }, [isProcessing]);
+    if (isProcessing) closeDownloadMenu();
+  }, [closeDownloadMenu, isProcessing]);
 
   useEffect(() => {
     if (!downloadMenuOpen) return;
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setDownloadMenuOpen(false);
+      if (event.key === 'Escape') closeDownloadMenu();
     };
+    const handleReposition = () => updateDownloadMenuPosition();
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [downloadMenuOpen]);
+    window.addEventListener('resize', handleReposition);
+    window.addEventListener('scroll', handleReposition, true);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('resize', handleReposition);
+      window.removeEventListener('scroll', handleReposition, true);
+    };
+  }, [closeDownloadMenu, downloadMenuOpen, updateDownloadMenuPosition]);
 
   useEffect(() => {
     return () => {
@@ -496,10 +529,10 @@ export default function ImageOptimizer() {
                 {isProcessing ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
                 {primaryActionLabel}
               </button>
-              <div className="relative flex items-center">
+              <div ref={downloadMenuAnchorRef} className="relative flex items-center">
                 <button
                   type="button"
-                  onClick={() => downloadItems(downloadableItems)}
+                  onClick={() => { downloadItems(downloadableItems); closeDownloadMenu(); }}
                   disabled={isProcessing || downloadableItems.length === 0}
                   className={`inline-flex items-center gap-2 border border-emerald-500/35 bg-emerald-500/10 px-4 py-2 text-[10px] font-mono uppercase tracking-[0.15em] text-emerald-600 transition-colors hover:border-emerald-500/55 hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:border-[var(--border-medium)] disabled:bg-[var(--bg-surface)] disabled:text-[var(--text-muted)] ${downloadableItems.length > 1 ? 'rounded-l-full border-r-0' : 'rounded-full'}`}
                 >
@@ -507,50 +540,50 @@ export default function ImageOptimizer() {
                   {downloadableItems.length > 1 ? 'Descargar ZIP' : 'Descargar'}
                 </button>
                 {downloadableItems.length > 1 && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => setDownloadMenuOpen((v) => !v)}
-                      disabled={isProcessing || downloadableItems.length === 0}
-                      aria-expanded={downloadMenuOpen}
-                      aria-haspopup="menu"
-                      aria-label="Opciones de descarga"
-                      className="inline-flex items-center rounded-r-full border border-emerald-500/35 bg-emerald-500/10 px-1.5 py-2 text-emerald-600 transition-colors hover:border-emerald-500/55 hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:border-[var(--border-medium)] disabled:bg-[var(--bg-surface)] disabled:text-[var(--text-muted)]"
-                    >
-                      <ChevronDown size={12} />
-                    </button>
-                    {downloadMenuOpen && (
-                      <>
-                        <div className="fixed inset-0 z-40" onClick={() => setDownloadMenuOpen(false)} />
-                        <div
-                          role="menu"
-                          className="absolute right-0 top-full z-50 mt-1 w-52 overflow-hidden rounded-xl border border-[var(--border-medium)] bg-[var(--bg-surface)] py-1 shadow-xl"
-                        >
-                          <button
-                            type="button"
-                            role="menuitem"
-                            onClick={() => { downloadItemsAsZip(downloadableItems); setDownloadMenuOpen(false); }}
-                            className="flex w-full items-center gap-2.5 px-4 py-2.5 text-left text-[11px] font-mono tracking-wide text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-elevated)]"
-                          >
-                            <FileDown size={13} className="text-emerald-500 shrink-0" />
-                            Descargar como ZIP
-                          </button>
-                          <button
-                            type="button"
-                            role="menuitem"
-                            onClick={() => { downloadItemsIndividually(downloadableItems); setDownloadMenuOpen(false); }}
-                            className="flex w-full items-center gap-2.5 px-4 py-2.5 text-left text-[11px] font-mono tracking-wide text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-elevated)]"
-                          >
-                            <FileDown size={13} className="text-sky-500 shrink-0" />
-                            Descargar individual
-                            <span className="ml-auto text-[9px] text-[var(--text-muted)]">{downloadableItems.length} archivos</span>
-                          </button>
-                        </div>
-                      </>
-                    )}
-                  </>
+                  <button
+                    type="button"
+                    onClick={toggleDownloadMenu}
+                    disabled={isProcessing || downloadableItems.length === 0}
+                    aria-expanded={downloadMenuOpen}
+                    aria-haspopup="menu"
+                    aria-label="Opciones de descarga"
+                    className="inline-flex items-center rounded-r-full border border-emerald-500/35 bg-emerald-500/10 px-1.5 py-2 text-emerald-600 transition-colors hover:border-emerald-500/55 hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:border-[var(--border-medium)] disabled:bg-[var(--bg-surface)] disabled:text-[var(--text-muted)]"
+                  >
+                    <ChevronDown size={12} className={`transition-transform ${downloadMenuOpen ? 'rotate-180' : ''}`} />
+                  </button>
                 )}
               </div>
+              {downloadMenuOpen && downloadMenuPosition && createPortal(
+                <>
+                  <div className="fixed inset-0 z-[120]" onClick={closeDownloadMenu} aria-hidden="true" />
+                  <div
+                    role="menu"
+                    style={{ top: downloadMenuPosition.top, right: downloadMenuPosition.right }}
+                    className="fixed z-[130] w-52 overflow-hidden rounded-xl border border-[var(--border-medium)] bg-[var(--bg-surface)] py-1 shadow-xl"
+                  >
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => { downloadItemsAsZip(downloadableItems); closeDownloadMenu(); }}
+                      className="flex w-full items-center gap-2.5 px-4 py-2.5 text-left text-[11px] font-mono tracking-wide text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-elevated)]"
+                    >
+                      <FileDown size={13} className="text-emerald-500 shrink-0" />
+                      Descargar como ZIP
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => { downloadItemsIndividually(downloadableItems); closeDownloadMenu(); }}
+                      className="flex w-full items-center gap-2.5 px-4 py-2.5 text-left text-[11px] font-mono tracking-wide text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-elevated)]"
+                    >
+                      <FileDown size={13} className="text-sky-500 shrink-0" />
+                      Descargar individual
+                      <span className="ml-auto text-[9px] text-[var(--text-muted)]">{downloadableItems.length} archivos</span>
+                    </button>
+                  </div>
+                </>,
+                document.body,
+              )}
               <button
                 onClick={handleClearAll}
                 disabled={isProcessing || items.length === 0}
