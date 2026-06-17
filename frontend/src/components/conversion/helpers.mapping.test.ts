@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeMappingStats, findMappingCollisions, lookupMappingValue } from './helpers';
+import { computeMappingStats, findMappingCollisions, isMappingSchemaMismatch, lookupMappingValue } from './helpers';
 
 describe('mapping helpers', () => {
   it('computes matched, unmatched and orphan stats locally', () => {
@@ -30,5 +30,15 @@ describe('mapping helpers', () => {
 
   it('lookup is case insensitive', () => {
     expect(lookupMappingValue({ 'img_0001.jpg': 'fachada' }, 'IMG_0001.jpg')).toBe('fachada');
+  });
+
+  it('falls back to catalog import only for mapping schema mismatches', () => {
+    // Current backend messages (post flexible-mapping-columns refactor).
+    expect(isMappingSchemaMismatch(new Error('El Excel de mapeo necesita al menos 2 columnas'))).toBe(true);
+    expect(isMappingSchemaMismatch(new Error('No se detectó una columna ID'))).toBe(true);
+    expect(isMappingSchemaMismatch(new Error('No se detectó una columna de nuevo nombre'))).toBe(true);
+    // Content errors are NOT schema mismatches — they must surface to the user.
+    expect(isMappingSchemaMismatch(new Error("ID duplicado 'A.jpg' en la fila 3"))).toBe(false);
+    expect(isMappingSchemaMismatch(new Error('Nuevo nombre vacío en la fila 4'))).toBe(false);
   });
 });

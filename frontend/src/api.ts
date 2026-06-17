@@ -54,21 +54,6 @@ const LONG_RUNNING_METHODS = new Set([
 
 const _delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-const _sanitizeHtmlForPdf = (html: string): string => {
-  const stripped = html
-    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
-    .replace(/<iframe[^>]*>[\s\S]*?<\/iframe>/gi, '')
-    .replace(/<object[^>]*>[\s\S]*?<\/object>/gi, '')
-    .replace(/<embed[^>]*>/gi, '')
-    .replace(/<link[^>]*>/gi, '')
-    .replace(/url\(\s*(['"]?)(.+?)\1\s*\)/gi, (match, _quote, urlValue: string) => {
-      return urlValue.trim().toLowerCase().startsWith('data:') ? match : "url('')";
-    });
-  const cspMeta = '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; style-src \'unsafe-inline\'; img-src data: file:; font-src data:;">';
-  const injectedHtml = stripped.replace(/<head([^>]*)>/i, `<head$1>${cspMeta}`);
-  return /<head/i.test(injectedHtml) ? injectedHtml : cspMeta + injectedHtml;
-};
-
 const _isRetryable = (err: unknown): boolean => {
   if (!(err instanceof Error)) return false;
   const msg = err.message.toLowerCase();
@@ -161,6 +146,8 @@ export interface ProcessBody {
   key_column?: string;
   mapping?: Record<string, string>;
   mapping_path?: string;
+  id_column?: string;
+  rename_column?: string;
 }
 
 export interface PreviewBody {
@@ -170,6 +157,9 @@ export interface PreviewBody {
   use_filename_seq: boolean;
   key_column?: string;
   mapping?: Record<string, string>;
+  mapping_path?: string;
+  id_column?: string;
+  rename_column?: string;
 }
 
 export interface PreviewImageBody {
@@ -236,7 +226,6 @@ export const api = {
   importExcel: (path: string) => _invoke<{ imported: number }>('db_import', { path }),
   exportExcel: (path: string) => _invoke<{ exported: number }>('db_export', { path }),
   generateTemplate: (path: string) => _invoke<{ path: string }>('db_template', { path }),
-  generateMappingTemplate: (path: string) => _invoke<{ path: string }>('db_mapping_template', { path }),
   clearDatabase: () => _invoke<{ cleared: number }>('db_clear'),
   scanFolder: (folder: string) => _invoke<{ files: string[] }>('scan_folder', { folder }),
 
@@ -245,8 +234,8 @@ export const api = {
   resetFields: () => _invoke<{ fields: DBField[] }>('db_fields_reset'),
 
   getDbColumns: () => _invoke<{ columns: string[]; records: DBRecord[]; total: number }>('db_columns'),
-  dbParseMapping: (path: string, files?: string[]) =>
-    _invoke<MappingResult>('db_parse_mapping', { path, files: files ?? [] }),
+  dbParseMapping: (path: string, files?: string[], id_column?: string, rename_column?: string) =>
+    _invoke<MappingResult>('db_parse_mapping', { path, files: files ?? [], id_column, rename_column }),
   dbValidateMapping: (mapping: Record<string, string>, files?: string[]) =>
     _invoke<MappingResult>('db_validate_mapping', { mapping, files: files ?? [] }),
 
@@ -366,11 +355,10 @@ export const api = {
   templateGet: (name: string) => _invoke<{ name: string; content: string }>('template_get', { name }),
 
   // ─── Render HTML to PDF via Electron ─────────────────────────────────────
+  // Sanitization happens once, in Electron's renderHtmlToPdf (defense in depth
+  // at the trust boundary), so the renderer just forwards the raw HTML.
   htmlToPdf: (body: HtmlToPdfBody) =>
-    _invoke<HtmlToPdfResponse>('html_to_pdf', {
-      ...body,
-      html: _sanitizeHtmlForPdf(body.html),
-    }),
+    _invoke<HtmlToPdfResponse>('html_to_pdf', body),
 
   // ─── Informes técnicos ─────────────────────────────────────────────────
   technicalReportsList: (body?: TechnicalReportsListBody) =>

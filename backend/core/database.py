@@ -460,7 +460,8 @@ def limpiar_base_datos() -> int:
         conn = _get_connection()
         cursor = conn.cursor()
         cursor.execute("SELECT COUNT(*) FROM imagenes")
-        count = cursor.fetchone()[0]
+        row = cursor.fetchone()
+        count = int(row[0]) if row else 0
         cursor.execute("DELETE FROM imagenes")
         conn.commit()
         # Vacuum to reclaim space and optimize
@@ -468,18 +469,68 @@ def limpiar_base_datos() -> int:
     return count
 
 
-_MAPPING_ID_COL = "id"
-_MAPPING_RENAME_COLS = frozenset({"renombre", "rename"})
+_MAPPING_ID_ALIASES = ("id", "codigo", "code", "filename", "archivo", "nombre original")
+_MAPPING_RENAME_ALIASES = ("renombre", "rename", "new_name", "newname", "nombre nuevo", "nuevo_nombre", "nuevonombre")
 
 
-def parse_id_rename_mapping(excel_path: str) -> dict[str, str]:
-    """Parsea un Excel de dos columnas (ID, RENOMBRE) en un dict de mapeo directo.
+def _normalize_header_alias(header: str) -> str:
+    """Normaliza un encabezado para matching de alias: minúsculas, sin acentos, espacios/underscores/guiones unificados."""
+    text = str(header).lower().strip()
+    text = "".join(c for c in unicodedata.normalize("NFKD", text) if unicodedata.category(c) != "Mn")
+    text = re.sub(r"[\s_\-]+", " ", text)
+    text = " ".join(text.split())
+    return text
+
+
+def _detect_column(columns: list[str], aliases: tuple[str, ...]) -> str | None:
+    """Devuelve la columna que mejor coincida con los alias, respetando el orden de prioridad."""
+    for alias in aliases:
+        for col in columns:
+            if _normalize_header_alias(col) == alias:
+                return col
+    return None
+
+
+def parse_id_rename_mapping(
+    excel_path: str,
+    id_column: str | None = None,
+    rename_column: str | None = None,
+) -> dict[str, str]:
+    """Parsea un Excel de mapeo (columnas ID y nuevo nombre) en un dict de mapeo directo.
 
     Args:
         excel_path: Ruta al archivo .xlsx.
+        id_column: Nombre de la columna ID. Si no se indica, se auto-detecta.
+        rename_column: Nombre de la columna con el nuevo nombre. Si no se indica, se auto-detecta.
 
     Returns:
-        Dict {ID.strip(): RENOMBRE_sanitizado.strip()}.
+        Dict {ID.strip(): nuevo_nombre_sanitizado.strip()}.
+
+    Raises:
+        ValueError: Si la estructura no es válida (columnas, duplicados, celdas vacías).
+        FileNotFoundError: Si el archivo no existe.
+        ImportError: Si pandas/openpyxl no están instalados.
+
+    Note:
+        Para obtener también las columnas detectadas y todas las disponibles, usa
+        :func:`parse_id_rename_mapping_full`.
+    """
+    return parse_id_rename_mapping_full(excel_path, id_column, rename_column)["mapping"]
+
+
+def parse_id_rename_mapping_full(
+    excel_path: str,
+    id_column: str | None = None,
+    rename_column: str | None = None,
+) -> dict[str, Any]:
+    """Variante de :func:`parse_id_rename_mapping` que devuelve metadatos de columnas.
+
+    Returns:
+        Dict con claves:
+        - ``mapping``: dict {ID.strip(): nuevo_nombre_sanitizado.strip()}.
+        - ``id_column``: nombre (normalizado) de la columna ID usada.
+        - ``rename_column``: nombre (normalizado) de la columna de nuevo nombre usada.
+        - ``columns``: lista de todas las columnas normalizadas del Excel.
 
     Raises:
         ValueError: Si la estructura no es válida (columnas, duplicados, celdas vacías).
@@ -500,71 +551,70 @@ def parse_id_rename_mapping(excel_path: str) -> dict[str, str]:
 
     df = pd.read_excel(excel_path, dtype=str, engine="openpyxl")
     df.columns = _normalize_excel_columns(list(df.columns))
+    columns = list(df.columns)
 
-    if len(df.columns) != 2:
+    if len(columns) < 2:
         msg = (
-            f"El Excel de mapeo debe tener exactamente 2 columnas (ID y RENOMBRE). "
-            f"Columnas encontradas: {list(df.columns)}"
+            f"El Excel de mapeo necesita al menos 2 columnas (una ID y una de nuevo nombre). "
+            f"Columnas encontradas: {columns}"
         )
         raise ValueError(msg)
 
-    col_set = set(df.columns)
-    if _MAPPING_ID_COL not in col_set or not col_set.intersection(_MAPPING_RENAME_COLS):
+    raw_id_column = id_column or _detect_column(columns, _MAPPING_ID_ALIASES)
+    raw_rename_column = rename_column or _detect_column(columns, _MAPPING_RENAME_ALIASES)
+
+    chosen_id = raw_id_column if raw_id_column in df.columns else None
+    chosen_rename = raw_rename_column if raw_rename_column in df.columns else None
+
+    if not chosen_id:
         msg = (
-            "El Excel de mapeo debe contener las columnas ID y RENOMBRE "
-            f"(sin columnas extra). Columnas encontradas: {list(df.columns)}"
+            f"No se detectó una columna ID. Usa una columna como ID, Código, Code, Filename, Archivo, "
+            f"o indica id_column. Columnas disponibles: {columns}"
         )
         raise ValueError(msg)
+    if not chosen_rename:
+        msg = (
+            f"No se detectó una columna de nuevo nombre. Usa RENOMBRE, Nombre, New_Name, etc., "
+            f"o indica rename_column. Columnas disponibles: {columns}"
+        )
+        raise ValueError(msg)
+    if chosen_id == chosen_rename:
+        msg = "La columna ID y la columna de nuevo nombre no pueden ser la misma."
+        raise ValueError(msg)
 
-    rename_col = "renombre" if "renombre" in col_set else "rename"
     result: dict[str, str] = {}
     seen_ids: set[str] = set()
 
     for row_idx, row in df.iterrows():
         excel_row = int(row_idx) + 2  # encabezado + base 1
-        raw_id = row.get(_MAPPING_ID_COL)
-        raw_rename = row.get(rename_col)
+        raw_id = row.get(chosen_id)
+        raw_rename = row.get(chosen_rename)
 
         if pd.isna(raw_id) or not str(raw_id).strip():
-            msg = f"ID vacío en la fila {excel_row} del Excel de mapeo"
+            msg = f"ID vacío en la fila {excel_row} de la columna '{chosen_id}'"
             raise ValueError(msg)
         if pd.isna(raw_rename) or not str(raw_rename).strip():
-            msg = f"RENOMBRE vacío en la fila {excel_row} del Excel de mapeo"
+            msg = f"Nuevo nombre vacío en la fila {excel_row} de la columna '{chosen_rename}'"
             raise ValueError(msg)
 
         id_key = str(raw_id).strip()
         if id_key in seen_ids:
-            msg = f"ID duplicado '{id_key}' en la fila {excel_row} del Excel de mapeo"
+            msg = f"ID duplicado '{id_key}' en la fila {excel_row} de la columna '{chosen_id}'"
             raise ValueError(msg)
         seen_ids.add(id_key)
 
         rename_val = sanitizar_nombre(str(raw_rename).strip())
         if not rename_val:
-            msg = f"RENOMBRE inválido en la fila {excel_row} del Excel de mapeo"
+            msg = f"Nuevo nombre inválido en la fila {excel_row} de la columna '{chosen_rename}'"
             raise ValueError(msg)
         result[id_key] = rename_val
 
-    return result
-
-
-def generar_plantilla_mapeo_excel(ruta_salida: str) -> int:
-    """Genera plantilla Excel de mapeo directo ID → RENOMBRE."""
-    try:
-        import pandas as pd  # type: ignore
-    except ImportError as exc:
-        msg = "pandas no está instalado."
-        raise ImportError(msg) from exc
-
-    df = pd.DataFrame(
-        [
-            ["IMG_0001.jpg", "fachada_norte"],
-            ["IMG_0002.jpg", "fachada_sur"],
-            ["IMG_0003.jpg", "interior_sala"],
-        ],
-        columns=["ID", "RENOMBRE"],
-    )
-    df.to_excel(ruta_salida, index=False, engine="openpyxl")
-    return len(df)
+    return {
+        "mapping": result,
+        "id_column": chosen_id,
+        "rename_column": chosen_rename,
+        "columns": columns,
+    }
 
 
 def generar_plantilla_excel(ruta_salida: str) -> int:

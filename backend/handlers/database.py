@@ -14,8 +14,7 @@ from backend.core.database import (
     importar_excel,
     limpiar_base_datos,
     obtener_todos,
-    parse_id_rename_mapping,
-    generar_plantilla_mapeo_excel,
+    parse_id_rename_mapping_full,
 )
 from backend.handlers.common import validate_params, with_locale
 
@@ -115,20 +114,20 @@ def db_parse_mapping(params: dict[str, Any]) -> dict[str, Any]:
     from backend.core.mapping_index import MappingIndex
 
     excel_path = params.get("path", "")
-    mapping = parse_id_rename_mapping(excel_path)
+    id_column = params.get("id_column") or None
+    rename_column = params.get("rename_column") or None
+    parsed = parse_id_rename_mapping_full(excel_path, id_column, rename_column)
+    mapping = parsed["mapping"]
     files = params.get("files") or []
     stats = MappingIndex(mapping).compute_stats(files)
-    return {"mapping": mapping, **stats}
 
-
-@with_locale
-@validate_params("path")
-def db_mapping_template(params: dict[str, Any]) -> dict[str, Any]:
-    path = params.get("path", "")
-    if path and not path.lower().endswith(".xlsx"):
-        path = path + ".xlsx"
-    generar_plantilla_mapeo_excel(path)
-    return {"path": path}
+    return {
+        "mapping": mapping,
+        "id_column": parsed["id_column"],
+        "rename_column": parsed["rename_column"],
+        "columns": parsed["columns"],
+        **stats,
+    }
 
 
 @with_locale
@@ -176,7 +175,6 @@ HANDLERS = {
     "db_fields_update": db_fields_update,
     "db_fields_reset": db_fields_reset,
     "db_parse_mapping": db_parse_mapping,
-    "db_mapping_template": db_mapping_template,
     "db_validate_mapping": db_validate_mapping,
     "db_columns": db_columns,
     "rename_patterns_get": rename_patterns_get,

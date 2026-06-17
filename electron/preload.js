@@ -1,7 +1,11 @@
 const { contextBridge, ipcRenderer } = require('electron');
 const { ALLOWED_RENDERER_METHODS } = require('./ipc-methods');
 
-console.log('[preload] Preload script executing...');
+const isDev = process.env.NODE_ENV !== 'production';
+
+if (isDev) {
+  console.debug('[preload] Preload script executing...');
+}
 
 try {
   contextBridge.exposeInMainWorld('electronAPI', {
@@ -30,11 +34,17 @@ try {
       return () => ipcRenderer.removeListener('auto-update-status', listener);
     },
   });
-  console.log('[preload] electronAPI exposed successfully');
+  if (isDev) {
+    console.debug('[preload] electronAPI exposed successfully');
+  }
 } catch (err) {
-  console.error('[preload] Failed to expose electronAPI:', err);
+  if (isDev) {
+    console.error('[preload] Failed to expose electronAPI:', err);
+  }
 }
 
 window.addEventListener('error', (e) => {
-  console.error('Renderer error:', e.error);
+  if (isDev) {
+    console.error('Renderer error:', e.error);
+  }
 });

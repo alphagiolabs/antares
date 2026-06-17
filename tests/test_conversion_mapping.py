@@ -158,3 +158,124 @@ def test_run_conversion_job_with_mapping_rename_only(monkeypatch, tmp_path) -> N
     assert out_path.name == "fachada_norte.jpg"
     assert len(copied) == 1
     assert Path(copied[0][1]).name == "fachada_norte.jpg"
+
+
+def test_run_conversion_job_with_mapping_path_and_columns(monkeypatch, tmp_path) -> None:
+    src = tmp_path / "in"
+    dst = tmp_path / "out"
+    src.mkdir()
+    dst.mkdir()
+    source_file = src / "IMG_0001.jpg"
+    source_file.write_text("data")
+
+    excel = tmp_path / "map.xlsx"
+    import pandas as pd
+    df = pd.DataFrame(
+        [("IMG_0001.jpg", "codigo_001", "fachada_norte")],
+        columns=["Archivo", "Codigo", "NuevoNombre"],
+    )
+    df.to_excel(excel, index=False, engine="openpyxl")
+
+    scheduler = _RecordingScheduler()
+    copied: list[tuple[str, str]] = []
+
+    monkeypatch.setattr(conversion, "get_scheduler", lambda: scheduler)
+    monkeypatch.setattr(conversion, "es_video", lambda _path: False)
+    monkeypatch.setattr(conversion, "_calculate_chunk_size", lambda: 10)
+    monkeypatch.setattr(conversion, "copiar_archivo", lambda src_path, out_path: copied.append((str(src_path), str(out_path))))
+    monkeypatch.setattr(conversion, "_notify_complete", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr("backend.core.history.save_run", lambda **_kwargs: None)
+
+    job = Job(
+        id="mapping-path-columns",
+        job_type="conversion",
+        params={
+            "files": [str(source_file)],
+            "destino": str(dst),
+            "formato": "JPEG",
+            "conversion_enabled": False,
+            "usar_rename": True,
+            "patron": "",
+            "mapping_path": str(excel),
+            "id_column": "archivo",
+            "rename_column": "nuevonombre",
+        },
+    )
+    conversion._run_conversion_job(job)
+
+    assert len(scheduler.submitted) == 1
+    _src, out_path, _is_video = scheduler.submitted[0]
+    assert out_path.name == "fachada_norte.jpg"
+
+
+def test_preview_with_mapping_path_and_columns(tmp_path) -> None:
+    """preview() must accept mapping_path + id_column + rename_column (B-03)."""
+    file_path = tmp_path / "IMG_0001.jpg"
+    file_path.write_text("x")
+
+    excel = tmp_path / "map.xlsx"
+    import pandas as pd
+    df = pd.DataFrame(
+        [("IMG_0001.jpg", "codigo_001", "fachada_norte")],
+        columns=["Archivo", "Codigo", "NuevoNombre"],
+    )
+    df.to_excel(excel, index=False, engine="openpyxl")
+
+    result = conversion.preview({
+        "files": [str(file_path)],
+        "patron": "",
+        "mapping_path": str(excel),
+        "id_column": "archivo",
+        "rename_column": "nuevonombre",
+    })
+
+    assert len(result["preview"]) == 1
+    assert result["preview"][0]["origen"] == "IMG_0001.jpg"
+    assert result["preview"][0]["nuevo"] == "fachada_norte.jpg"
+    assert result["preview"][0]["en_bd"] is True
+
+
+def test_preview_mapping_path_auto_detects_columns(tmp_path) -> None:
+    """preview() with mapping_path but no columns auto-detects them."""
+    file_path = tmp_path / "IMG_0001.jpg"
+    file_path.write_text("x")
+
+    excel = tmp_path / "map.xlsx"
+    import pandas as pd
+    df = pd.DataFrame(
+        [("IMG_0001.jpg", "fachada_norte")],
+        columns=["ID", "RENOMBRE"],
+    )
+    df.to_excel(excel, index=False, engine="openpyxl")
+
+    result = conversion.preview({
+        "files": [str(file_path)],
+        "patron": "",
+        "mapping_path": str(excel),
+    })
+
+    assert result["preview"][0]["nuevo"] == "fachada_norte.jpg"
+    assert result["preview"][0]["en_bd"] is True
+
+
+def test_preview_inline_mapping_takes_precedence_over_mapping_path(tmp_path) -> None:
+    """When both inline mapping and mapping_path are present, inline wins."""
+    file_path = tmp_path / "IMG_0001.jpg"
+    file_path.write_text("x")
+
+    excel = tmp_path / "map.xlsx"
+    import pandas as pd
+    df = pd.DataFrame(
+        [("IMG_0001.jpg", "desde_excel")],
+        columns=["ID", "RENOMBRE"],
+    )
+    df.to_excel(excel, index=False, engine="openpyxl")
+
+    result = conversion.preview({
+        "files": [str(file_path)],
+        "patron": "",
+        "mapping": {"IMG_0001.jpg": "desde_inline"},
+        "mapping_path": str(excel),
+    })
+
+    assert result["preview"][0]["nuevo"] == "desde_inline.jpg"

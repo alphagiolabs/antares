@@ -5,8 +5,30 @@ Thread-safety is verified separately in test_race_condition.py.
 """
 from __future__ import annotations
 
-from backend.core.jobs import Job, JobManager, DEFAULT_JOB_ID
+from backend.core.jobs import DEFAULT_JOB_ID, Job, JobManager, resolve_job_id
 from backend.core.state import ProcessState
+
+
+class TestResolveJobId:
+    def test_missing_key_falls_back_to_default(self):
+        assert resolve_job_id({}) == DEFAULT_JOB_ID
+
+    def test_none_value_falls_back_to_default(self):
+        # Regression: str(None) used to leak "None" as the job id.
+        assert resolve_job_id({"job_id": None}) == DEFAULT_JOB_ID
+
+    def test_empty_string_kept_as_is(self):
+        assert resolve_job_id({"job_id": ""}) == ""
+
+    def test_string_value_kept_as_is(self):
+        assert resolve_job_id({"job_id": "abc"}) == "abc"
+
+    def test_int_value_coerced_to_string(self):
+        assert resolve_job_id({"job_id": 123}) == "123"
+
+    def test_custom_default(self):
+        assert resolve_job_id({}, default="custom") == "custom"
+        assert resolve_job_id({"job_id": None}, default="custom") == "custom"
 
 
 class TestProcessState:

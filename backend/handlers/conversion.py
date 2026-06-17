@@ -41,6 +41,18 @@ def preview(params: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
     use_column_rename = params.get("use_column_rename", False)
     key_column = params.get("key_column", "")
     file_mapping = params.get("mapping") or None
+    # Precedence: inline mapping > mapping_path + columns > key_column.
+    # When mapping_path is provided without inline mapping, parse the Excel
+    # using the (optionally) chosen id/rename columns.
+    if not file_mapping and params.get("mapping_path"):
+        from backend.core.database import parse_id_rename_mapping
+
+        mapping_path = params.get("mapping_path") or ""
+        file_mapping = parse_id_rename_mapping(
+            mapping_path,
+            id_column=params.get("id_column") or None,
+            rename_column=params.get("rename_column") or None,
+        )
     engine = RenamerEngine(patron, secuencia)
     file_seqs = {}
     codigos_manuales = {}
@@ -56,6 +68,7 @@ def preview(params: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
             file_seqs[p.name] = seq
 
     collisions: list[dict[str, Any]] = []
+    res: list[tuple[str, str, bool]] = []
     if file_mapping:
         from backend.core.mapping_index import MappingIndex
 
@@ -70,7 +83,6 @@ def preview(params: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
     elif key_column:
         # Buscamos por código parseado y por stem completo para máxima compatibilidad
         db_cache = buscar_por_columna(list(set(codigos_list + stems)), key_column)
-        res: list[tuple[str, str, bool]] = []
         seq_backup = engine.secuencia
         for f in files:
             p = Path(f)
@@ -177,7 +189,8 @@ def process_cancel(params: dict[str, Any]) -> dict[str, Any]:
     mgr = get_job_manager()
     result = mgr.cancel_job(job_id)
     if result.get("cancelled"):
-        log_message(t("info.process_cancelled"), "warn", state=mgr.get_job(job_id).state if mgr.get_job(job_id) else None)
+        job = mgr.get_job(job_id)
+        log_message(t("info.process_cancelled"), "warn", state=job.state if job else None)
     return result
 
 
@@ -219,12 +232,18 @@ def _run_conversion_job(job: Job) -> None:
         key_column = params.get("key_column", "")
         file_mapping = params.get("mapping") or None
         mapping_path = params.get("mapping_path") or ""
+        mapping_id_column = params.get("id_column") or None
+        mapping_rename_column = params.get("rename_column") or None
         mapping_index = None
 
         if mapping_path and not file_mapping:
             from backend.core.database import parse_id_rename_mapping
 
-            file_mapping = parse_id_rename_mapping(mapping_path)
+            file_mapping = parse_id_rename_mapping(
+                mapping_path,
+                id_column=mapping_id_column,
+                rename_column=mapping_rename_column,
+            )
 
         if file_mapping is not None:
             if not isinstance(file_mapping, dict) or len(file_mapping) == 0:
@@ -423,6 +442,8 @@ def _run_conversion_job(job: Job) -> None:
                 "rename_source": rename_source,
                 "mapping_mode": mapping_index is not None,
                 "mapping_path": mapping_path or None,
+                "id_column": mapping_id_column or None,
+                "rename_column": mapping_rename_column or None,
                 "key_column": key_column or None,
             },
             patron=patron, formato=formato, calidad=calidad,
@@ -548,8 +569,13 @@ def _prepare_chunk_tasks(
             if is_video_file or not conversion_enabled:
                 out_path = Path(destino) / nuevo_nombre
             else:
+                assert ext_dest is not None
                 out_path = (Path(destino) / nuevo_nombre).with_suffix(ext_dest)
         else:
-            out_path = Path(destino) / p.name if is_video_file or not conversion_enabled else Path(destino) / (p.stem + ext_dest)
+            if is_video_file or not conversion_enabled:
+                out_path = Path(destino) / p.name
+            else:
+                assert ext_dest is not None
+                out_path = Path(destino) / (p.stem + ext_dest)
         tasks.append((fpath, out_path, is_video_file))
     return tasks

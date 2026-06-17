@@ -50,21 +50,19 @@ describe('API Client', () => {
     expect(result.paths).toContain('/path/file.jpg');
   });
 
-  it('should call HTML PDF renderer with correct method', async () => {
+  it('should forward raw HTML to the Electron PDF renderer (B-10: sanitization lives in Electron)', async () => {
     mockInvoke.mockResolvedValue({ pdf_base64: 'JVBERi0=', filename: 'reporte.pdf' });
 
+    const rawHtml = '<html><head><style>.x{background:url(file:///etc/passwd)}</style></head><body><script>alert(1)</script></body></html>';
     const result = await api.htmlToPdf({
-      html: '<html><head><style>.x{background:url(file:///etc/passwd)}</style></head><body><script>alert(1)</script></body></html>',
+      html: rawHtml,
       filename: 'reporte.pdf',
     });
 
     expect(mockInvoke).toHaveBeenCalledWith('html_to_pdf', {
-      html: expect.stringContaining('Content-Security-Policy'),
+      html: rawHtml,
       filename: 'reporte.pdf',
     });
-    const payload = mockInvoke.mock.calls[0][1] as { html: string };
-    expect(payload.html).not.toContain('<script');
-    expect(payload.html).not.toContain('file:///etc/passwd');
     expect(result.filename).toBe('reporte.pdf');
   });
 
@@ -78,7 +76,7 @@ describe('API Client', () => {
     });
 
     expect(mockInvoke).toHaveBeenCalledWith('html_to_pdf', {
-      html: expect.stringContaining('Content-Security-Policy'),
+      html: '<html><body>PDF</body></html>',
       filename: 'reporte.pdf',
       outputPath: 'C:\\tmp\\reporte.pdf',
     });

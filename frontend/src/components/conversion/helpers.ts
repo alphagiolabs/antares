@@ -135,14 +135,40 @@ export const pickSyncedKeyColumn = (current: string, columns: string[]) => {
   return columns[0] ?? '';
 };
 
-const normalizeColumnName = (name: string) =>
-  name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+const normalizeColumnName = (name: string) => {
+  const text = name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  return text.replace(/[\s_\-]+/g, ' ').trim().replace(/\s+/g, ' ');
+};
+
+const ID_ALIASES = new Set(['id', 'codigo', 'code', 'filename', 'archivo', 'nombre original']);
+const RENAME_ALIASES = new Set(['renombre', 'rename', 'new_name', 'newname', 'nombre nuevo', 'nuevo_nombre', 'nuevonombre']);
+
+export const detectMappingColumns = (columns: string[]): { id_column?: string; rename_column?: string } => {
+  const find = (aliases: Set<string>) => {
+    for (const col of columns) {
+      if (aliases.has(normalizeColumnName(col))) return col;
+    }
+    return undefined;
+  };
+  return {
+    id_column: find(ID_ALIASES),
+    rename_column: find(RENAME_ALIASES),
+  };
+};
 
 export const detectMappingMode = (columns: string[]): boolean => {
-  if (columns.length !== 2) return false;
-  const normalized = columns.map(normalizeColumnName);
-  const set = new Set(normalized);
-  return set.has('id') && (set.has('renombre') || set.has('rename'));
+  const { id_column, rename_column } = detectMappingColumns(columns);
+  return Boolean(id_column && rename_column);
+};
+
+export const isMappingSchemaMismatch = (error: unknown): boolean => {
+  const message = error instanceof Error ? error.message : String(error);
+  const normalized = normalizeColumnName(message);
+  return [
+    'al menos 2 columnas',
+    'no se detecto una columna id',
+    'no se detecto una columna de nuevo nombre',
+  ].some((fragment) => normalized.includes(fragment));
 };
 
 export const parsePositiveInt = (value: string) => {

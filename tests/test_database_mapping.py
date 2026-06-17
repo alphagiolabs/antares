@@ -33,10 +33,16 @@ class TestParseIdRenameMapping:
         result = db.parse_id_rename_mapping(str(excel))
         assert result == {"A.jpg": "nuevo_a"}
 
-    def test_extra_column_raises(self, tmp_path) -> None:
+    def test_extra_column_auto_detects(self, tmp_path) -> None:
         excel = tmp_path / "map.xlsx"
         _write_mapping_excel(excel, [("A.jpg", "nuevo", "nota")], headers=("ID", "RENOMBRE", "Notas"))
-        with pytest.raises(ValueError, match="exactamente 2 columnas"):
+        result = db.parse_id_rename_mapping(str(excel))
+        assert result == {"A.jpg": "nuevo"}
+
+    def test_extra_column_missing_rename_raises(self, tmp_path) -> None:
+        excel = tmp_path / "map.xlsx"
+        _write_mapping_excel(excel, [("A.jpg", "nuevo", "nota")], headers=("ID", "Nombre", "Notas"))
+        with pytest.raises(ValueError, match="No se detectó una columna de nuevo nombre"):
             db.parse_id_rename_mapping(str(excel))
 
     def test_empty_id_raises_with_row(self, tmp_path) -> None:
@@ -63,10 +69,104 @@ class TestParseIdRenameMapping:
         result = db.parse_id_rename_mapping(str(excel))
         assert result == {"A.jpg": "nuevo"}
 
+    def test_explicit_columns_used(self, tmp_path) -> None:
+        excel = tmp_path / "map.xlsx"
+        _write_mapping_excel(
+            excel,
+            [("A.jpg", "desc_a", "nuevo_a")],
+            headers=("Archivo", "Descripcion", "NuevoNombre"),
+        )
+        result = db.parse_id_rename_mapping(str(excel), id_column="archivo", rename_column="nuevonombre")
+        assert result == {"A.jpg": "nuevo_a"}
 
-def test_mapping_template_parses(tmp_path) -> None:
-    excel = tmp_path / "plantilla-mapeo.xlsx"
-    db.generar_plantilla_mapeo_excel(str(excel))
-    result = db.parse_id_rename_mapping(str(excel))
-    assert len(result) == 3
-    assert result["IMG_0001.jpg"] == "fachada_norte"
+    def test_auto_detect_custom_columns(self, tmp_path) -> None:
+        excel = tmp_path / "map.xlsx"
+        _write_mapping_excel(
+            excel,
+            [("A.jpg", "desc_a", "nuevo_a")],
+            headers=("Codigo", "Descripcion", "NuevoNombre"),
+        )
+        result = db.parse_id_rename_mapping(str(excel))
+        assert result == {"A.jpg": "nuevo_a"}
+
+    def test_single_column_raises(self, tmp_path) -> None:
+        excel = tmp_path / "map.xlsx"
+        _write_mapping_excel(excel, [("A.jpg",)], headers=("ID",))
+        with pytest.raises(ValueError, match="al menos 2 columnas"):
+            db.parse_id_rename_mapping(str(excel))
+
+
+class TestParseIdRenameMappingFull:
+    """parse_id_rename_mapping_full returns mapping + chosen columns + all columns."""
+
+    def test_auto_detect_returns_chosen_columns(self, tmp_path) -> None:
+        excel = tmp_path / "map.xlsx"
+        _write_mapping_excel(
+            excel,
+            [("IMG_0001.jpg", "fachada", "categoria1", "fachada_norte")],
+            headers=("ID", "TIPO", "CATEGORIA", "RENOMBRE"),
+        )
+        result = db.parse_id_rename_mapping_full(str(excel))
+        assert result["mapping"] == {"IMG_0001.jpg": "fachada_norte"}
+        assert result["id_column"] == "id"
+        assert result["rename_column"] == "renombre"
+        assert result["columns"] == ["id", "tipo", "categoria", "renombre"]
+
+    def test_explicit_columns_returned_as_is(self, tmp_path) -> None:
+        excel = tmp_path / "map.xlsx"
+        _write_mapping_excel(
+            excel,
+            [("A.jpg", "desc_a", "nuevo_a")],
+            headers=("Archivo", "Descripcion", "NuevoNombre"),
+        )
+        result = db.parse_id_rename_mapping_full(
+            str(excel), id_column="archivo", rename_column="nuevonombre"
+        )
+        assert result["mapping"] == {"A.jpg": "nuevo_a"}
+        assert result["id_column"] == "archivo"
+        assert result["rename_column"] == "nuevonombre"
+        assert result["columns"] == ["archivo", "descripcion", "nuevonombre"]
+
+    def test_full_and_simple_are_consistent(self, tmp_path) -> None:
+        excel = tmp_path / "map.xlsx"
+        _write_mapping_excel(excel, [("A.jpg", "nuevo_a")])
+        full = db.parse_id_rename_mapping_full(str(excel))
+        simple = db.parse_id_rename_mapping(str(excel))
+        assert full["mapping"] == simple
+
+
+class TestDbParseMappingHandler:
+    """db_parse_mapping must return the auto-detected columns (B-01 regression)."""
+
+    def test_auto_detect_response_includes_columns(self, tmp_path) -> None:
+        from backend.handlers.database import db_parse_mapping
+
+        excel = tmp_path / "map.xlsx"
+        _write_mapping_excel(
+            excel,
+            [("IMG_0001.jpg", "fachada", "fachada_norte")],
+            headers=("ID", "TIPO", "RENOMBRE"),
+        )
+        result = db_parse_mapping({"path": str(excel), "files": []})
+        assert result["mapping"] == {"IMG_0001.jpg": "fachada_norte"}
+        # B-01: these used to be None even when auto-detected.
+        assert result["id_column"] == "id"
+        assert result["rename_column"] == "renombre"
+        assert result["columns"] == ["id", "tipo", "renombre"]
+
+    def test_explicit_columns_echoed_in_response(self, tmp_path) -> None:
+        from backend.handlers.database import db_parse_mapping
+
+        excel = tmp_path / "map.xlsx"
+        _write_mapping_excel(
+            excel,
+            [("A.jpg", "desc", "nuevo_a")],
+            headers=("Archivo", "Descripcion", "NuevoNombre"),
+        )
+        result = db_parse_mapping(
+            {"path": str(excel), "files": [], "id_column": "archivo", "rename_column": "nuevonombre"}
+        )
+        assert result["id_column"] == "archivo"
+        assert result["rename_column"] == "nuevonombre"
+        assert result["columns"] == ["archivo", "descripcion", "nuevonombre"]
+

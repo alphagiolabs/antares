@@ -44,7 +44,8 @@ def resolve_job_id(params: dict[str, Any], *, default: str = DEFAULT_JOB_ID) -> 
     Falls back to DEFAULT_JOB_ID for backward compatibility with legacy
     single-job frontend code. All new code should prefer passing explicit job_id.
     """
-    return params.get("job_id", default)
+    val = params.get("job_id", default)
+    return str(val) if val is not None else default
 
 
 def is_legacy_default_job(job_id: str) -> bool:
