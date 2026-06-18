@@ -8,7 +8,7 @@ include = ["backend*"]
 
 [project]
 name = "hidro-convert-backend"
-version = "0.10.4"
+version = "1.10.5"
 description = "Backend for ANTARES - Image conversion and renaming"
 authors = [
     {name = "ANTARES", email = "dev@antares.app"},
@@ -16,15 +16,16 @@ authors = [
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-    "Pillow>=10.0.0",
+    "Pillow>=12.2.0",
     "Jinja2>=3.1.0",
     "pandas>=2.0.0",
     "openpyxl>=3.1.0",
-    "pypdf>=5.0.0",
+    "pypdf>=6.12.0",
     "pymupdf>=1.24.0",
-    "weasyprint>=60.0",
+    "weasyprint>=68.0",
     "python-docx>=1.1.0",
     "jsonschema>=4.0.0",
+    "lxml>=6.1.0",
 ]
 
 [project.optional-dependencies]
@@ -33,6 +34,10 @@ dev = [
     "pytest-cov>=5.0.0",
     "mypy>=1.10.0",
     "ruff>=0.5.0",
+    "pip-audit>=2.7.0",
+    "types-openpyxl>=3.1.0",
+    "types-psutil>=5.9.0",
+    "lxml-stubs>=0.5.0",
 ]
 
 [tool.ruff]
@@ -53,6 +58,13 @@ warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = false
 
+[[tool.mypy.overrides]]
+module = "weasyprint"
+ignore_missing_imports = true
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-v --tb=short"
+addopts = "-v --tb=short -m 'not slow'"
+markers = [
+    "slow: long-running stress tests (e.g. 10k conversion queue)",
+]
