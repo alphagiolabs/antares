@@ -520,7 +520,7 @@ export default function ConversionView() {
             <ConversionPresets currentConfig={currentConfig} onLoadConfig={handleLoadConfig} className="hidden sm:block shrink-0" />
             <button
               onClick={selectDest}
-              className={`flex h-11 min-w-0 max-w-[min(280px,100%)] flex-1 items-center gap-2.5 rounded-xl border px-3 text-left transition-all group sm:max-w-[280px] sm:flex-none ${
+              className={`flex h-9 min-w-0 max-w-[min(260px,100%)] flex-1 items-center gap-2 rounded-lg border px-2.5 text-left transition-all group sm:max-w-[260px] sm:flex-none ${
                 destino
                   ? 'bg-[var(--bg-elevated)] border-[var(--border-subtle)] hover:border-[var(--border-medium)]'
                   : 'bg-[var(--accent-yellow)]/5 border-[var(--accent-yellow)]/30 hover:border-[var(--accent-yellow)]/50'
