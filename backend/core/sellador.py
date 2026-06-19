@@ -52,7 +52,7 @@ def group_stamp_pages(page_indices: list[int]) -> dict[int, int]:
 
 
 def _prepare_stamp_image(stamp_bytes: bytes, width_pt: float, height_pt: float) -> tuple[Image.Image, float, float]:
-    img = Image.open(io.BytesIO(stamp_bytes))
+    img: Image.Image = Image.open(io.BytesIO(stamp_bytes))
     if img.mode not in ("RGB", "RGBA"):
         img = img.convert("RGBA")
 
@@ -150,7 +150,7 @@ def _apply_stamp_to_page(page: Any, stamp_page: Any, x: float, y: float, stamp_h
 
 
 def _apply_stamp_placements(
-    reader: PdfReader,
+    writer: PdfWriter,
     stamp_bytes: bytes,
     stamp_placements: list[dict[str, float | int]],
 ) -> None:
@@ -158,12 +158,12 @@ def _apply_stamp_placements(
     by_page: dict[int, list[dict[str, float | int]]] = {}
     for placement in stamp_placements:
         page_idx = int(placement["page_index"])
-        if page_idx < 0 or page_idx >= len(reader.pages):
+        if page_idx < 0 or page_idx >= len(writer.pages):
             msg = f"Página {page_idx + 1} fuera de rango"
             raise ValueError(msg)
         by_page.setdefault(page_idx, []).append(placement)
 
-    for page_idx, page in enumerate(reader.pages):
+    for page_idx, page in enumerate(writer.pages):
         for placement in by_page.get(page_idx, ()):
             width = float(placement["width"])
             height = float(placement["height"])
@@ -211,28 +211,26 @@ def apply_sellador(
 
     effective_seed = seed if seed is not None else random.randint(0, 2_147_483_647)
     expected_count = effective_stamp_count(num_pages, stamp_count)
+    page_indices: list[int]
 
-    writer = PdfWriter()
+    writer = PdfWriter(clone_from=reader)
     if stamp_placements:
         if len(stamp_placements) != expected_count:
             msg = "La cantidad de ubicaciones debe coincidir con los sellos a aplicar"
             raise ValueError(msg)
         page_indices = [int(item["page_index"]) for item in stamp_placements]
         _validate_unique_stamp_pages(page_indices)
-        _apply_stamp_placements(reader, stamp_bytes, stamp_placements)
-        for page in reader.pages:
-            writer.add_page(page)
+        _apply_stamp_placements(writer, stamp_bytes, stamp_placements)
     else:
         page_indices, effective_seed = distribute_stamp_pages(num_pages, stamp_count, effective_seed)
         page_counts = group_stamp_pages(page_indices)
         stamp_img, _actual_w_pt, actual_h_pt = _prepare_stamp_image(stamp_bytes, width, height)
         stamp_pdf_bytes = _stamp_image_to_pdf_page(stamp_img)
         stamp_page = PdfReader(io.BytesIO(stamp_pdf_bytes)).pages[0]
-        for page_idx, page in enumerate(reader.pages):
+        for page_idx, page in enumerate(writer.pages):
             stamps_on_page = page_counts.get(page_idx, 0)
             for _ in range(stamps_on_page):
                 _apply_stamp_to_page(page, stamp_page, x, y, actual_h_pt)
-            writer.add_page(page)
 
     output = io.BytesIO()
     writer.write(output)

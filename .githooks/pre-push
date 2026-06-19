@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+# .githooks/pre-push
+# Garantiza que cada push se haga con la cuenta de GitHub `sechgio` y hacia
+# el repo `antares`. Si la cuenta activa del gh CLI no es `sechgio`, hace
+# `gh auth switch --user sechgio` automáticamente.
+
+set -u
+
+TARGET_USER="sechgio"
+EXPECTED_REPO="sechgio/antares"
+
+# 1) Verificar el remoto antes de tocar credenciales.
+ORIGIN_URL="$(git config --get remote.origin.url 2>/dev/null || true)"
+if [[ "$ORIGIN_URL" != *"$EXPECTED_REPO"* ]]; then
+  echo "[pre-push] ERROR: remote.origin.url es '$ORIGIN_URL'." >&2
+  echo "[pre-push] Se esperaba una URL que contenga '$EXPECTED_REPO'." >&2
+  echo "[pre-push] Corrige con: git remote set-url origin https://github.com/$EXPECTED_REPO.git" >&2
+  exit 1
+fi
+
+# 2) Verificar / cambiar cuenta activa del gh CLI (best-effort).
+if ! command -v gh >/dev/null 2>&1; then
+  # gh no está instalado: dejamos que git use sus propias credenciales.
+  exit 0
+fi
+
+# Detectar la cuenta activa de forma robusta.
+ACTIVE_USER="$(gh api user --jq .login 2>/dev/null || true)"
+
+if [[ "$ACTIVE_USER" == "$TARGET_USER" ]]; then
+  exit 0
+fi
+
+if [[ -n "$ACTIVE_USER" ]]; then
+  echo "[pre-push] Cuenta gh activa: '$ACTIVE_USER'. Cambiando a '$TARGET_USER'..."
+else
+  echo "[pre-push] No hay sesión gh activa. Intentando activar '$TARGET_USER'..."
+fi
+
+if ! gh auth switch --user "$TARGET_USER" >/dev/null 2>&1; then
+  echo "[pre-push] ERROR: no se pudo cambiar la cuenta gh a '$TARGET_USER'." >&2
+  echo "[pre-push] Ejecuta manualmente: gh auth switch --user $TARGET_USER" >&2
+  exit 1
+fi
+
+# Confirmar el switch.
+NEW_ACTIVE_USER="$(gh api user --jq .login 2>/dev/null || true)"
+if [[ "$NEW_ACTIVE_USER" != "$TARGET_USER" ]]; then
+  echo "[pre-push] ERROR: tras el switch la cuenta activa es '$NEW_ACTIVE_USER'." >&2
+  exit 1
+fi
+
+echo "[pre-push] Cuenta gh activa: '$TARGET_USER'."
+exit 0

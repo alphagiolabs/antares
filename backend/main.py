@@ -18,7 +18,7 @@ if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8")
 
 try:
-    from bootstrap import adjust_backend_import_path
+    from bootstrap import adjust_backend_import_path  # type: ignore[import-not-found]
 except ModuleNotFoundError:
     from backend.bootstrap import adjust_backend_import_path
 
@@ -167,7 +167,8 @@ def _submit_handler(handler, params, msg_id, method_name) -> Future | None:
         logger.warning("Heavy scheduler saturated while accepting %s: %s", method_name, scheduler.metrics())
         send_response(None, msg_id, error="Backend ocupado: cola de trabajo pesada llena")
         return None
-    future.add_done_callback(_log_future_exception)
+    if future is not None:
+        future.add_done_callback(_log_future_exception)
     return future
 
 

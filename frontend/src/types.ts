@@ -37,6 +37,9 @@ export interface MappingResult {
   unmatchedFiles: string[];
   orphanEntries: string[];
   collisions: MappingCollision[];
+  id_column?: string;
+  rename_column?: string;
+  columns?: string[];
 }
 
 export interface DBField {

@@ -1,6 +1,7 @@
 const BACKEND_METHODS = [
   'version', 'formats', 'plugin_formats',
   'db_records', 'db_import', 'db_export', 'db_clear', 'db_template',
+  'db_parse_mapping', 'db_validate_mapping',
   'db_fields', 'db_fields_update', 'db_fields_reset',
   'db_columns',
   'rename_patterns_get', 'rename_patterns_update', 'rename_patterns_reset',
@@ -8,7 +9,8 @@ const BACKEND_METHODS = [
   'process_start', 'process_status', 'process_cancel',
   'preview', 'preview_image', 'is_video',
   'formatos_list', 'formatos_generate', 'formatos_upload', 'formatos_delete', 'formatos_update_mapping',
-  'history_list', 'history_get', 'history_delete', 'history_save',
+  'history_list', 'history_get', 'history_delete', 'history_delete_many', 'history_save',
+  'history_export',
   'technical_reports_list', 'technical_reports_get', 'technical_reports_create',
   'technical_reports_update', 'technical_reports_delete', 'technical_reports_clear',
   'technical_reports_import_file', 'technical_reports_variables',

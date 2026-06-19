@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import base64
 import io
-import shutil
 import struct
 from pathlib import Path
 
@@ -71,7 +70,7 @@ def load_and_trim(path: Path) -> Image.Image:
 def resize_to_height(img: Image.Image, height: int) -> Image.Image:
     w, h = img.size
     scale = height / h
-    new_w = max(1, int(round(w * scale)))
+    new_w = max(1, round(w * scale))
     return img.resize((new_w, height), Image.Resampling.LANCZOS)
 
 

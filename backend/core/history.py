@@ -10,7 +10,7 @@ from typing import Any
 from backend.core.database import get_db_path
 from backend.core.migrations import Migration, MigrationManager
 from backend.core.repository import _db_lock, get_connection
-from backend.core.run_types import ALL_RUN_TYPES
+from backend.core.run_types import ALL_RUN_TYPES  # noqa: F401
 
 # ─── Constants ─────────────────────────────────────────────────────────────
 

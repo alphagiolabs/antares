@@ -311,6 +311,8 @@ def parse_csv_file(content: bytes) -> list[dict[str, Any]]:
 def parse_xlsx_file(content: bytes) -> list[dict[str, Any]]:
     workbook = load_workbook(io.BytesIO(content), read_only=True, data_only=True)
     worksheet = workbook.active
+    if worksheet is None:
+        return []
     rows_iter = worksheet.iter_rows(values_only=True)
     headers = next(rows_iter, None)
     if not headers:

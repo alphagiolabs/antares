@@ -3,22 +3,13 @@ const os = require('os');
 const path = require('path');
 const { pathToFileURL } = require('url');
 
+const { sanitizeHtmlForPdf } = require('../shared/html-sanitizer');
+
 const DIALOG_METHODS = new Set(['dialog_files', 'dialog_folder', 'dialog_dest', 'dialog_save']);
 const NATIVE_METHODS = new Set([...DIALOG_METHODS, 'html_to_pdf']);
 
 function _sanitizeHtmlForPdf(html) {
-  const stripped = html
-    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
-    .replace(/<iframe[^>]*>[\s\S]*?<\/iframe>/gi, '')
-    .replace(/<object[^>]*>[\s\S]*?<\/object>/gi, '')
-    .replace(/<embed[^>]*>/gi, '')
-    .replace(/<link[^>]*>/gi, '')
-    .replace(/url\(\s*(['"]?)(.+?)\1\s*\)/gi, (match, _quote, urlValue) => {
-      return String(urlValue).trim().toLowerCase().startsWith('data:') ? match : "url('')";
-    });
-  const cspMeta = '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; style-src \'unsafe-inline\'; img-src data: file:; font-src data:;">';
-  const injectedHtml = stripped.replace(/<head([^>]*)>/i, `<head$1>${cspMeta}`);
-  return /<head/i.test(injectedHtml) ? injectedHtml : cspMeta + injectedHtml;
+  return sanitizeHtmlForPdf(html);
 }
 
 function _localImageEntries(rawPaths) {

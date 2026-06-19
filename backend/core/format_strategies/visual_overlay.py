@@ -92,26 +92,28 @@ def _apply_visual_overlay(page, number: int, mapping: dict[str, Any]) -> None:
     bx, by, bw, bh = mapping.get("blank_x"), mapping.get("blank_y"), mapping.get("blank_width"), mapping.get("blank_height")
     has_blank = all(v is not None for v in (bx, by, bw, bh))
     if has_blank:
-        blank_pdf_y = ur_y - by - bh
+        assert bx is not None and by is not None and bw is not None and bh is not None
+        blank_x, blank_y, blank_w, blank_h = float(bx), float(by), float(bw), float(bh)
+        blank_pdf_y = ur_y - blank_y - blank_h
         parts.append("1 1 1 rg")
-        parts.append(f"{bx} {blank_pdf_y} {bw} {bh} re")
+        parts.append(f"{blank_x} {blank_pdf_y} {blank_w} {blank_h} re")
         parts.append("f")
         if mapping.get("redraw_ot_badge"):
-            radius = min(8.0, float(bh) / 2)
+            radius = min(8.0, blank_h / 2)
             parts.append(f"{mapping['color_r']} {mapping['color_g']} {mapping['color_b']} RG")
             parts.append("1 1 1 rg")
             parts.append("1.35 w")
-            _append_rounded_rect_path(parts, float(bx), float(blank_pdf_y), float(bw), float(bh), radius)
+            _append_rounded_rect_path(parts, blank_x, blank_pdf_y, blank_w, blank_h, radius)
             parts.append("B")
             parts.append(f"{mapping['color_r']} {mapping['color_g']} {mapping['color_b']} rg")
             parts.append("BT")
             parts.append(f"/{clean_name} {mapping['font_size']} Tf")
-            parts.append(f"{float(bx) + 14} {pdf_y} Td")
+            parts.append(f"{blank_x + 14} {pdf_y} Td")
             parts.append(f"({escaped_label}) Tj")
             parts.append("ET")
         elif mapping.get("redraw_top_border"):
-            top_y = blank_pdf_y + bh
-            right_x = bx + bw
+            top_y = blank_pdf_y + blank_h
+            right_x = blank_x + blank_w
             parts.append(f"{mapping['color_r']} {mapping['color_g']} {mapping['color_b']} RG")
             parts.append("1 w")
             parts.append(f"{bx} {top_y} m")
@@ -130,7 +132,7 @@ def _apply_visual_overlay(page, number: int, mapping: dict[str, Any]) -> None:
     page.merge_page(stamp_reader.pages[0])
 
 
-_DEFAULT_OVERLAY_MAPPING = {
+_DEFAULT_OVERLAY_MAPPING: dict[str, Any] = {
     "page": 0, "x": 500, "y": 30, "width": 140, "height": 20,
     "font_size": 12, "font_name": "Helvetica-Bold",
     "color_r": 0, "color_g": 0, "color_b": 0,

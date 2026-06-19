@@ -1,4 +1,12 @@
-"""Dynamic plugin loader for format extensions."""
+"""Dynamic plugin loader for format extensions.
+
+Security model
+--------------
+Plugins are loaded only from ``user_data_path("plugins")`` and must expose a
+``register()`` entry point.  Source is validated with an AST whitelist before
+``exec_module`` runs, but plugins still execute in the same Python process as
+the backend.  Treat third-party plugins as *use at your own risk*.
+"""
 
 from __future__ import annotations
 

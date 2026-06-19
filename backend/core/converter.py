@@ -6,6 +6,7 @@ import base64
 import io
 import shutil
 from pathlib import Path
+from typing import cast
 
 from PIL import Image
 
@@ -235,7 +236,7 @@ def convertir_a_preview(
     cache = get_preview_cache()
     cached_result = cache.get(cache_key)
     if cached_result:
-        return cached_result
+        return cast(dict[str, str], cached_result)
 
     formato = formato_salida.upper()
     pil_formato = PIL_FORMAT_MAP.get(formato, formato)

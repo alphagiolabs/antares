@@ -127,9 +127,8 @@ class TechnicalReportsDB:
     def get_unique_contratista(self, cs: str | None = None) -> list[str]:
         """Return sorted unique contratista values, optionally filtered by CS."""
         with self._lock:
-            items = self._items.values()
-            if cs:
-                items = [r for r in items if r.get("header", {}).get("cs") == cs]
+            all_items = self._items.values()
+            filtered_items = [r for r in all_items if r.get("header", {}).get("cs") == cs] if cs else list(all_items)
             return sorted(
-                {r.get("header", {}).get("contratista", "") for r in items if r.get("header", {}).get("contratista")}
+                {r.get("header", {}).get("contratista", "") for r in filtered_items if r.get("header", {}).get("contratista")}
             )

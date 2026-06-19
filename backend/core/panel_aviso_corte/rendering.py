@@ -108,8 +108,10 @@ def _serialize_panel(panel: Panel) -> dict[str, Any]:
 
 def _prepare_logos(logos: dict[str, str | None]) -> tuple[str | None, str | None, str | None]:
     """Devuelve (logo_left, logo_right, logo_center) como data URIs."""
-    left = _data_uri_from_b64(logos["left"]) if logos.get("left") else None
-    right = _data_uri_from_b64(logos["right"]) if logos.get("right") else None
+    left_raw = logos.get("left")
+    right_raw = logos.get("right")
+    left = _data_uri_from_b64(left_raw) if left_raw else None
+    right = _data_uri_from_b64(right_raw) if right_raw else None
     center = None
     if left and not right:
         center = left
@@ -370,12 +372,14 @@ def render_docx(
     }
 
     logo_bytes: bytes | None = None
-    if logos.get("left"):
+    left_raw = logos.get("left")
+    right_raw = logos.get("right")
+    if left_raw:
         with contextlib.suppress(Exception):
-            logo_bytes = base64.b64decode(logos["left"], validate=True)
-    elif logos.get("right"):
+            logo_bytes = base64.b64decode(left_raw, validate=True)
+    elif right_raw:
         with contextlib.suppress(Exception):
-            logo_bytes = base64.b64decode(logos["right"], validate=True)
+            logo_bytes = base64.b64decode(right_raw, validate=True)
 
     for pidx, panel in enumerate(panels):
         if pidx > 0:

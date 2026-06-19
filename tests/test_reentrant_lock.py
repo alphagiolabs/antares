@@ -14,9 +14,8 @@ from backend.handlers.common import log_message
 def test_state_lock_is_reentrant() -> None:
     """Acquiring state._lock twice in the same thread must not deadlock."""
     state = ProcessState()
-    with state._lock:
-        with state._lock:
-            state.progress = 50
+    with state._lock, state._lock:
+        state.progress = 50
     assert state.progress == 50
 
 

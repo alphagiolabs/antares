@@ -509,7 +509,7 @@ export default function FormatosView() {
         setLoadingFormats(true);
         try {
             const res = await api.formatosList();
-            setFormats(res.formats);
+            setFormats(res.formats ?? []);
             if (res.formats.length > 0 && !selectedId) {
                 setSelectedId(res.formats[0].id);
             }

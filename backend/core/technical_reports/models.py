@@ -181,7 +181,8 @@ class TechnicalReport:
     @staticmethod
     def normalize(data: dict[str, Any] | None) -> dict[str, Any]:
         source = data if isinstance(data, dict) else {}
-        metadata_source = source.get("metadata") if isinstance(source.get("metadata"), dict) else {}
+        metadata_raw = source.get("metadata")
+        metadata_source = metadata_raw if isinstance(metadata_raw, dict) else {}
         informe_id = _safe_int(metadata_source.get("informe_id") or source.get("informe_id"), 1)
         report = create_empty_report(informe_id)
         report["id"] = _safe_str(source.get("id"), report_id_from_number(informe_id))
@@ -196,7 +197,8 @@ class TechnicalReport:
         report["metadata"] = metadata
 
         header = deepcopy(report["header"])
-        header_source = source.get("header") if isinstance(source.get("header"), dict) else {}
+        header_raw = source.get("header")
+        header_source = header_raw if isinstance(header_raw, dict) else {}
         header.update({k: v for k, v in header_source.items() if v is not None})
         header["tipo"] = _safe_str(header.get("tipo"), "ELEVADO").upper()
         if header["tipo"] not in REPORT_TYPES:

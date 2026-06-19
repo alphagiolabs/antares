@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 import base64
-
-import pytest
 from io import BytesIO
 
+import pytest
 from PIL import Image
 from pypdf import PdfReader, PdfWriter
 

@@ -3,13 +3,16 @@ import Card from '../ui/Card';
 import Input from '../ui/Input';
 import Toggle from '../ui/Toggle';
 import type { RenamePattern, DBRecord, MappingResult, PreviewItem } from '../../types';
-import { PencilLine, Tags, Database, ArrowRight, AlertTriangle } from 'lucide-react';
+import { PencilLine, Tags, Database, ArrowRight, AlertTriangle, FileSpreadsheet, Upload } from 'lucide-react';
 
 interface RenameCardProps {
   files: string[];
   usarRename: boolean;
   mappingMode?: boolean;
   mappingResult?: MappingResult | null;
+  mappingColumns?: string[];
+  mappingIdColumn?: string;
+  mappingRenameColumn?: string;
   renamePreview?: PreviewItem[];
   onClearMapping?: () => void;
   namingMode: string;
@@ -28,6 +31,10 @@ interface RenameCardProps {
   hasVideos?: boolean;
   keyColumn?: string;
   onKeyColumnChange?: (col: string) => void;
+  onLoadRenameExcel?: () => void;
+  onGenerateTemplate?: () => void;
+  onMappingIdColumnChange?: (col: string) => void;
+  onMappingRenameColumnChange?: (col: string) => void;
 }
 
 const fileNameFromPath = (path: string) => path.split(/[\\/]/).pop() || path;
@@ -87,8 +94,15 @@ export default function RenameCard(props: RenameCardProps) {
     onKeyColumnChange,
     mappingMode = false,
     mappingResult = null,
+    mappingColumns = [],
+    mappingIdColumn = '',
+    mappingRenameColumn = '',
     renamePreview = [],
     onClearMapping,
+    onLoadRenameExcel,
+    onGenerateTemplate,
+    onMappingIdColumnChange,
+    onMappingRenameColumnChange,
   } = props;
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [showAllMappings, setShowAllMappings] = useState(false);
@@ -185,10 +199,34 @@ export default function RenameCard(props: RenameCardProps) {
 
       {usarRename && (
         <div className="space-y-6 animate-fade-in">
+          <div className="flex items-center gap-2">
+            {onLoadRenameExcel && (
+              <button
+                type="button"
+                onClick={onLoadRenameExcel}
+                className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-[var(--accent-primary)]/30 bg-[var(--accent-primary)]/10 px-3 py-2.5 text-xs font-semibold text-[var(--accent-primary)] transition-colors hover:border-[var(--accent-primary)]/50 hover:bg-[var(--accent-primary)]/15"
+              >
+                <Upload className="h-3.5 w-3.5" />
+                Cargar Excel para renombrar
+              </button>
+            )}
+            {onGenerateTemplate && (
+              <button
+                type="button"
+                onClick={onGenerateTemplate}
+                className="flex shrink-0 items-center justify-center gap-2 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)] px-3 py-2.5 text-xs font-medium text-[var(--text-secondary)] transition-colors hover:border-[var(--border-medium)] hover:text-[var(--text-primary)]"
+                title="Descargar plantilla de Excel"
+              >
+                <FileSpreadsheet className="h-3.5 w-3.5" />
+                Plantilla
+              </button>
+            )}
+          </div>
+
           {!mappingMode && !hasCatalog ? (
             <div className="rounded-xl border border-dashed border-[var(--border-medium)] p-6 text-center space-y-3">
               <Database className="h-8 w-8 mx-auto text-[var(--text-muted)] opacity-50" />
-              <p className="text-xs text-[var(--text-secondary)]">Carga un Excel de catálogo o un mapeo ID → RENOMBRE desde la barra superior.</p>
+              <p className="text-xs text-[var(--text-secondary)]">Carga un Excel y detectaremos automáticamente si es un catálogo o un mapeo ID → RENOMBRE.</p>
             </div>
           ) : mappingMode ? (
             <div className="space-y-4">
@@ -221,6 +259,33 @@ export default function RenameCard(props: RenameCardProps) {
                     </>
                   )}
                 </p>
+                {mappingColumns.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-[10px] text-[var(--text-muted)]">Columnas del Excel:</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <select
+                        value={mappingIdColumn}
+                        onChange={(e) => onMappingIdColumnChange?.(e.target.value)}
+                        className="w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-elevated)] px-2.5 py-2 text-xs text-[var(--text-primary)] focus:border-[var(--accent-primary)] focus:outline-none"
+                      >
+                        <option value="">Columna ID...</option>
+                        {mappingColumns.map((col) => (
+                          <option key={col} value={col}>{col}</option>
+                        ))}
+                      </select>
+                      <select
+                        value={mappingRenameColumn}
+                        onChange={(e) => onMappingRenameColumnChange?.(e.target.value)}
+                        className="w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-elevated)] px-2.5 py-2 text-xs text-[var(--text-primary)] focus:border-[var(--accent-primary)] focus:outline-none"
+                      >
+                        <option value="">Nuevo nombre...</option>
+                        {mappingColumns.map((col) => (
+                          <option key={col} value={col}>{col}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                )}
                 {(unmatchedCount > 0 || orphanCount > 0) && (
                   <div className="flex items-center gap-2 rounded-lg border border-[var(--accent-yellow)]/30 bg-[var(--accent-yellow)]/10 px-3 py-2 text-[11px] text-[var(--accent-yellow)]">
                     <AlertTriangle className="h-3.5 w-3.5 shrink-0" />

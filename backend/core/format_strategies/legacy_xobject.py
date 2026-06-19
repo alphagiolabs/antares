@@ -88,6 +88,8 @@ def _update_accessible_number(reader: PdfReader, padded_number: str) -> None:
         obj = reader.get_object(IndirectObject(object_number, 0, reader))
         if not hasattr(obj, "get"):
             continue
+        if not isinstance(obj, dict):
+            continue
         if obj.get("/T") == _TEMPLATE_NUMBER_TEXT or obj.get("/E") == _TEMPLATE_NUMBER_TEXT:
             obj[NameObject("/T")] = create_string_object(padded_number)
             obj[NameObject("/E")] = create_string_object(padded_number)

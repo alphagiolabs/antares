@@ -74,3 +74,9 @@ opencode.json
 # Temp files
 _temp_*
 mypy-out.txt
+
+# Windows reserved filename artifact
+nul
+
+# Vite bundle analyze output
+frontend/stats.html

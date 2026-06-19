@@ -155,7 +155,7 @@ def _resolve_path(fmt: dict[str, Any]) -> Path:
         # Sanitize storage_path so it cannot escape the uploads directory
         # (defense in depth — storage_path is created server-side but we
         # still validate before touching the filesystem).
-        candidate = (_UPLOADS_DIR / fmt["storage_path"]).resolve()
+        candidate = (_UPLOADS_DIR / str(fmt["storage_path"])).resolve()
         uploads_resolved = _UPLOADS_DIR.resolve()
         try:
             candidate.relative_to(uploads_resolved)
@@ -164,7 +164,7 @@ def _resolve_path(fmt: dict[str, Any]) -> Path:
             raise ValueError(msg) from exc
         return candidate
 
-    fname = fmt["storage_path"]
+    fname = str(fmt["storage_path"])
     # 1. Development: project root /formatos/
     builtin = _BUILTIN_DIR / fname
     if builtin.exists():
@@ -288,9 +288,10 @@ def add_uploaded_format(
 
         total_size = 0
         for page in reader.pages:
-            if hasattr(page, "get_contents") and page.get_contents():
+            contents = page.get_contents() if hasattr(page, "get_contents") else None
+            if contents is not None:
                 try:
-                    raw = page.get_contents().get_data()
+                    raw = contents.get_data()
                     total_size += len(raw)
                 except Exception:
                     pass

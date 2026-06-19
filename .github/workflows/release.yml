@@ -31,15 +31,15 @@ jobs:
 
       - name: Install dependencies
         run: |
-          # Root dependencies
           npm install
-          # Frontend dependencies
           cd frontend
           npm install
           cd ..
-          # Backend dependencies
           pip install pyinstaller
-          pip install -e .
+          pip install -e ".[dev]"
+
+      - name: Run CI checks
+        run: npm run ci
 
       - name: Build Backend
         run: npm run build:backend

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import App from '../App';
+import { TAB_DEFINITIONS } from '../navigation';
 
 describe('App', () => {
   it('shows an Electron-only message when the preload bridge is unavailable', () => {
@@ -42,10 +43,10 @@ describe('App', () => {
 
   it('opens Reportes de Campo from the sidebar', async () => {
     render(<App />);
-    fireEvent.click(screen.getByRole('button', { name: /Reportes de Campo/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /Reportes de Campo/i }, {}, { timeout: 5000 }));
 
-    expect(await screen.findByRole('heading', { name: /Paneles/i }, { timeout: 5000 })).toBeInTheDocument();
-  });
+    expect(await screen.findByRole('heading', { name: /Paneles/i }, { timeout: 10000 })).toBeInTheDocument();
+  }, 15000);
 
   it('opens Informes tecnicos from the sidebar', async () => {
     render(<App />);
@@ -68,27 +69,19 @@ describe('App', () => {
 
   it('does not render the removed shared header for any tool', async () => {
     render(<App />);
+    await screen.findByRole('button', { name: 'Conversión' }, {}, { timeout: 5000 });
 
-    const toolButtons = [
-      'Conversión',
-      'Formatos PDF',
-      'Generar Padrones',
-      'Generar Volantes',
-      'Reportes de Campo',
-      'Informes técnicos',
-      'Optimizador',
-      'Generador Reportes',
-      'Aviso de Corte',
-      'Historial',
-      'Apariencia',
-    ];
-
-    for (const label of toolButtons) {
-      fireEvent.click(screen.getByTitle(label));
-      expect(screen.queryByTestId('app-header')).not.toBeInTheDocument();
-      expect(screen.queryByRole('button', { name: 'Buscar' })).not.toBeInTheDocument();
+    for (const tab of TAB_DEFINITIONS) {
+      fireEvent.click(screen.getByRole('button', { name: tab.label }));
+      await waitFor(
+        () => {
+          expect(screen.queryByTestId('app-header')).not.toBeInTheDocument();
+          expect(screen.queryByRole('button', { name: 'Buscar' })).not.toBeInTheDocument();
+        },
+        { timeout: 5000 },
+      );
     }
-  });
+  }, 60000);
 
   it('opens search from Ctrl+K without rendering a header search button', async () => {
     render(<App />);

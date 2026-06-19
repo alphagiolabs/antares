@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import base64
+import xml.etree.ElementTree as ET
 from io import BytesIO
 from pathlib import Path
 from zipfile import ZipFile
-import xml.etree.ElementTree as ET
 
 import pytest
 from PIL import Image

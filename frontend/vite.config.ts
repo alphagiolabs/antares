@@ -1,9 +1,26 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { visualizer } from 'rollup-plugin-visualizer'
+import path from 'node:path'
+
+const sharedHtmlSanitizerPath = path.resolve(__dirname, '../shared/html-sanitizer.js')
+
+const sharedHtmlSanitizerPlugin = {
+  name: 'shared-html-sanitizer',
+  enforce: 'pre' as const,
+  transform(code: string, id: string) {
+    if (path.normalize(id.split('?')[0]) !== path.normalize(sharedHtmlSanitizerPath)) return null
+
+    return code.replace(
+      'module.exports = { sanitizeHtmlForPdf, CSP_META };',
+      'export { sanitizeHtmlForPdf, CSP_META };',
+    )
+  },
+}
 
 export default defineConfig(({ mode }) => ({
   plugins: [
+    sharedHtmlSanitizerPlugin,
     react({
       babel: {
         plugins: mode === 'production'
