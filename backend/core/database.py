@@ -278,16 +278,19 @@ def importar_excel(excel_path: str) -> int:
             col_names = ", ".join(_qi(fn) for fn in field_names)
             sql = f"INSERT INTO imagenes ({col_names}) VALUES ({placeholders})"
 
-            # Use executemany for bulk insert performance
+            # Use executemany for bulk insert performance.
+            # itertuples() is significantly faster than iterrows() for large DataFrames.
             all_values: list[list[Any]] = []
-            for _, row in df.iterrows():
+            required_set = set(required)
+            for row in df.itertuples(index=False):
+                row_dict = dict(zip(field_names, row, strict=False))
                 values: list[Any] = []
                 valid = True
                 for fn in field_names:
-                    val = row.get(fn)
+                    val = row_dict.get(fn)
                     if pd.notna(val) and str(val).strip():
                         values.append(str(val).strip())
-                    elif fn in required:
+                    elif fn in required_set:
                         valid = False
                         break
                     else:

@@ -30,6 +30,7 @@ venv*/
 
 # Output de pruebas
 test_output/
+.coverage
 
 # Electron
 node_modules/
@@ -57,6 +58,7 @@ scratch/_smoke*.db
 # AI tool configs (not project-specific)
 .claude/
 .codex/
+.commandcode/
 .devin/
 .hypothesis/
 .kiro/
@@ -71,3 +73,4 @@ opencode.json
 
 # Temp files
 _temp_*
+mypy-out.txt
