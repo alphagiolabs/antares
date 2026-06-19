@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Download, Search, SlidersHorizontal, Trash2, X } from 'lucide-react';
 import { api } from '../../api';
 import { useToast } from '../../hooks/useToast';
 import { useDialog } from '../../hooks/useDialog';
@@ -38,6 +39,7 @@ export default function HistoryView() {
   const [dateTo, setDateTo] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [exporting, setExporting] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const reqId = useRef(0);
   const typeFilters = useMemo(() => getTypeFilters(t), [t]);
 
@@ -174,127 +176,192 @@ export default function HistoryView() {
     }
   };
 
+  const hasActiveFilters = activeType !== 'all' || Boolean(dateFrom) || Boolean(dateTo);
+  const clearAllFilters = () => {
+    setActiveType('all');
+    setDateFrom('');
+    setDateTo('');
+  };
+
   return (
     <div className="flex flex-col h-full w-full bg-[var(--bg-base)] text-[var(--text-primary)]">
-      <div className="px-6 py-3 border-b border-[var(--border-subtle)] flex items-center justify-between gap-4 flex-wrap">
-        <div className="flex items-center gap-4 flex-wrap">
-          <h2 className="text-lg font-semibold text-[var(--text-primary)]">{t('history.title')}</h2>
-          <div className="flex items-center gap-1 bg-[var(--bg-surface)] rounded-full p-1 border border-[var(--border-subtle)]">
-            {typeFilters.map((filter) => (
-              <button
-                key={filter.value}
-                onClick={() => setActiveType(filter.value)}
-                className={`px-3 py-1 rounded-full text-[11px] font-medium transition-all ${
-                  activeType === filter.value
-                    ? 'bg-[var(--accent-primary)] text-[var(--text-on-accent)]'
-                    : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
-                }`}
-              >
-                {filter.label}
-              </button>
-            ))}
+      {/* Barra de herramientas superior */}
+      <div className="shrink-0 border-b border-[var(--border-subtle)] bg-[var(--bg-surface)] px-5 py-3">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--accent-primary-glow)] text-[var(--accent-primary)]">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 3v18h18" /><path d="M7 14l4-4 3 3 5-6" />
+              </svg>
+            </div>
+            <div className="min-w-0">
+              <h2 className="text-[15px] font-semibold leading-tight text-[var(--text-primary)]">{t('history.title')}</h2>
+              <p className="mt-0.5 text-[11px] text-[var(--text-muted)]">
+                {filteredRuns.length > 0
+                  ? `${filteredRuns.length} ${filteredRuns.length === 1 ? 'ejecución' : 'ejecuciones'}`
+                  : t('history.noRuns')}
+              </p>
+            </div>
           </div>
-          <div className="flex items-center gap-2 text-[11px] text-[var(--text-muted)]">
-            <label className="flex items-center gap-1">
-              <span>{t('history.filters.from')}</span>
+
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="relative">
+              <Search size={14} strokeWidth={2} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] pointer-events-none" />
               <input
-                type="date"
-                value={dateFrom}
-                onChange={(e) => setDateFrom(e.target.value)}
-                className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded px-2 py-1 text-[11px] text-[var(--text-primary)] focus:border-[var(--accent-primary)] focus:outline-none"
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder={t('history.search.placeholder')}
+                className="w-56 rounded-full border border-[var(--border-subtle)] bg-[var(--bg-elevated)] py-2 pl-9 pr-3 text-[13px] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] transition-all focus:border-[var(--accent-primary)] focus:outline-none focus:shadow-[0_0_0_3px_var(--accent-primary-glow)]"
               />
-            </label>
-            <label className="flex items-center gap-1">
-              <span>{t('history.filters.to')}</span>
-              <input
-                type="date"
-                value={dateTo}
-                onChange={(e) => setDateTo(e.target.value)}
-                className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded px-2 py-1 text-[11px] text-[var(--text-primary)] focus:border-[var(--accent-primary)] focus:outline-none"
-              />
-            </label>
-            {(dateFrom || dateTo) && (
-              <button
-                onClick={() => { setDateFrom(''); setDateTo(''); }}
-                className="text-[var(--text-muted)] hover:text-[var(--text-primary)] text-[10px] underline"
-              >
-                {t('history.filters.clearDates')}
-              </button>
-            )}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setFiltersOpen((v) => !v)}
+              aria-expanded={filtersOpen}
+              className={`inline-flex h-9 items-center gap-2 rounded-full border px-3 text-[12px] font-medium transition-all ${
+                filtersOpen || hasActiveFilters
+                  ? 'border-[var(--accent-primary)] bg-[var(--accent-primary-glow)] text-[var(--text-primary)]'
+                  : 'border-[var(--border-subtle)] bg-[var(--bg-elevated)] text-[var(--text-secondary)] hover:border-[var(--border-medium)] hover:text-[var(--text-primary)]'
+              }`}
+              title="Filtros"
+            >
+              <SlidersHorizontal size={14} strokeWidth={2} />
+              <span className="hidden sm:inline">Filtros</span>
+              {hasActiveFilters && (
+                <span className="ml-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-[var(--accent-primary)] px-1 text-[10px] font-bold text-[var(--text-on-accent)]">
+                  {(activeType !== 'all' ? 1 : 0) + (dateFrom ? 1 : 0) + (dateTo ? 1 : 0)}
+                </span>
+              )}
+            </button>
+
+            <button
+              onClick={() => void exportCsv()}
+              disabled={exporting}
+              data-testid="history-export-csv"
+              className="inline-flex h-9 items-center gap-2 rounded-full border border-[var(--border-subtle)] bg-[var(--bg-elevated)] px-3 text-[12px] font-medium text-[var(--text-secondary)] transition-all hover:border-[var(--border-medium)] hover:text-[var(--text-primary)] disabled:cursor-not-allowed disabled:opacity-50"
+              title={t('history.actions.exportCsv')}
+            >
+              <Download size={14} strokeWidth={2} />
+              <span className="hidden sm:inline">{exporting ? t('history.exporting') : t('history.actions.exportCsv')}</span>
+            </button>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="relative">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]">
-              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-            </svg>
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder={t('history.search.placeholder')}
-              className="w-56 pl-9 pr-3 py-2 bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-full text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--accent-primary)] focus:outline-none focus:shadow-[0_0_0_3px_var(--accent-primary-glow)]"
-            />
+
+        {/* Panel de filtros desplegable */}
+        {filtersOpen && (
+          <div className="mt-3 flex flex-col gap-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)] p-3 animate-fade-in sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-1 flex-wrap rounded-full bg-[var(--bg-base)] p-1 border border-[var(--border-subtle)]">
+              {typeFilters.map((filter) => (
+                <button
+                  key={filter.value}
+                  onClick={() => setActiveType(filter.value)}
+                  className={`rounded-full px-3 py-1 text-[11px] font-medium transition-all ${
+                    activeType === filter.value
+                      ? 'bg-[var(--accent-primary)] text-[var(--text-on-accent)] shadow-sm'
+                      : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+                  }`}
+                >
+                  {filter.label}
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center gap-2 text-[11px] text-[var(--text-muted)]">
+              <label className="flex items-center gap-1.5">
+                <span>{t('history.filters.from')}</span>
+                <input
+                  type="date"
+                  value={dateFrom}
+                  onChange={(e) => setDateFrom(e.target.value)}
+                  className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-base)] px-2 py-1 text-[11px] text-[var(--text-primary)] focus:border-[var(--accent-primary)] focus:outline-none"
+                />
+              </label>
+              <span className="text-[var(--text-muted)]">→</span>
+              <label className="flex items-center gap-1.5">
+                <span>{t('history.filters.to')}</span>
+                <input
+                  type="date"
+                  value={dateTo}
+                  onChange={(e) => setDateTo(e.target.value)}
+                  className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-base)] px-2 py-1 text-[11px] text-[var(--text-primary)] focus:border-[var(--accent-primary)] focus:outline-none"
+                />
+              </label>
+              {hasActiveFilters && (
+                <button
+                  onClick={clearAllFilters}
+                  className="ml-1 inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-medium text-[var(--text-muted)] transition-colors hover:bg-[var(--bg-base)] hover:text-[var(--text-primary)]"
+                >
+                  <X size={11} strokeWidth={2} />
+                  {t('history.filters.clearDates')}
+                </button>
+              )}
+            </div>
           </div>
-          <button
-            onClick={() => void exportCsv()}
-            disabled={exporting}
-            data-testid="history-export-csv"
-            className="px-3 py-2 rounded-full text-[11px] font-medium border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-[var(--border-medium)] disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {exporting ? t('history.exporting') : t('history.actions.exportCsv')}
-          </button>
-        </div>
+        )}
       </div>
+
+      {/* Barra de seleccion masiva */}
       {selectedIds.size > 0 && (
         <div
           data-testid="history-bulk-bar"
-          className="px-6 py-2 border-b border-[var(--border-subtle)] bg-[var(--bg-surface)] flex items-center justify-between text-[12px]"
+          className="shrink-0 border-b border-[var(--border-subtle)] bg-[var(--accent-primary-glow)] px-5 py-2.5"
         >
-          <span className="text-[var(--text-secondary)]">
-            {t('history.selection.count', { count: selectedIds.size })}
-          </span>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => void delMany()}
-              className="px-3 py-1 rounded-full text-[11px] font-medium border border-[color:var(--accent-red)]/30 text-[var(--accent-red)] hover:bg-[color:var(--accent-red)]/10"
-            >
-              {t('history.actions.deleteSelected', { count: selectedIds.size })}
-            </button>
-            <button
-              onClick={clearSelection}
-              className="px-3 py-1 rounded-full text-[11px] font-medium text-[var(--text-muted)] hover:text-[var(--text-primary)]"
-            >
-              {t('history.actions.clearSelection')}
-            </button>
+          <div className="flex items-center justify-between gap-3 text-[12px]">
+            <div className="flex items-center gap-2 text-[var(--text-primary)]">
+              <span className="flex h-6 min-w-6 items-center justify-center rounded-full bg-[var(--accent-primary)] px-2 text-[11px] font-bold text-[var(--text-on-accent)]">
+                {selectedIds.size}
+              </span>
+              <span className="font-medium">{t('history.selection.count', { count: selectedIds.size })}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => void delMany()}
+                className="inline-flex items-center gap-1.5 rounded-full border border-[color:var(--accent-red)]/30 bg-[color:var(--accent-red)]/10 px-3 py-1.5 text-[11px] font-medium text-[var(--accent-red)] transition-colors hover:bg-[color:var(--accent-red)]/20"
+              >
+                <Trash2 size={12} strokeWidth={2} />
+                {t('history.actions.deleteSelected', { count: selectedIds.size })}
+              </button>
+              <button
+                onClick={clearSelection}
+                className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-medium text-[var(--text-muted)] transition-colors hover:bg-[var(--bg-elevated)] hover:text-[var(--text-primary)]"
+              >
+                <X size={12} strokeWidth={2} />
+                {t('history.actions.clearSelection')}
+              </button>
+            </div>
           </div>
         </div>
       )}
+
+      {/* Cuerpo: lista + detalle */}
       <div className="flex flex-1 min-h-0">
-        <div className="w-[280px] shrink-0 border-r border-[var(--border-subtle)] overflow-y-auto">
-          <RunList
-            runs={filteredRuns}
-            selected={selected}
-            onSelect={setSelected}
-            selectedIds={selectedIds}
-            onToggleSelect={toggleSelected}
-          />
-          <div className="px-4 py-3">
+        <div className="w-[300px] shrink-0 border-r border-[var(--border-subtle)] bg-[var(--bg-surface)] flex flex-col min-h-0">
+          <div className="flex-1 overflow-y-auto custom-scrollbar">
+            <RunList
+              runs={filteredRuns}
+              selected={selected}
+              onSelect={setSelected}
+              selectedIds={selectedIds}
+              onToggleSelect={toggleSelected}
+            />
+          </div>
+          <div className="shrink-0 border-t border-[var(--border-subtle)] px-4 py-3">
             {hasMoreRuns && (
               <button
                 onClick={() => void loadPage(false)}
                 disabled={loadingRuns}
-                className="w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 py-2 text-xs font-medium text-[var(--text-secondary)] transition-colors hover:border-[var(--border-medium)] hover:text-[var(--text-primary)] disabled:cursor-not-allowed disabled:opacity-50"
+                className="w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-elevated)] px-3 py-2 text-[12px] font-medium text-[var(--text-secondary)] transition-all hover:border-[var(--accent-primary)] hover:text-[var(--text-primary)] disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {loadingRuns ? t('history.loading') : t('history.loadMore')}
               </button>
             )}
             {loadingRuns && runs.length === 0 && (
-              <p className="py-2 text-center text-xs text-[var(--text-muted)]">{t('history.loadingRuns')}</p>
+              <p className="py-2 text-center text-[11px] text-[var(--text-muted)]">{t('history.loadingRuns')}</p>
             )}
           </div>
         </div>
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto bg-[var(--bg-base)] min-h-0">
           {selected ? (
             <RunDetail
               run={selected}
@@ -302,14 +369,21 @@ export default function HistoryView() {
               onDelete={() => del(selected.id)}
             />
           ) : (
-            <div className="flex flex-col items-center justify-center h-full text-center">
-              <div className="w-12 h-12 rounded-2xl bg-[var(--bg-elevated)] flex items-center justify-center mb-3 border border-[var(--border-subtle)]">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-[var(--text-muted)]">
-                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                  <polyline points="14 2 14 8 20 8" />
-                </svg>
+            <div className="flex flex-col items-center justify-center h-full px-6 text-center animate-fade-in">
+              <div className="relative mb-4">
+                <div className="absolute inset-0 rounded-2xl bg-[var(--accent-primary-glow)] blur-xl opacity-60" aria-hidden="true" />
+                <div className="relative flex h-16 w-16 items-center justify-center rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-muted)]">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                    <polyline points="14 2 14 8 20 8" />
+                    <line x1="16" y1="13" x2="8" y2="13" />
+                    <line x1="16" y1="17" x2="8" y2="17" />
+                    <polyline points="10 9 9 9 8 9" />
+                  </svg>
+                </div>
               </div>
-              <p className="text-sm text-[var(--text-secondary)]">{t('history.empty')}</p>
+              <p className="text-[14px] font-medium text-[var(--text-secondary)]">{t('history.empty')}</p>
+              <p className="mt-1 text-[12px] text-[var(--text-muted)]">Selecciona una ejecución del listado para revisar su detalle</p>
             </div>
           )}
         </div>

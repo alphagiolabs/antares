@@ -2,13 +2,14 @@ import React, { useState, Suspense, useMemo, useCallback } from 'react';
 import Sidebar from './components/layout/Sidebar';
 import TitleBar from './components/layout/TitleBar';
 import BackendStatusBar from './components/layout/BackendStatusBar';
+import SettingsModal from './components/settings/SettingsModal';
 import { ToastProvider } from './hooks/useToast';
 import { DialogProvider } from './hooks/useDialog';
 import { useKeyboardShortcut } from './hooks/useKeyboardShortcut';
 import ToastContainer from './components/ui/Toast';
 import Dialog from './components/ui/Dialog';
 import CommandPalette from './components/ui/CommandPalette';
-import { FULL_BLEED_TABS, TAB_DEFINITIONS, type TabId } from './navigation';
+import { FULL_BLEED_TABS, TAB_DEFINITIONS, CONFIG_SECTION_DEFINITIONS, type TabId, type ConfigSectionId } from './navigation';
 
 const ConversionView = React.lazy(() => import('./components/conversion/ConversionView'));
 const FormatosView = React.lazy(() => import('./components/formatos/FormatosView'));
@@ -16,8 +17,6 @@ const SelladorView = React.lazy(() => import('./components/sellador'));
 const PadronView = React.lazy(() => import('./components/padron/PadronView'));
 const VolantesView = React.lazy(() => import('./components/volantes/VolantesView'));
 const ReportesCampoView = React.lazy(() => import('./components/reportes-campo'));
-const HistoryView = React.lazy(() => import('./components/history/HistoryView'));
-const AppearanceView = React.lazy(() => import('./components/settings/AppearanceView'));
 const ImageOptimizerView = React.lazy(() => import('./components/image-optimizer'));
 const PreviewPanelView = React.lazy(() => import('./components/preview-panel/PreviewPanelView'));
 const TechnicalReportsView = React.lazy(() => import('./components/technical-reports'));
@@ -34,8 +33,6 @@ const VIEWS: Record<TabId, React.LazyExoticComponent<React.ComponentType>> = {
   imageOptimizer: ImageOptimizerView,
   previewPanel: PreviewPanelView,
   panelAvisoCorte: PanelAvisoCorteView,
-  history: HistoryView,
-  appearance: AppearanceView,
 };
 
 function ElectronOnlyNotice() {
@@ -66,9 +63,16 @@ function ElectronOnlyNotice() {
 function AppContent() {
   const [activeTab, setActiveTab] = useState<TabId>('convert');
   const [commandOpen, setCommandOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsSection, setSettingsSection] = useState<ConfigSectionId>('appearance');
 
   const openCommandPalette = useCallback(() => setCommandOpen(true), []);
   const handleTabChange = useCallback((tab: TabId) => setActiveTab(tab), []);
+  const openSettings = useCallback((section: ConfigSectionId = 'appearance') => {
+    setSettingsSection(section);
+    setSettingsOpen(true);
+  }, []);
+  const closeSettings = useCallback(() => setSettingsOpen(false), []);
 
   useKeyboardShortcut('k', openCommandPalette, { ctrl: true, preventDefault: true });
   useKeyboardShortcut('1', () => handleTabChange('convert'), { ctrl: true, preventDefault: true });
@@ -76,8 +80,8 @@ function AppContent() {
   useKeyboardShortcut('s', () => handleTabChange('sellador'), { ctrl: true, shift: true, preventDefault: true });
   useKeyboardShortcut('4', () => handleTabChange('padron'), { ctrl: true, preventDefault: true });
   useKeyboardShortcut('5', () => handleTabChange('volantes'), { ctrl: true, preventDefault: true });
-  useKeyboardShortcut('6', () => handleTabChange('history'), { ctrl: true, preventDefault: true });
-  useKeyboardShortcut('7', () => handleTabChange('appearance'), { ctrl: true, preventDefault: true });
+  useKeyboardShortcut('6', () => openSettings('history'), { ctrl: true, preventDefault: true });
+  useKeyboardShortcut('7', () => openSettings('appearance'), { ctrl: true, preventDefault: true });
   useKeyboardShortcut('8', () => handleTabChange('reportesCampo'), { ctrl: true, preventDefault: true });
   useKeyboardShortcut('9', () => handleTabChange('imageOptimizer'), { ctrl: true, preventDefault: true });
   useKeyboardShortcut('0', () => handleTabChange('previewPanel'), { ctrl: true, preventDefault: true });
@@ -85,13 +89,21 @@ function AppContent() {
   useKeyboardShortcut('i', () => handleTabChange('technicalReports'), { ctrl: true, shift: true, preventDefault: true });
 
   const commandItems = useMemo(
-    () => TAB_DEFINITIONS.map((tab) => ({
-      id: `tab-${tab.id}`,
-      label: `Ir a ${'commandLabel' in tab ? tab.commandLabel : tab.label}`,
-      shortcut: tab.shortcut,
-      action: () => handleTabChange(tab.id),
-    })),
-    [handleTabChange],
+    () => [
+      ...TAB_DEFINITIONS.map((tab) => ({
+        id: `tab-${tab.id}`,
+        label: `Ir a ${'commandLabel' in tab ? tab.commandLabel : tab.label}`,
+        shortcut: tab.shortcut,
+        action: () => handleTabChange(tab.id),
+      })),
+      ...CONFIG_SECTION_DEFINITIONS.map((section) => ({
+        id: `settings-${section.id}`,
+        label: `Configuración: ${section.label}`,
+        shortcut: section.shortcut,
+        action: () => openSettings(section.id),
+      })),
+    ],
+    [handleTabChange, openSettings],
   );
 
   const isFullBleed = FULL_BLEED_TABS.has(activeTab);
@@ -99,7 +111,7 @@ function AppContent() {
 
   return (
     <div className="flex h-screen w-screen flex-col overflow-hidden bg-[var(--bg-base)] text-[var(--text-primary)]">
-      <TitleBar />
+      <TitleBar onOpenSettings={() => openSettings('appearance')} />
       <div className="flex min-h-0 flex-1">
         <Sidebar
           activeTab={activeTab}
@@ -115,6 +127,12 @@ function AppContent() {
           </main>
         </div>
       </div>
+      <SettingsModal
+        isOpen={settingsOpen}
+        section={settingsSection}
+        onSectionChange={setSettingsSection}
+        onClose={closeSettings}
+      />
       <CommandPalette isOpen={commandOpen} onClose={() => setCommandOpen(false)} items={commandItems} />
       <Dialog />
       <ToastContainer />

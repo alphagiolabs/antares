@@ -1,11 +1,15 @@
-import { Minus, Square, X } from 'lucide-react';
+import { Minus, Square, X, Settings } from 'lucide-react';
 import UpdateButton from './UpdateButton';
 
 function handleWindowAction(action: 'minimizeWindow' | 'maximizeWindow' | 'closeWindow') {
   window.electronAPI?.[action]?.();
 }
 
-export default function TitleBar() {
+interface TitleBarProps {
+  onOpenSettings?: () => void;
+}
+
+export default function TitleBar({ onOpenSettings }: TitleBarProps) {
   return (
     <div
       data-testid="app-titlebar"
@@ -13,6 +17,18 @@ export default function TitleBar() {
     >
       <div className="app-titlebar-controls flex h-full items-stretch">
         <UpdateButton />
+        {onOpenSettings && (
+          <button
+            type="button"
+            data-testid="titlebar-settings-button"
+            aria-label="Configuración"
+            title="Configuración"
+            onClick={onOpenSettings}
+            className="app-titlebar-button group flex h-full w-10 items-center justify-center text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-elevated)] hover:text-[var(--text-primary)]"
+          >
+            <Settings size={14} strokeWidth={1.8} className="transition-transform duration-300 group-hover:rotate-45" />
+          </button>
+        )}
         <button
           type="button"
           aria-label="Minimizar"
