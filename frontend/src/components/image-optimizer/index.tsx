@@ -162,6 +162,35 @@ export default function ImageOptimizer() {
     }));
   }, [commitItems]);
 
+  const handleUpdateCustomFilename = useCallback((id: string, value: string) => {
+    updateItem(id, (item) => ({ ...item, overrides: { ...item.overrides, customFilename: value } }));
+  }, [updateItem]);
+
+  const handleUpdatePresetOverride = useCallback((id: string, value: PresetId | null) => {
+    updateItem(id, (item) => ({ ...item, overrides: { ...item.overrides, presetId: value } }));
+  }, [updateItem]);
+
+  const handleToggleSkipCompression = useCallback((id: string, value: boolean) => {
+    updateItem(id, (item) => ({ ...item, overrides: { ...item.overrides, skipCompression: value } }));
+  }, [updateItem]);
+
+  const handleToggleExcluded = useCallback((id: string, value: boolean) => {
+    updateItem(id, (item) => ({ ...item, excluded: value, overrides: { ...item.overrides, excluded: value } }));
+  }, [updateItem]);
+
+  const handleClearPresetOverride = useCallback((id: string) => {
+    updateItem(id, (item) => ({ ...item, overrides: { ...item.overrides, presetId: null } }));
+  }, [updateItem]);
+
+  const handleToggleSelection = useCallback((id: string) => {
+    updateItem(id, (item) => ({ ...item, selected: !item.selected }));
+  }, [updateItem]);
+
+  const handleOpenCropEditor = useCallback((id?: string) => {
+    const targetId = id ?? activeItemId;
+    if (targetId) setCropEditorItemId(targetId);
+  }, [activeItemId]);
+
   const processInputFiles = useCallback(async (inputFiles: FileList | File[] | null) => {
     if (!inputFiles || inputFiles.length === 0) return;
     const fileArray = Array.from(inputFiles);
@@ -420,6 +449,10 @@ export default function ImageOptimizer() {
     addToast(`Descargando ${entries.length} archivo(s) individualmente.`, 'success', 2400);
   }, [addToast, collectDownloadEntries]);
 
+  const handleDownloadSingle = useCallback((item: ImageItem) => {
+    downloadItems([item]);
+  }, [downloadItems]);
+
   const handleProcessScope = useCallback(async (scope: 'all' | 'selected') => {
     const targets = getProcessableItems(itemsRef.current, settingsRef.current, scope);
     if (targets.length === 0) {
@@ -629,10 +662,7 @@ export default function ImageOptimizer() {
             activeItem={activeItem}
             renameOnlyMode={false}
             onUpdateSettings={updateSettings}
-            onOpenCropEditor={(id?: string) => {
-              const targetId = id ?? activeItem?.id;
-              if (targetId) setCropEditorItemId(targetId);
-            }}
+            onOpenCropEditor={handleOpenCropEditor}
           />
 
           <PreviewWorkspace
@@ -652,17 +682,14 @@ export default function ImageOptimizer() {
             onChangePreviewTab={setPreviewTab}
             onViewModeChange={setViewMode}
             onSetActiveItem={setActiveItemId}
-            onDownloadSingle={(item) => downloadItems([item])}
+            onDownloadSingle={handleDownloadSingle}
             onRemoveItem={handleRemoveItem}
-            onOpenCropEditor={(id?: string) => {
-              const targetId = id ?? activeItem?.id;
-              if (targetId) setCropEditorItemId(targetId);
-            }}
-            onUpdateCustomFilename={(id, value) => updateItem(id, (item) => ({ ...item, overrides: { ...item.overrides, customFilename: value } }))}
-            onUpdatePresetOverride={(id, value) => updateItem(id, (item) => ({ ...item, overrides: { ...item.overrides, presetId: value } }))}
-            onToggleSkipCompression={(id, value) => updateItem(id, (item) => ({ ...item, overrides: { ...item.overrides, skipCompression: value } }))}
-            onToggleExcluded={(id, value) => updateItem(id, (item) => ({ ...item, excluded: value, overrides: { ...item.overrides, excluded: value } }))}
-            onClearPresetOverride={(id) => updateItem(id, (item) => ({ ...item, overrides: { ...item.overrides, presetId: null } }))}
+            onOpenCropEditor={handleOpenCropEditor}
+            onUpdateCustomFilename={handleUpdateCustomFilename}
+            onUpdatePresetOverride={handleUpdatePresetOverride}
+            onToggleSkipCompression={handleToggleSkipCompression}
+            onToggleExcluded={handleToggleExcluded}
+            onClearPresetOverride={handleClearPresetOverride}
           />
 
           <QueuePanel
@@ -678,10 +705,10 @@ export default function ImageOptimizer() {
             onReprocessSelected={handleReprocessSelected}
             onToggleExcludeSelected={handleToggleExcludeSelected}
             onRemoveSelected={handleRemoveSelected}
-            onToggleSelection={(id) => updateItem(id, (item) => ({ ...item, selected: !item.selected }))}
+            onToggleSelection={handleToggleSelection}
             onSetActiveItem={setActiveItemId}
             onOpenCropEditor={setCropEditorItemId}
-            onDownloadSingle={(item) => downloadItems([item])}
+            onDownloadSingle={handleDownloadSingle}
             onRemoveItem={handleRemoveItem}
             onReorderItems={handleReorderItems}
             getResolvedBlob={getResolvedBlob}
