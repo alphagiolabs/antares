@@ -10,7 +10,7 @@ from __future__ import annotations
 import time
 from concurrent.futures import ALL_COMPLETED, CancelledError, wait
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from backend.core.converter import FORMATOS_SOPORTADOS, convertir_imagen, copiar_archivo, copiar_video, es_video
 from backend.core.jobs import (
@@ -19,7 +19,7 @@ from backend.core.jobs import (
     is_legacy_default_job,
     resolve_job_id,
 )
-from backend.core.renamer import RenamerEngine
+from backend.core.renamer import RenamerEngine, SequenceMode
 from backend.core.scheduler import get_scheduler
 from backend.handlers.common import log_message, validate_params, with_locale
 from backend.ipc_protocol import send_notification
@@ -27,6 +27,41 @@ from backend.utils.i18n import set_locale, t
 from backend.utils.validators import parse_filename_parts
 
 _CANCEL_GRACE_SECONDS = 0.25
+
+_SEQUENCE_MODES = {"record", "global", "filename"}
+
+
+def _resolve_sequence_mode(params: dict[str, Any]) -> SequenceMode:
+    """Resuelve el modo de secuencia explícito o hereda del booleano legacy."""
+    requested = params.get("sequence_mode")
+    if isinstance(requested, str) and requested in _SEQUENCE_MODES:
+        return cast(SequenceMode, requested)
+    return "filename" if params.get("use_filename_seq", True) else "global"
+
+
+def _record_group_key(datos: dict[str, Any], key_column: str, fallback: str) -> str:
+    """Calcula la clave estable de fila usada por el modo ``record``."""
+    raw_value = datos.get(key_column) if key_column else None
+    value = str(raw_value or fallback).strip()
+    return value.casefold()
+
+
+def _apply_catalog_rename(
+    engine: RenamerEngine,
+    path: str | Path,
+    datos: dict[str, Any],
+    codigo: str,
+    parsed_sequence: str,
+    key_column: str,
+) -> str:
+    """Aplica el renombrado con catálogo pasando el grupo de fila al motor."""
+    return engine.aplicar(
+        path,
+        datos_bd=datos,
+        codigo_manual=codigo,
+        file_seq=parsed_sequence,
+        sequence_group=_record_group_key(datos, key_column, codigo),
+    )
 
 
 def _detect_best_key_column(
@@ -151,7 +186,13 @@ def preview(params: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
             rename_column=params.get("rename_column") or None,
         )
     word_separator = params.get("word_separator", "_")
-    engine = RenamerEngine(patron, secuencia, separador=word_separator)
+    sequence_mode = _resolve_sequence_mode(params)
+    engine = RenamerEngine(
+        patron,
+        secuencia,
+        separador=word_separator,
+        sequence_mode=sequence_mode,
+    )
     file_seqs = {}
     codigos_manuales = {}
     codigos_list = []
@@ -162,8 +203,7 @@ def preview(params: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
         codigos_manuales[p.name] = code
         codigos_list.append(code)
         stems.append(p.stem)
-        if use_filename_seq:
-            file_seqs[p.name] = seq
+        file_seqs[p.name] = seq
 
     collisions: list[dict[str, Any]] = []
     res: list[tuple[str, str, bool]] = []
@@ -192,24 +232,41 @@ def preview(params: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
         # Buscamos por código parseado y por stem completo para máxima compatibilidad
         db_cache = buscar_por_columna(list(set(codigos_list + stems)), key_column)
         seq_backup = engine.secuencia
-        for f in files:
-            p = Path(f)
-            code = codigos_manuales[p.name]
-            stem = p.stem
-            datos = db_cache.get(code) or db_cache.get(stem)
-            if datos:
-                fseq = file_seqs.get(p.name) if use_filename_seq else None
-                nombre_nuevo = engine.aplicar(f, datos_bd=datos, codigo_manual=code, file_seq=fseq)
-                res.append((f, nombre_nuevo, True))
-            else:
-                res.append((f, p.name, False))
-        engine.secuencia = seq_backup
+        record_sequences_backup = engine._record_sequences.copy()
+        try:
+            for f in files:
+                p = Path(f)
+                code = codigos_manuales[p.name]
+                stem = p.stem
+                datos = db_cache.get(code) or db_cache.get(stem)
+                if datos:
+                    nombre_nuevo = _apply_catalog_rename(
+                        engine, f, datos, code, file_seqs[p.name], key_column
+                    )
+                    res.append((f, nombre_nuevo, True))
+                else:
+                    res.append((f, p.name, False))
+        finally:
+            engine.secuencia = seq_backup
+            engine._record_sequences = record_sequences_backup
     elif use_column_rename:
         db_cache = {str(i): rec for i, rec in enumerate(obtener_todos(limit=len(files)))}
         def lookup(codigo: str) -> dict[str, Any] | None:
             idx = str(codigos_list.index(codigo)) if codigo in codigos_list else None
             return db_cache.get(idx) if idx else None
-        res = engine.preview_lote(files, lookup_fn=lookup, codigos_manuales=codigos_manuales, file_seqs=file_seqs)
+        sequence_groups: dict[str, str] = {}
+        for index, f in enumerate(files):
+            name = Path(f).name
+            datos = db_cache.get(str(index))
+            if datos:
+                sequence_groups[name] = _record_group_key(datos, "", codigos_manuales[name])
+        res = engine.preview_lote(
+            files,
+            lookup_fn=lookup,
+            codigos_manuales=codigos_manuales,
+            file_seqs=file_seqs,
+            sequence_groups=sequence_groups,
+        )
     else:
         # No key_column provided: try auto-detecting the best column first
         from backend.core.config_fields import get_field_names
@@ -220,18 +277,23 @@ def preview(params: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
             if auto_key:
                 db_cache = buscar_por_columna(list(set(codigos_list + stems)), auto_key)
                 seq_backup = engine.secuencia
-                for f in files:
-                    p = Path(f)
-                    code = codigos_manuales[p.name]
-                    stem = p.stem
-                    datos = db_cache.get(code) or db_cache.get(stem)
-                    if datos:
-                        fseq = file_seqs.get(p.name) if use_filename_seq else None
-                        nombre_nuevo = engine.aplicar(f, datos_bd=datos, codigo_manual=code, file_seq=fseq)
-                        res.append((f, nombre_nuevo, True))
-                    else:
-                        res.append((f, p.name, False))
-                engine.secuencia = seq_backup
+                record_sequences_backup = engine._record_sequences.copy()
+                try:
+                    for f in files:
+                        p = Path(f)
+                        code = codigos_manuales[p.name]
+                        stem = p.stem
+                        datos = db_cache.get(code) or db_cache.get(stem)
+                        if datos:
+                            nombre_nuevo = _apply_catalog_rename(
+                                engine, f, datos, code, file_seqs[p.name], auto_key
+                            )
+                            res.append((f, nombre_nuevo, True))
+                        else:
+                            res.append((f, p.name, False))
+                finally:
+                    engine.secuencia = seq_backup
+                    engine._record_sequences = record_sequences_backup
                 payload: dict[str, Any] = {
                     "preview": [{"origen": Path(orig).name, "nuevo": nuev, "en_bd": en_bd} for orig, nuev, en_bd in res],
                 }
@@ -242,7 +304,20 @@ def preview(params: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
         db_cache = buscar_lote_por_codigos(codigos_list)
         def lookup(codigo: str) -> dict[str, Any] | None:
             return db_cache.get(codigo)
-        res = engine.preview_lote(files, lookup_fn=lookup, codigos_manuales=codigos_manuales, file_seqs=file_seqs)
+        sequence_groups = {}
+        for f in files:
+            name = Path(f).name
+            code = codigos_manuales[name]
+            datos = db_cache.get(code)
+            if datos:
+                sequence_groups[name] = _record_group_key(datos, "", code)
+        res = engine.preview_lote(
+            files,
+            lookup_fn=lookup,
+            codigos_manuales=codigos_manuales,
+            file_seqs=file_seqs,
+            sequence_groups=sequence_groups,
+        )
 
     payload: dict[str, Any] = {
         "preview": [{"origen": Path(orig).name, "nuevo": nuev, "en_bd": en_bd} for orig, nuev, en_bd in res],
