@@ -509,7 +509,7 @@ export default function ConversionView() {
         onClear={clearFiles}
         onPasteFiles={onPasteFiles}
         centerControls={!isEmpty ? (
-          <div className="flex w-full min-w-0 items-center justify-center gap-2 sm:gap-3">
+          <div className="flex min-w-0 items-center gap-2 sm:gap-3">
             <ConversionPresets currentConfig={currentConfig} onLoadConfig={handleLoadConfig} className="hidden sm:block shrink-0" />
             <button
               onClick={selectDest}

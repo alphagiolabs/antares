@@ -122,7 +122,7 @@ export default function Dropzone({
           {centerControls && (
             <>
               <div className={toolbarSeparator} />
-              <div className="flex min-w-0 flex-1 items-center justify-center">
+              <div className="flex shrink-0 items-center gap-2">
                 {centerControls}
               </div>
             </>
