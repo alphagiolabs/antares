@@ -35,7 +35,7 @@ def test_dispatch_uses_heavy_scheduler_for_heavy_methods(monkeypatch) -> None:
     monkeypatch.setattr(backend_main, "get_scheduler", lambda: FakeScheduler())
     monkeypatch.setattr(backend_main, "_dispatch", lambda *args: None)
 
-    backend_main._submit_handler(lambda _params: {}, {}, "1", "scan_folder")
+    backend_main._submit_handler(lambda _params: {}, {}, "1", "db_import")
     backend_main._submit_handler(lambda _params: {}, {}, "2", "version")
 
-    assert calls == [("heavy", "scan_folder"), ("light", "version")]
+    assert calls == [("heavy", "db_import"), ("light", "version")]

@@ -26,14 +26,20 @@ class RenamerEngine:
     def campos_disponibles() -> set[str]:
         """Retorna el conjunto de placeholders disponibles según la configuración actual."""
         fields = get_field_names()
-        return {f"{{{f}}}" for f in fields} | {"{seq}", "{ext}"}
+        return {f"{{{f}}}" for f in fields} | {"{seq}", "{ext}", "{sep}"}
 
-    def __init__(self, patron: str | None = None, secuencia_inicial: int = 1) -> None:
+    def __init__(
+        self,
+        patron: str | None = None,
+        secuencia_inicial: int = 1,
+        separador: str = "_",
+    ) -> None:
         """Inicializa el motor de renombrado.
 
         Args:
             patron: Cadena con placeholders, ej: "{categoria}_{codigo}_{nombre}{ext}".
             secuencia_inicial: Número inicial para {seq}.
+            separador: Carácter usado para sustituir {sep} en el patrón.
         """
         if patron is None:
             fields = get_field_names()
@@ -45,6 +51,7 @@ class RenamerEngine:
             patron = default
         self.patron: str = patron
         self.secuencia: int = int(secuencia_inicial)
+        self.separador: str = separador
 
     @staticmethod
     def build_mapping_patron(mapping_keys: list[str]) -> str:
@@ -118,7 +125,7 @@ class RenamerEngine:
 
         seq_value = file_seq if file_seq is not None else str(self.secuencia).zfill(3)
 
-        mapping: dict[str, str] = {"seq": seq_value, "ext": ext}
+        mapping: dict[str, str] = {"seq": seq_value, "ext": ext, "sep": self.separador}
 
         # Primero poblamos con los datos de la base de datos si existen
         if datos_bd:

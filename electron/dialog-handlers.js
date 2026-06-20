@@ -5,7 +5,7 @@ const { pathToFileURL } = require('url');
 
 const { sanitizeHtmlForPdf } = require('../shared/html-sanitizer');
 
-const DIALOG_METHODS = new Set(['dialog_files', 'dialog_folder', 'dialog_dest', 'dialog_save']);
+const DIALOG_METHODS = new Set(['dialog_files', 'dialog_dest', 'dialog_save', 'dialog_folder']);
 const NATIVE_METHODS = new Set([...DIALOG_METHODS, 'html_to_pdf']);
 
 function _sanitizeHtmlForPdf(html) {
@@ -55,6 +55,32 @@ function resultFromOpenDialog(response) {
 function resultFromSaveDialog(response) {
   if (response.canceled || !response.filePath) return { paths: [] };
   return { paths: [response.filePath] };
+}
+
+const FOLDER_SCAN_EXTENSIONS = new Set([
+  '.jpg', '.jpeg', '.png', '.webp', '.tiff', '.tif', '.bmp', '.gif', '.ico', '.pdf',
+  '.mp4', '.avi', '.mov', '.mkv', '.wmv', '.flv', '.webm', '.m4v', '.3gp', '.mpg', '.mpeg',
+]);
+
+async function _scanFolderRecursive(dirPath, extensions) {
+  const results = [];
+  let entries;
+  try {
+    entries = await fs.promises.readdir(dirPath, { withFileTypes: true });
+  } catch {
+    return results;
+  }
+  for (const entry of entries) {
+    const fullPath = path.join(dirPath, entry.name);
+    if (entry.isDirectory()) {
+      const sub = await _scanFolderRecursive(fullPath, extensions);
+      for (const p of sub) results.push(p);
+    } else if (entry.isFile()) {
+      const ext = path.extname(entry.name).toLowerCase();
+      if (extensions.has(ext)) results.push(fullPath);
+    }
+  }
+  return results;
 }
 
 async function renderHtmlToPdf(params = {}, electronModules = {}) {
@@ -189,7 +215,20 @@ async function handleDialogCall(method, params = {}, dialog, window, electronMod
     return { handled: true, result: resultFromSaveDialog(response) };
   }
 
-  const properties = method === 'dialog_folder' || method === 'dialog_dest'
+  if (method === 'dialog_folder') {
+    const response = await dialog.showOpenDialog(window, {
+      title: params.title || 'Seleccionar carpeta',
+      properties: ['openDirectory'],
+    });
+    if (response.canceled || !response.filePaths || response.filePaths.length === 0) {
+      return { handled: true, result: { paths: [] } };
+    }
+    const folderPath = response.filePaths[0];
+    const files = await _scanFolderRecursive(folderPath, FOLDER_SCAN_EXTENSIONS);
+    return { handled: true, result: { paths: files } };
+  }
+
+  const properties = method === 'dialog_dest'
     ? ['openDirectory']
     : ['openFile', 'multiSelections'];
 

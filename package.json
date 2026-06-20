@@ -37,6 +37,9 @@
     "bump:patch": "node scripts/bump-version.js patch",
     "bump:minor": "node scripts/bump-version.js minor",
     "bump:major": "node scripts/bump-version.js major",
+    "release:dry-run": "node scripts/release-loop.js",
+    "release:ship": "node scripts/release-loop.js --ship",
+    "release:full": "node scripts/release-loop.js --ship --build",
     "postinstall": "electron-builder install-app-deps"
   },
   "devDependencies": {

@@ -540,7 +540,6 @@ export default function ImageOptimizer() {
         <section className="relative shrink-0 overflow-hidden rounded-[14px] border border-[var(--border-medium)] bg-[var(--bg-surface)] px-5 py-3 shadow-sm">
           <div className="flex flex-wrap items-center gap-3 xl:flex-nowrap">
             <div className="flex min-w-0 flex-1 items-center gap-4 overflow-hidden">
-              <h1 className="shrink-0 text-2xl uppercase tracking-[0.16em] text-[var(--text-primary)]" style={{ fontFamily: 'Inter, sans-serif' }}>Image Optimizer</h1>
               <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto no-scrollbar">
                 {IMAGE_OPTIMIZER_PRESETS.map((preset) => (
                   <PillPreset

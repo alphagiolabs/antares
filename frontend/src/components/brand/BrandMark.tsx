@@ -94,7 +94,7 @@ export default function BrandMark({
   const iconSrc = bgIsLight ? './favicon2.png' : './favicon1.png';
   const logoSrc = bgIsLight ? './logo1.png' : './logo2.png';
 
-  const markPx = size === 'md' ? 36 : 28;
+  const markPx = size === 'md' ? 30 : 24;
 
   return (
     <div className={`inline-flex items-center gap-2 min-w-0 ${className}`}>
@@ -104,7 +104,7 @@ export default function BrandMark({
             src={logoSrc}
             alt="Antares"
             className="object-contain shrink-0"
-            style={{ maxHeight: size === 'md' ? 48 : 36, width: 'auto', maxWidth: '100%' }}
+            style={{ maxHeight: size === 'md' ? 40 : 30, width: 'auto', maxWidth: '100%' }}
             draggable={false}
           />
           {tagline && (

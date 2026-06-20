@@ -3,7 +3,7 @@ import Card from '../ui/Card';
 import Input from '../ui/Input';
 import Toggle from '../ui/Toggle';
 import type { RenamePattern, DBRecord, MappingResult, PreviewItem } from '../../types';
-import { PencilLine, Tags, Database, ArrowRight, AlertTriangle, FileSpreadsheet, Upload } from 'lucide-react';
+import { PencilLine, Tags, Database, ArrowRight, AlertTriangle } from 'lucide-react';
 
 interface RenameCardProps {
   files: string[];
@@ -31,14 +31,14 @@ interface RenameCardProps {
   hasVideos?: boolean;
   keyColumn?: string;
   onKeyColumnChange?: (col: string) => void;
-  onLoadRenameExcel?: () => void;
-  onGenerateTemplate?: () => void;
   onMappingIdColumnChange?: (col: string) => void;
   onMappingRenameColumnChange?: (col: string) => void;
+  wordSeparator?: string;
+  onWordSeparatorChange?: (sep: string) => void;
 }
 
 const fileNameFromPath = (path: string) => path.split(/[\\/]/).pop() || path;
-const RESERVED_PATTERN_KEYS = new Set(['seq', 'ext']);
+const RESERVED_PATTERN_KEYS = new Set(['seq', 'ext', 'sep']);
 
 const getPatternColumns = (pattern: string) => {
   const columns: string[] = [];
@@ -62,31 +62,46 @@ const inferSeparator = (pattern: string, fallback: string) => {
   return fallback;
 };
 
-const exampleFromPath = (pattern: string, fields: string[], firstFile?: string) => {
+const patternUsesSep = (pattern: string) => pattern.includes('{sep}');
+
+const cleanupTrailingSeparators = (name: string, sep: string) => {
+  if (!sep) return name;
+  const escaped = sep.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return name.replace(new RegExp(`${escaped}+(?=\\.)`), '');
+};
+
+const exampleFromPath = (pattern: string, fields: string[], firstFile?: string, sep = '_') => {
   const originalName = firstFile ? fileNameFromPath(firstFile) : '1.jpg';
   const dotIndex = originalName.lastIndexOf('.');
   const ext = dotIndex >= 0 ? originalName.slice(dotIndex) : '.jpg';
   if (!pattern) return originalName;
-  const values: Record<string, string> = { seq: '001', ext };
+  const values: Record<string, string> = { seq: '001', ext, sep };
   fields.forEach((field, index) => { values[field] = index === 0 ? '1' : index === 1 ? 'producto' : ''; });
-  return pattern.replace(/\{([^}]+)\}/g, (_, key: string) => values[key] ?? '').replace(/_+(?=\.)/g, '');
+  return cleanupTrailingSeparators(
+    pattern.replace(/\{([^}]+)\}/g, (_, key: string) => values[key] ?? ''),
+    sep,
+  );
 };
 
-const exampleFromColumns = (pattern: string, columns: string[], sampleRecord: DBRecord) => {
+const exampleFromColumns = (pattern: string, columns: string[], sampleRecord: DBRecord, sep = '_') => {
   const firstCol = columns[0];
   const firstVal = String(sampleRecord[firstCol] || '');
   const dotIndex = firstVal.lastIndexOf('.');
   const ext = dotIndex >= 0 ? firstVal.slice(dotIndex) : '.jpg';
   if (!pattern) return 'archivo.jpg';
-  const values: Record<string, string> = { seq: '001', ext };
+  const values: Record<string, string> = { seq: '001', ext, sep };
   columns.forEach((col) => { values[col] = String(sampleRecord[col] || '').substring(0, 20); });
-  return pattern.replace(/\{([^}]+)\}/g, (_, key: string) => values[key] ?? '').replace(/_+(?=\.)/g, '');
+  return cleanupTrailingSeparators(
+    pattern.replace(/\{([^}]+)\}/g, (_, key: string) => values[key] ?? ''),
+    sep,
+  );
 };
 
 export default function RenameCard(props: RenameCardProps) {
   const {
     files, usarRename, onNamingModeChange,
-    patron, onPatronChange, fields,
+    patron, onPatronChange, secuencia, onSecuenciaChange,
+    useFilenameSeq, onToggleFilenameSeq, fields,
     dbColumns = [], dbRecords = [],
     onInsertVar,
     hasVideos = false,
@@ -99,30 +114,42 @@ export default function RenameCard(props: RenameCardProps) {
     mappingRenameColumn = '',
     renamePreview = [],
     onClearMapping,
-    onLoadRenameExcel,
-    onGenerateTemplate,
     onMappingIdColumnChange,
     onMappingRenameColumnChange,
+    wordSeparator = '_',
+    onWordSeparatorChange,
   } = props;
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [showAllMappings, setShowAllMappings] = useState(false);
   const [selectedRenameCols, setSelectedRenameCols] = useState<string[]>([]);
-  const [separator, setSeparator] = useState('_');
+  const usesSepPlaceholder = patternUsesSep(patron);
   const hasCatalog = dbColumns.length > 0 && !mappingMode;
+  const showSeparatorUi = !mappingMode && (hasCatalog || usesSepPlaceholder);
   const dbSyncRef = useRef<{ dbKey: string; keyColumn: string } | null>(null);
 
   useEffect(() => {
-    setSeparator((prev) => inferSeparator(patron, prev));
+    if (!usesSepPlaceholder) {
+      const inferred = inferSeparator(patron, wordSeparator);
+      if (inferred !== wordSeparator) {
+        onWordSeparatorChange?.(inferred);
+      }
+    }
 
     const available = new Set(dbColumns);
     const nextCols = getPatternColumns(patron).filter((col) => !hasCatalog || available.has(col));
     setSelectedRenameCols((prev) => (sameArray(prev, nextCols) ? prev : nextCols));
-  }, [dbColumns, hasCatalog, patron]);
+  }, [dbColumns, hasCatalog, patron, usesSepPlaceholder, wordSeparator, onWordSeparatorChange]);
 
-  const updatePatron = useCallback((cols: string[], sep: string) => {
-    const newPatron = cols.length > 0
-      ? cols.map(c => `{${c}}`).join(sep) + '{ext}'
-      : '{seq}{ext}';
+  const usesSeq = patron.includes('{seq}');
+
+  const updatePatron = useCallback((cols: string[], sep: string, withSeq: boolean) => {
+    let newPatron: string;
+    if (cols.length === 0) {
+      newPatron = withSeq ? '{seq}{ext}' : '{ext}';
+    } else {
+      const base = cols.map((c) => `{${c}}`).join(sep);
+      newPatron = withSeq ? `${base}${sep}{seq}{ext}` : `${base}{ext}`;
+    }
     onPatronChange(newPatron);
   }, [onPatronChange]);
 
@@ -142,8 +169,12 @@ export default function RenameCard(props: RenameCardProps) {
 
     const validCols = patternCols.filter((col) => available.has(col));
     const fallbackCols = Array.from(new Set([keyColumn, ...dbColumns].filter(Boolean))).slice(0, 2);
-    updatePatron(validCols.length > 0 ? validCols : fallbackCols, inferSeparator(patron, separator));
-  }, [dbColumns, hasCatalog, keyColumn, patron, separator, updatePatron, usarRename, mappingMode]);
+    updatePatron(
+      validCols.length > 0 ? validCols : fallbackCols,
+      inferSeparator(patron, wordSeparator),
+      patron.includes('{seq}'),
+    );
+  }, [dbColumns, hasCatalog, keyColumn, patron, wordSeparator, updatePatron, usarRename, mappingMode]);
 
   const previewRows = mappingMode && renamePreview.length > 0
     ? renamePreview
@@ -164,17 +195,23 @@ export default function RenameCard(props: RenameCardProps) {
       ? selectedRenameCols.filter(c => c !== col)
       : [...selectedRenameCols, col];
     setSelectedRenameCols(next);
-    updatePatron(next, separator);
+    updatePatron(next, wordSeparator, usesSeq);
+  };
+
+  const toggleSeq = (enabled: boolean) => {
+    updatePatron(selectedRenameCols, wordSeparator, enabled);
   };
 
   const changeSeparator = (sep: string) => {
-    setSeparator(sep);
-    updatePatron(selectedRenameCols, sep);
+    onWordSeparatorChange?.(sep);
+    if (!usesSepPlaceholder) {
+      updatePatron(selectedRenameCols, sep, usesSeq);
+    }
   };
 
-  const namingExample = exampleFromPath(usarRename ? patron : '', fields, files[0]);
+  const namingExample = exampleFromPath(usarRename ? patron : '', fields, files[0], wordSeparator);
   const columnExample = keyColumn && dbRecords.length > 0 && dbColumns.length > 0
-    ? exampleFromColumns(patron, dbColumns, dbRecords[0])
+    ? exampleFromColumns(patron, dbColumns, dbRecords[0], wordSeparator)
     : namingExample;
   const displayExample = keyColumn ? columnExample : namingExample;
 
@@ -198,35 +235,11 @@ export default function RenameCard(props: RenameCardProps) {
       </div>
 
       {usarRename && (
-        <div className="space-y-6 animate-fade-in">
-          <div className="flex items-center gap-2">
-            {onLoadRenameExcel && (
-              <button
-                type="button"
-                onClick={onLoadRenameExcel}
-                className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-[var(--accent-primary)]/30 bg-[var(--accent-primary)]/10 px-3 py-2.5 text-xs font-semibold text-[var(--accent-primary)] transition-colors hover:border-[var(--accent-primary)]/50 hover:bg-[var(--accent-primary)]/15"
-              >
-                <Upload className="h-3.5 w-3.5" />
-                Cargar Excel para renombrar
-              </button>
-            )}
-            {onGenerateTemplate && (
-              <button
-                type="button"
-                onClick={onGenerateTemplate}
-                className="flex shrink-0 items-center justify-center gap-2 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)] px-3 py-2.5 text-xs font-medium text-[var(--text-secondary)] transition-colors hover:border-[var(--border-medium)] hover:text-[var(--text-primary)]"
-                title="Descargar plantilla de Excel"
-              >
-                <FileSpreadsheet className="h-3.5 w-3.5" />
-                Plantilla
-              </button>
-            )}
-          </div>
-
+        <div className="space-y-6">
           {!mappingMode && !hasCatalog ? (
             <div className="rounded-xl border border-dashed border-[var(--border-medium)] p-6 text-center space-y-3">
               <Database className="h-8 w-8 mx-auto text-[var(--text-muted)] opacity-50" />
-              <p className="text-xs text-[var(--text-secondary)]">Carga un Excel y detectaremos automáticamente si es un catálogo o un mapeo ID → RENOMBRE.</p>
+              <p className="text-xs text-[var(--text-secondary)]">Importa una base de datos desde la barra superior para renombrar con columnas del catálogo.</p>
             </div>
           ) : mappingMode ? (
             <div className="space-y-4">
@@ -362,38 +375,74 @@ export default function RenameCard(props: RenameCardProps) {
                 </p>
               </div>
 
-              {/* Paso 2: Columnas para renombrar */}
-              <div className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <div className="flex h-5 w-5 items-center justify-center rounded-full bg-[var(--accent-primary)] text-white text-[10px] font-bold">2</div>
-                  <label className="text-xs font-bold text-[var(--text-primary)]">¿Qué columnas quieres en el nuevo nombre?</label>
+              {/* Pasos 2 y 3: Columna renombre + Secuencia */}
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <div className="flex h-5 w-5 items-center justify-center rounded-full bg-[var(--accent-primary)] text-white text-[10px] font-bold">2</div>
+                    <label className="text-xs font-bold text-[var(--text-primary)]">Columna renombre</label>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {dbColumns.map((col) => {
+                      const active = selectedRenameCols.includes(col);
+                      return (
+                        <button
+                          type="button"
+                          key={col}
+                          onClick={() => toggleCol(col)}
+                          className={`px-3 py-2 rounded-lg border text-xs font-medium transition-all ${
+                            active
+                              ? 'bg-[var(--accent-primary)] text-white border-[var(--accent-primary)] shadow-sm'
+                              : 'bg-[var(--bg-elevated)] text-[var(--text-secondary)] border-[var(--border-subtle)] hover:border-[var(--border-medium)]'
+                          }`}
+                        >
+                          {col}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-                <div className="flex flex-wrap gap-2">
-                  {dbColumns.map((col) => {
-                    const active = selectedRenameCols.includes(col);
-                    return (
-                      <button
-                        type="button"
-                        key={col}
-                        onClick={() => toggleCol(col)}
-                        className={`px-3 py-2 rounded-lg border text-xs font-medium transition-all ${
-                          active
-                            ? 'bg-[var(--accent-primary)] text-white border-[var(--accent-primary)] shadow-sm'
-                            : 'bg-[var(--bg-elevated)] text-[var(--text-secondary)] border-[var(--border-subtle)] hover:border-[var(--border-medium)]'
-                        }`}
-                      >
-                        {col}
-                      </button>
-                    );
-                  })}
+
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <div className="flex h-5 w-5 items-center justify-center rounded-full bg-[var(--accent-primary)] text-white text-[10px] font-bold">3</div>
+                    <label className="text-xs font-bold text-[var(--text-primary)]">Secuencia</label>
+                  </div>
+                  <div className="space-y-2.5 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)]/40 p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[11px] text-[var(--text-secondary)]">Incluir número</span>
+                      <Toggle checked={usesSeq} onChange={toggleSeq} />
+                    </div>
+                    {usesSeq && (
+                      <>
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[11px] text-[var(--text-secondary)]">Desde archivo</span>
+                          <Toggle checked={useFilenameSeq} onChange={onToggleFilenameSeq} />
+                        </div>
+                        {!useFilenameSeq && (
+                          <div className="flex items-center gap-2">
+                            <span className="text-[11px] text-[var(--text-muted)]">Inicial</span>
+                            <Input
+                              type="number"
+                              min={1}
+                              max={9999}
+                              value={secuencia}
+                              onChange={(e) => onSecuenciaChange(parseInt(e.target.value, 10) || 1)}
+                              className="w-20 text-center"
+                            />
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
 
-              {/* Paso 3: Separador */}
+              {/* Paso 4: Separador */}
               <div className="space-y-3">
                 <div className="flex items-center gap-2">
-                  <div className="flex h-5 w-5 items-center justify-center rounded-full bg-[var(--accent-primary)] text-white text-[10px] font-bold">3</div>
-                  <label className="text-xs font-bold text-[var(--text-primary)]">¿Cómo quieres separar las palabras?</label>
+                  <div className="flex h-5 w-5 items-center justify-center rounded-full bg-[var(--accent-primary)] text-white text-[10px] font-bold">4</div>
+                  <label className="text-xs font-bold text-[var(--text-primary)]">Separador</label>
                 </div>
                 <div className="flex gap-2">
                   {[
@@ -404,10 +453,10 @@ export default function RenameCard(props: RenameCardProps) {
                   ].map((sep) => (
                     <button
                       type="button"
-                      key={sep.id}
+                      key={sep.id || 'none'}
                       onClick={() => changeSeparator(sep.id)}
                       className={`flex-1 py-2 rounded-lg border text-xs font-medium transition-all ${
-                        separator === sep.id
+                        wordSeparator === sep.id
                           ? 'bg-[var(--accent-secondary)]/20 text-[var(--accent-secondary)] border-[var(--accent-secondary)]/40'
                           : 'bg-[var(--bg-elevated)] text-[var(--text-secondary)] border-[var(--border-subtle)] hover:border-[var(--border-medium)]'
                       }`}
@@ -438,12 +487,12 @@ export default function RenameCard(props: RenameCardProps) {
                 <Input
                   value={patron}
                   onChange={(e) => onPatronChange(e.target.value)}
-                  placeholder="{codigo}_{nombre}{ext}"
+                  placeholder="{codigo}{sep}{nombre}{ext}"
                   className="font-mono text-sm"
                 />
               </div>
               <div className="flex flex-wrap gap-1.5">
-                {['seq', 'ext', ...variableFields].map(f => (
+                {['seq', 'ext', 'sep', ...variableFields].map(f => (
                   <button
                     type="button"
                     key={f}
@@ -451,6 +500,33 @@ export default function RenameCard(props: RenameCardProps) {
                     className="px-2 py-1 rounded bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[10px] font-mono"
                   >
                     {`{${f}}`}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {showSeparatorUi && !hasCatalog && (
+            <div className="space-y-3">
+              <label className="text-xs font-bold text-[var(--text-primary)]">Separador</label>
+              <div className="flex gap-2">
+                {[
+                  { id: '_', label: 'Guion bajo (_)' },
+                  { id: '-', label: 'Guion medio (-)' },
+                  { id: ' ', label: 'Espacio ( )' },
+                  { id: '', label: 'Pegado' },
+                ].map((sep) => (
+                  <button
+                    type="button"
+                    key={sep.id || 'none'}
+                    onClick={() => changeSeparator(sep.id)}
+                    className={`flex-1 py-2 rounded-lg border text-xs font-medium transition-all ${
+                      wordSeparator === sep.id
+                        ? 'bg-[var(--accent-secondary)]/20 text-[var(--accent-secondary)] border-[var(--accent-secondary)]/40'
+                        : 'bg-[var(--bg-elevated)] text-[var(--text-secondary)] border-[var(--border-subtle)] hover:border-[var(--border-medium)]'
+                    }`}
+                  >
+                    {sep.label}
                   </button>
                 ))}
               </div>

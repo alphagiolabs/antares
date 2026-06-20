@@ -40,8 +40,8 @@ describe('RenameCard mapping mode', () => {
     render(<RenameCard {...baseProps} />);
 
     expect(screen.getByText('Mapeo directo activo')).toBeInTheDocument();
-    expect(screen.queryByText('¿Qué columnas quieres en el nuevo nombre?')).not.toBeInTheDocument();
-    expect(screen.queryByText('¿Cómo quieres separar las palabras?')).not.toBeInTheDocument();
+    expect(screen.queryByText('Columna renombre')).not.toBeInTheDocument();
+    expect(screen.queryByText('Separador')).not.toBeInTheDocument();
   });
 
   it('renders classic UI for multi-column databases', () => {
@@ -56,8 +56,9 @@ describe('RenameCard mapping mode', () => {
     );
 
     expect(screen.queryByText('Mapeo directo activo')).not.toBeInTheDocument();
-    expect(screen.getByText('¿Qué columnas quieres en el nuevo nombre?')).toBeInTheDocument();
-    expect(screen.getByText('¿Cómo quieres separar las palabras?')).toBeInTheDocument();
+    expect(screen.getByText('Columna renombre')).toBeInTheDocument();
+    expect(screen.getByText('Secuencia')).toBeInTheDocument();
+    expect(screen.getByText('Separador')).toBeInTheDocument();
   });
 
   it('shows first 10 rows and ver todas link', () => {

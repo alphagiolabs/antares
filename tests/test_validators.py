@@ -67,6 +67,9 @@ class TestParseFilenameParts:
     def test_extrae_base_y_secuencia_con_guion_bajo(self) -> None:
         assert parse_filename_parts("69466481_2.jpg") == ("69466481", "2")
 
+    def test_extrae_base_y_secuencia_del_sufijo_parentetico_de_windows(self) -> None:
+        assert parse_filename_parts("4210502 (3).jpeg") == ("4210502", "3")
+
 
 class TestSafeUserPath:
     def test_rechaza_traversal_y_bytes_nulos(self) -> None:

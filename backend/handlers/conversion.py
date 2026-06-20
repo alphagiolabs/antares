@@ -29,6 +29,103 @@ from backend.utils.validators import parse_filename_parts
 _CANCEL_GRACE_SECONDS = 0.25
 
 
+def _detect_best_key_column(
+    files: list[str],
+    db_columns: list[str],
+    sample_size: int = 50,
+) -> str:
+    """Auto-detect which DB column contains the file codes.
+
+    Tries each column and picks the one with the most matches against the
+    file codes (parsed stems). This fixes the common case where the user's
+    file codes live in a column that is NOT the first one (e.g. 'sgio'
+    instead of 'nis'), which caused silent rename failures because
+    buscar_por_columna found nothing in the wrong column.
+
+    Args:
+        files: List of file paths.
+        db_columns: Available DB columns to probe.
+        sample_size: Max files to probe (performance).
+
+    Returns:
+        Best matching column name, or the first column if none match.
+    """
+    if not db_columns:
+        return ""
+    if len(db_columns) == 1:
+        return db_columns[0]
+
+    from backend.core.database import buscar_por_columna
+
+    # Parse codes from a sample of files
+    sample_files = files[:sample_size]
+    codigos = []
+    stems = []
+    for f in sample_files:
+        p = Path(f)
+        code, _ = parse_filename_parts(p.name)
+        codigos.append(code)
+        stems.append(p.stem)
+
+    search_keys = list(set(codigos + stems))
+    if not search_keys:
+        return db_columns[0]
+
+    best_col = db_columns[0]
+    best_count = -1
+    for col in db_columns:
+        try:
+            matches = buscar_por_columna(search_keys, col)
+            count = len(matches)
+        except Exception:
+            count = -1
+        if count > best_count:
+            best_count = count
+            best_col = col
+
+    return best_col
+
+
+def _resolve_key_column(
+    key_column: str,
+    files: list[str],
+    db_columns: list[str] | None = None,
+) -> str:
+    """Resolve the effective key column, auto-detecting if needed.
+
+    Always probes all DB columns and picks the one with the most file-code
+    matches. This fixes the case where the user's provided key_column is a
+    valid column name but doesn't contain the file codes (e.g. 'nis' when
+    the codes are actually in 'sgio').
+    """
+    from backend.core.config_fields import get_field_names
+
+    columns = db_columns if db_columns is not None else get_field_names()
+    if not columns:
+        return key_column
+    if len(columns) == 1:
+        return columns[0]
+
+    best = _detect_best_key_column(files, columns)
+    # Keep the user's choice if it matches equally well as the best
+    if key_column and key_column in columns:
+        from backend.core.database import buscar_por_columna
+
+        codigos = []
+        stems = []
+        for f in files[:50]:
+            p = Path(f)
+            code, _ = parse_filename_parts(p.name)
+            codigos.append(code)
+            stems.append(p.stem)
+        search_keys = list(set(codigos + stems))
+        user_matches = len(buscar_por_columna(search_keys, key_column))
+        best_matches = len(buscar_por_columna(search_keys, best))
+        if user_matches >= best_matches and user_matches > 0:
+            return key_column
+    return best
+
+
 @with_locale
 @validate_params("files")
 def preview(params: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
@@ -53,7 +150,8 @@ def preview(params: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
             id_column=params.get("id_column") or None,
             rename_column=params.get("rename_column") or None,
         )
-    engine = RenamerEngine(patron, secuencia)
+    word_separator = params.get("word_separator", "_")
+    engine = RenamerEngine(patron, secuencia, separador=word_separator)
     file_seqs = {}
     codigos_manuales = {}
     codigos_list = []
@@ -81,6 +179,16 @@ def preview(params: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
         )
         collisions = mapping_index.find_collisions(files)
     elif key_column:
+        # Auto-detect the best key column if the provided one is invalid
+        from backend.core.config_fields import get_field_names
+
+        resolved_key = _resolve_key_column(key_column, files, get_field_names())
+        if resolved_key != key_column:
+            log_message(
+                f"Columna ID '{key_column}' no encontrada en BD, usando '{resolved_key}'",
+                "warn",
+            )
+        key_column = resolved_key
         # Buscamos por código parseado y por stem completo para máxima compatibilidad
         db_cache = buscar_por_columna(list(set(codigos_list + stems)), key_column)
         seq_backup = engine.secuencia
@@ -103,6 +211,34 @@ def preview(params: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
             return db_cache.get(idx) if idx else None
         res = engine.preview_lote(files, lookup_fn=lookup, codigos_manuales=codigos_manuales, file_seqs=file_seqs)
     else:
+        # No key_column provided: try auto-detecting the best column first
+        from backend.core.config_fields import get_field_names
+
+        db_cols = get_field_names()
+        if db_cols and files:
+            auto_key = _detect_best_key_column(files, db_cols)
+            if auto_key:
+                db_cache = buscar_por_columna(list(set(codigos_list + stems)), auto_key)
+                seq_backup = engine.secuencia
+                for f in files:
+                    p = Path(f)
+                    code = codigos_manuales[p.name]
+                    stem = p.stem
+                    datos = db_cache.get(code) or db_cache.get(stem)
+                    if datos:
+                        fseq = file_seqs.get(p.name) if use_filename_seq else None
+                        nombre_nuevo = engine.aplicar(f, datos_bd=datos, codigo_manual=code, file_seq=fseq)
+                        res.append((f, nombre_nuevo, True))
+                    else:
+                        res.append((f, p.name, False))
+                engine.secuencia = seq_backup
+                payload: dict[str, Any] = {
+                    "preview": [{"origen": Path(orig).name, "nuevo": nuev, "en_bd": en_bd} for orig, nuev, en_bd in res],
+                }
+                if collisions:
+                    payload["collisions"] = collisions
+                return payload
+
         db_cache = buscar_lote_por_codigos(codigos_list)
         def lookup(codigo: str) -> dict[str, Any] | None:
             return db_cache.get(codigo)
@@ -227,6 +363,7 @@ def _run_conversion_job(job: Job) -> None:
         usar_rename = params.get("usar_rename", True)
         patron = params.get("patron", "")
         secuencia = params.get("secuencia", 1)
+        word_separator = params.get("word_separator", "_")
         use_filename_seq = params.get("use_filename_seq", True)
         use_column_rename = params.get("use_column_rename", False)
         key_column = params.get("key_column", "")
@@ -235,6 +372,26 @@ def _run_conversion_job(job: Job) -> None:
         mapping_id_column = params.get("id_column") or None
         mapping_rename_column = params.get("rename_column") or None
         mapping_index = None
+
+        # Auto-detect the best key column if rename is enabled without mapping
+        # and the provided key_column is empty or not in the DB schema.
+        # Only run auto-detection when key_column is explicitly provided to
+        # preserve the legacy fallback path (buscar_lote_por_codigos) that
+        # matches across all fields.
+        if usar_rename and not file_mapping and not mapping_path and files and key_column:
+            from backend.core.config_fields import get_field_names
+
+            db_cols = get_field_names()
+            if db_cols:
+                original_key = key_column
+                key_column = _resolve_key_column(key_column, files, db_cols)
+                if key_column != original_key:
+                    log_message(
+                        f"Columna ID auto-detectada: '{key_column}' "
+                        f"(original: '{original_key or '(vacío)'}')",
+                        "info",
+                        state=state,
+                    )
 
         if mapping_path and not file_mapping:
             from backend.core.database import parse_id_rename_mapping
@@ -271,7 +428,7 @@ def _run_conversion_job(job: Job) -> None:
                 return
             log_message(f"Modo: Renombrado por mapeo directo ({len(file_mapping)} entradas)", "info", state=state)
 
-        engine = RenamerEngine(patron, secuencia) if usar_rename else None
+        engine = RenamerEngine(patron, secuencia, separador=word_separator) if usar_rename else None
         try:
             rw = int(resize_ancho) if resize_ancho is not None else None
             rh = int(resize_alto) if resize_alto is not None else None
@@ -479,6 +636,70 @@ def _emit_complete_notifications(job: Job, ok_count: int, err_count: int) -> Non
 _notify_complete = _emit_complete_notifications
 
 
+@with_locale
+@validate_params("files")
+def db_detect_key_column(params: dict[str, Any]) -> dict[str, Any]:
+    """Auto-detect the DB column that best matches the file codes.
+
+    Probes each configured DB column against the parsed file codes and
+    returns the column with the most matches. This lets the frontend
+    pick the right key column without the user having to guess.
+
+    Returns:
+        Dict with:
+        - key_column: best matching column name (or first column if no match)
+        - matches: number of matched files in the best column
+        - columns: all probed columns with their match counts
+    """
+    files = params.get("files", [])
+    if not files or not isinstance(files, list):
+        return {"key_column": "", "matches": 0, "columns": []}
+
+    from backend.core.config_fields import get_field_names
+    from backend.core.database import buscar_por_columna
+
+    db_cols = get_field_names()
+    if not db_cols:
+        return {"key_column": "", "matches": 0, "columns": []}
+
+    if len(db_cols) == 1:
+        return {"key_column": db_cols[0], "matches": 0, "columns": [{"name": db_cols[0], "matches": 0}]}
+
+    # Parse codes from a sample of files
+    sample_files = files[:50]
+    codigos: list[str] = []
+    stems: list[str] = []
+    for f in sample_files:
+        p = Path(f)
+        code, _ = parse_filename_parts(p.name)
+        codigos.append(code)
+        stems.append(p.stem)
+
+    search_keys = list(set(codigos + stems))
+    if not search_keys:
+        return {"key_column": db_cols[0], "matches": 0, "columns": []}
+
+    column_results: list[dict[str, Any]] = []
+    best_col = db_cols[0]
+    best_count = -1
+    for col in db_cols:
+        try:
+            matches = buscar_por_columna(search_keys, col)
+            count = len(matches)
+        except Exception:
+            count = -1
+        column_results.append({"name": col, "matches": count})
+        if count > best_count:
+            best_count = count
+            best_col = col
+
+    return {
+        "key_column": best_col,
+        "matches": best_count,
+        "columns": column_results,
+    }
+
+
 HANDLERS = {
     "preview": preview,
     "process_start": process_start,
@@ -486,6 +707,7 @@ HANDLERS = {
     "process_cancel": process_cancel,
     "preview_image": preview_image,
     "is_video": is_video,
+    "db_detect_key_column": db_detect_key_column,
 }
 
 

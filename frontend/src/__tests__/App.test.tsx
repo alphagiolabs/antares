@@ -1,7 +1,21 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import App from '../App';
 import { TAB_DEFINITIONS } from '../navigation';
+
+// Mock AuthContext so the app renders as an authenticated admin in tests.
+vi.mock('../auth/AuthContext', () => ({
+  AuthProvider: ({ children }: { children: React.ReactNode }) => children,
+  useAuth: () => ({
+    user: { id: 'test', email: 'test@test.com', displayName: 'Test', isAdmin: true, isDisabled: false, createdAt: '' },
+    loading: false,
+    error: null,
+    signIn: async () => ({ error: null }),
+    signUp: async () => ({ error: null }),
+    signOut: async () => {},
+    refreshUser: async () => {},
+  }),
+}));
 
 describe('App', () => {
   it('shows an Electron-only message when the preload bridge is unavailable', () => {
@@ -23,16 +37,15 @@ describe('App', () => {
     });
   });
 
-  it('shows conversion tab by default', async () => {
+  it('shows Generador Reportes tab by default', async () => {
     render(<App />);
-    expect(await screen.findByText('Arrastra imágenes o videos aquí', {}, { timeout: 5000 })).toBeInTheDocument();
+    expect(await screen.findByText('Cargar Plantilla', {}, { timeout: 5000 })).toBeInTheDocument();
   });
 
   it('keeps conversion empty-state actions visible before files are selected', async () => {
     render(<App />);
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: /Seleccionar archivos/i })).toBeInTheDocument();
-    });
+    fireEvent.click(await screen.findByRole('button', { name: 'Conversión' }, {}, { timeout: 5000 }));
+    expect(await screen.findByRole('button', { name: /Seleccionar archivos/i }, {}, { timeout: 5000 })).toBeInTheDocument();
   });
 
   it('has sidebar with navigation buttons', () => {
@@ -55,13 +68,14 @@ describe('App', () => {
     expect(await screen.findByRole('heading', { name: /Informes técnicos|Informes tecnicos/i }, { timeout: 5000 })).toBeInTheDocument();
   });
 
-  it('renders the image optimizer in a full-height workspace without the generic page padding', async () => {
+  it('renders the image optimizer without its title in a full-height workspace', async () => {
     render(<App />);
     fireEvent.click(screen.getByRole('button', { name: /Optimizador/i }));
 
-    const heading = await screen.findByRole('heading', { name: /Image Optimizer/i }, { timeout: 5000 });
-    const routeViewport = heading.closest('main')?.firstElementChild;
+    const preset = await screen.findByRole('button', { name: /Optimizar web/i }, { timeout: 5000 });
+    const routeViewport = preset.closest('main')?.firstElementChild;
 
+    expect(screen.queryByRole('heading', { name: /Image Optimizer/i })).not.toBeInTheDocument();
     expect(routeViewport).toBeInstanceOf(HTMLElement);
     expect(routeViewport).not.toHaveClass('px-6');
     expect(routeViewport).not.toHaveClass('py-6');

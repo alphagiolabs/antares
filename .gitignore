@@ -67,6 +67,10 @@ scratch/_smoke*.db
 .mcp.json
 skills-lock.json
 opencode.json
+AGENTS.md
+CLAUDE.md
+.githooks/
+docs/
 
 # Ruff cache
 .ruff_cache/
@@ -80,3 +84,8 @@ nul
 
 # Vite bundle analyze output
 frontend/stats.html
+
+# Environment variables (repo publico — NUNCA commitear secrets)
+.env
+.env.*
+!.env.example

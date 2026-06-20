@@ -88,7 +88,6 @@ HEAVY_METHODS = {
     "db_import",
     "db_export",
     "db_clear",
-    "scan_folder",
     "preview_image",
     "formatos_generate",
     "image_optimizer_zip",

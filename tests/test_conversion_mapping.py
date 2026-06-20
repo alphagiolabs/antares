@@ -120,6 +120,126 @@ def test_mapping_precedence_over_key_column(monkeypatch, tmp_path) -> None:
     assert result["preview"][0]["nuevo"] == "desde_mapeo.jpg"
 
 
+def test_preview_resolves_sep_placeholder(monkeypatch, tmp_path) -> None:
+    files = [str(tmp_path / "IMG_0001.jpg")]
+    Path(files[0]).write_text("x")
+
+    monkeypatch.setattr(
+        "backend.core.database.buscar_por_columna",
+        lambda *_args, **_kwargs: {
+            "IMG_0001": {"sgio": "454654001", "nombre": "producto"},
+        },
+    )
+
+    result = conversion.preview({
+        "files": files,
+        "patron": "{sgio}{sep}{nombre}{ext}",
+        "word_separator": "-",
+        "key_column": "sgio",
+        "use_filename_seq": False,
+        "secuencia": 1,
+    })
+
+    assert result["preview"][0]["nuevo"] == "454654001-producto.jpg"
+
+
+def test_preview_sep_defaults_to_underscore(monkeypatch, tmp_path) -> None:
+    files = [str(tmp_path / "1.jpg")]
+    Path(files[0]).write_text("x")
+
+    monkeypatch.setattr(
+        "backend.core.database.buscar_por_columna",
+        lambda *_args, **_kwargs: {"1": {"codigo": "1", "nombre": "foto"}},
+    )
+
+    result = conversion.preview({
+        "files": files,
+        "patron": "{codigo}{sep}{nombre}{ext}",
+        "key_column": "codigo",
+        "use_filename_seq": False,
+        "secuencia": 1,
+    })
+
+    assert result["preview"][0]["nuevo"] == "1_foto.jpg"
+
+
+def test_run_conversion_job_resolves_sep_placeholder(monkeypatch, tmp_path) -> None:
+    src = tmp_path / "in"
+    dst = tmp_path / "out"
+    src.mkdir()
+    dst.mkdir()
+    source_file = src / "1.jpg"
+    source_file.write_text("data")
+
+    scheduler = _RecordingScheduler()
+    copied: list[tuple[str, str]] = []
+
+    monkeypatch.setattr(conversion, "get_scheduler", lambda: scheduler)
+    monkeypatch.setattr(conversion, "es_video", lambda _path: False)
+    monkeypatch.setattr(conversion, "_calculate_chunk_size", lambda: 10)
+    monkeypatch.setattr(conversion, "copiar_archivo", lambda src_path, out_path: copied.append((str(src_path), str(out_path))))
+    monkeypatch.setattr(conversion, "_notify_complete", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr("backend.core.history.save_run", lambda **_kwargs: None)
+    monkeypatch.setattr(
+        "backend.core.database.buscar_por_columna",
+        lambda *_args, **_kwargs: {"1": {"sgio": "454654001", "nombre": "producto"}},
+    )
+
+    job = Job(
+        id="sep-rename",
+        job_type="conversion",
+        params={
+            "files": [str(source_file)],
+            "destino": str(dst),
+            "formato": "JPEG",
+            "conversion_enabled": False,
+            "usar_rename": True,
+            "patron": "{sgio}{sep}{nombre}{ext}",
+            "word_separator": "_",
+            "key_column": "sgio",
+            "use_filename_seq": False,
+            "secuencia": 1,
+        },
+    )
+    conversion._run_conversion_job(job)
+
+    assert len(scheduler.submitted) == 1
+    _src, out_path, _is_video = scheduler.submitted[0]
+    assert out_path.name == "454654001_producto.jpg"
+    assert len(copied) == 1
+    assert Path(copied[0][1]).name == "454654001_producto.jpg"
+
+
+def test_prepare_chunk_renames_windows_parenthesized_sequence(monkeypatch, tmp_path) -> None:
+    source_file = tmp_path / "4210502 (3).jpg"
+    source_file.write_text("data")
+
+    monkeypatch.setattr(conversion, "es_video", lambda _path: False)
+    monkeypatch.setattr("backend.core.renamer.get_field_names", lambda: ["nis", "sgio"])
+
+    def buscar_por_nis(codigos, columna):
+        assert columna == "nis"
+        if "4210502" not in codigos:
+            return {}
+        return {"4210502": {"nis": "4210502", "sgio": "69841274"}}
+
+    monkeypatch.setattr("backend.core.database.buscar_por_columna", buscar_por_nis)
+    engine = conversion.RenamerEngine("{sgio}_{seq}{ext}", 1)
+
+    tasks = conversion._prepare_chunk_tasks(
+        [str(source_file)],
+        destino=str(tmp_path / "out"),
+        engine=engine,
+        conversion_enabled=False,
+        ext_dest=None,
+        use_filename_seq=True,
+        lookup_fn=lambda _codes: {},
+        key_column="nis",
+    )
+
+    assert tasks[0][1].name == "69841274_3.jpg"
+
+
 def test_run_conversion_job_with_mapping_rename_only(monkeypatch, tmp_path) -> None:
     src = tmp_path / "in"
     dst = tmp_path / "out"

@@ -3,6 +3,8 @@ import { useTranslation } from 'react-i18next';
 import { History, Palette, X, type LucideIcon } from 'lucide-react';
 import AppearanceView from './AppearanceView';
 import HistoryView from '../history/HistoryView';
+import PanelView from './PanelView';
+import { Users } from 'lucide-react';
 import { CONFIG_SECTION_DEFINITIONS, type ConfigSectionId } from '../../navigation';
 
 interface SettingsModalProps {
@@ -15,6 +17,7 @@ interface SettingsModalProps {
 const SECTION_ICONS: Record<ConfigSectionId, LucideIcon> = {
   appearance: Palette,
   history: History,
+  panel: Users,
 };
 
 export default function SettingsModal({ isOpen, section, onSectionChange, onClose }: SettingsModalProps) {
@@ -53,7 +56,7 @@ export default function SettingsModal({ isOpen, section, onSectionChange, onClos
   const sections = useMemo(
     () => CONFIG_SECTION_DEFINITIONS.map((def) => ({
       ...def,
-      label: def.id === 'appearance' ? t('tab.appearance') : t('tab.history'),
+      label: def.id === 'appearance' ? t('tab.appearance') : def.id === 'history' ? t('tab.history') : t('tab.panel'),
       icon: SECTION_ICONS[def.id],
     })),
     [t],
@@ -78,7 +81,7 @@ export default function SettingsModal({ isOpen, section, onSectionChange, onClos
         role="dialog"
         aria-modal="true"
         aria-label="Configuración"
-        className="relative flex h-full w-full max-w-[1280px] max-h-[900px] overflow-hidden rounded-2xl border border-[var(--border-medium)] bg-[var(--bg-base)] shadow-elevated animate-scale-in"
+        className="relative flex h-full w-full max-w-[1380px] max-h-[900px] overflow-hidden rounded-2xl border border-[var(--border-medium)] bg-[var(--bg-base)] shadow-elevated animate-scale-in"
       >
         {/* Sidebar interno de secciones */}
         <aside
@@ -86,11 +89,8 @@ export default function SettingsModal({ isOpen, section, onSectionChange, onClos
           aria-label="Secciones de configuración"
           className="flex w-[230px] shrink-0 flex-col border-r border-[var(--border-subtle)] bg-[var(--bg-surface)]"
         >
-          <div className="flex items-center justify-between gap-2 border-b border-[var(--border-subtle)] px-4 py-4">
-            <div className="min-w-0">
-              <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-[var(--text-muted)]">Configuración</div>
-              <div className="mt-0.5 text-[15px] font-semibold leading-tight text-[var(--text-primary)]">ANTARES</div>
-            </div>
+          <div className="flex h-14 shrink-0 items-center border-b border-[var(--border-subtle)] px-4">
+            <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-[var(--text-muted)]">Configuración</div>
           </div>
 
           <nav className="flex flex-col gap-1 p-2" aria-label="Secciones">
@@ -129,22 +129,24 @@ export default function SettingsModal({ isOpen, section, onSectionChange, onClos
             })}
           </nav>
 
-          <div className="mt-auto border-t border-[var(--border-subtle)] px-4 py-3 text-[10px] leading-relaxed text-[var(--text-muted)]">
+          <div className="mt-auto flex h-8 shrink-0 items-center border-t border-[var(--border-subtle)] px-4 text-[10px] leading-none text-[var(--text-muted)]">
             <span className="font-mono">Esc</span> para cerrar
           </div>
         </aside>
 
         {/* Contenido de la seccion activa */}
         <div className="relative flex min-w-0 flex-1 flex-col bg-[var(--bg-base)]">
-          <header className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--border-subtle)] bg-[var(--bg-surface)] px-5 py-3">
+          <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-[var(--border-subtle)] bg-[var(--bg-surface)] px-6">
             <div className="flex min-w-0 items-center gap-3">
               <h2 className="truncate text-[15px] font-semibold text-[var(--text-primary)]">
-                {section === 'appearance' ? t('tab.appearance') : t('tab.history')}
+                {section === 'appearance' ? t('tab.appearance') : section === 'history' ? t('tab.history') : t('tab.panel')}
               </h2>
               <span className="hidden text-[11px] font-medium text-[var(--text-muted)] sm:inline">
                 {section === 'appearance'
                   ? 'Personaliza el aspecto de la aplicación'
-                  : 'Revisa las ejecuciones anteriores'}
+                  : section === 'history'
+                  ? 'Revisa las ejecuciones anteriores'
+                  : 'Gestiona usuarios y permisos'}
               </span>
             </div>
             <button
@@ -168,6 +170,11 @@ export default function SettingsModal({ isOpen, section, onSectionChange, onClos
             {section === 'history' && (
               <div className="h-full overflow-hidden">
                 <HistoryView />
+              </div>
+            )}
+            {section === 'panel' && (
+              <div className="h-full overflow-y-auto">
+                <PanelView />
               </div>
             )}
           </div>

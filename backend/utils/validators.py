@@ -87,10 +87,12 @@ def obtener_codigo_desde_nombre(nombre_archivo: str | Path) -> str:
 def parse_filename_parts(nombre_archivo: str | Path) -> tuple[str, str]:
     """Extrae (grupo, secuencia) del nombre de archivo.
 
-    Formato esperado: '{grupo}_{secuencia}.ext' o '{grupo}-{secuencia}.ext'
+    Formatos esperados: '{grupo}_{secuencia}.ext', '{grupo}-{secuencia}.ext'
+    o el sufijo de copia de Windows '{grupo} ({secuencia}).ext'.
     Ejemplos:
         '1_1.jpg'        -> ('1', '1')
         '69466481-1.jpg' -> ('69466481', '1')
+        '4210502 (2).jpg' -> ('4210502', '2')
         'abc.jpg'        -> ('abc', '1')  # fallback sin secuencia
 
     Args:
@@ -101,6 +103,9 @@ def parse_filename_parts(nombre_archivo: str | Path) -> tuple[str, str]:
     """
     stem = Path(nombre_archivo).stem
     match = re.match(r"^(.+)[_-](\d+)$", stem)
+    if match:
+        return match.group(1), match.group(2)
+    match = re.match(r"^(.+) \((\d+)\)$", stem)
     if match:
         return match.group(1), match.group(2)
     return stem, "1"

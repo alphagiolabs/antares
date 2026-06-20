@@ -1,13 +1,11 @@
 """Database and field/pattern configuration handlers."""
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 
 from backend.core.config_fields import get_field_names, load_fields, save_fields
 from backend.core.config_patterns import load_patterns, save_patterns
 from backend.core.config_patterns import reset_to_defaults as reset_patterns_defaults
-from backend.core.converter import FORMATOS_SOPORTADOS, VIDEO_FORMATS
 from backend.core.database import (
     exportar_excel,
     generar_plantilla_excel,
@@ -17,15 +15,6 @@ from backend.core.database import (
     parse_id_rename_mapping_full,
 )
 from backend.handlers.common import validate_params, with_locale
-
-# Pre-compute extension set once at module level instead of per-call
-_SUPPORTED_EXTENSIONS: set[str] = set()
-for _info in FORMATOS_SOPORTADOS.values():
-    _SUPPORTED_EXTENSIONS.update(e.lower() for e in _info["ext"])
-    _SUPPORTED_EXTENSIONS.update(e.upper() for e in _info["ext"])
-for _ext in VIDEO_FORMATS.values():
-    _SUPPORTED_EXTENSIONS.add(_ext.lower())
-    _SUPPORTED_EXTENSIONS.add(_ext.upper())
 
 
 @with_locale
@@ -54,38 +43,6 @@ def db_template(params: dict[str, Any]) -> dict[str, Any]:
         path = path + ".xlsx"
     generar_plantilla_excel(path)
     return {"path": path}
-
-@with_locale
-@validate_params("folder")
-def scan_folder(params: dict[str, Any]) -> dict[str, list[str]]:
-    folder = params.get("folder", "")
-    path = Path(folder)
-    if not path.is_dir():
-        msg = f"Directorio no encontrado o no válido: {folder}"
-        raise ValueError(msg)
-    MAX_DEPTH = 10
-    MAX_FILES = 50000
-
-    def _walk_with_depth(root: Path, max_depth: int) -> list[Path]:
-        """Walk directory tree respecting depth limit."""
-        result: list[Path] = []
-        if max_depth < 0:
-            return result
-        try:
-            for entry in root.iterdir():
-                if entry.is_file():
-                    result.append(entry)
-                elif entry.is_dir() and max_depth > 0:
-                    result.extend(_walk_with_depth(entry, max_depth - 1))
-        except PermissionError:
-            pass
-        return result
-
-    all_files = _walk_with_depth(path, MAX_DEPTH)
-    files = [str(f.resolve()) for f in all_files if f.suffix in _SUPPORTED_EXTENSIONS]
-    if len(files) > MAX_FILES:
-        files = files[:MAX_FILES]
-    return {"files": files}
 
 @with_locale
 def db_fields(params: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
@@ -170,7 +127,6 @@ HANDLERS = {
     "db_export": db_export,
     "db_clear": db_clear,
     "db_template": db_template,
-    "scan_folder": scan_folder,
     "db_fields": db_fields,
     "db_fields_update": db_fields_update,
     "db_fields_reset": db_fields_reset,

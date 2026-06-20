@@ -124,7 +124,7 @@ export function usePanelSession(): PanelSession {
         newErrors.push(MSG_IMAGE_TOO_LARGE(file.name));
         continue;
       }
-      const localPath = (file as File & { path?: string }).path || undefined;
+      const localPath = window.electronAPI?.getPathForFile(file) || undefined;
       accepted.push({ file, objectUrl: URL.createObjectURL(file), localPath });
     }
     setImages((prev) => [...prev, ...accepted]);

@@ -53,7 +53,7 @@ export default function StickyActionBar({
 }: StickyActionBarProps) {
   const destinoLabel = destino
     ? destino.split(/[\\/]/).pop() || destino
-    : 'Seleccionar carpeta de destino…';
+    : 'carpeta de destino';
 
   const hasFiles = fileCount > 0 || videoCount > 0;
 

@@ -26,6 +26,7 @@ import {
   CheckCircle,
   PanelLeft,
 } from 'lucide-react';
+import DatePicker from '../ui/DatePicker';
 import PreviewPage from './PreviewPage';
 import WaterCutNoticePage from './WaterCutNoticePage';
 import {
@@ -805,17 +806,16 @@ export default function PadronView() {
                     >
                       <span>{field.shortLabel || field.label}</span>
                       {(isWaterCutNotice ? WATER_CUT_DATE_FIELDS : DATE_FIELDS).has(field.key) ? (
-                        <input
-                          type="date"
+                        <DatePicker
                           value={toISODate(
                             isWaterCutNotice
                               ? waterCutData[field.key] ?? ''
                               : headerData[field.key] ?? '',
                           )}
-                          onChange={(e) =>
+                          onChange={(isoValue) =>
                             isWaterCutNotice
-                              ? handleWaterCutHeaderChange(field.key, toDisplayDate(e.target.value))
-                              : handleHeaderChange(field.key, toDisplayDate(e.target.value))
+                              ? handleWaterCutHeaderChange(field.key, toDisplayDate(isoValue))
+                              : handleHeaderChange(field.key, toDisplayDate(isoValue))
                           }
                         />
                       ) : !isWaterCutNotice && field.wide &&

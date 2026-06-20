@@ -5,13 +5,13 @@ import { useProcessRunner } from '../../hooks/useProcessRunner';
 import { useToast } from '../../hooks/useToast';
 import { useDialog } from '../../hooks/useDialog';
 import { RenamePattern, DBRecord, PreviewItem } from '../../types';
-import { buildDefaultPresets, computeMappingStats, detectMappingColumns, isMappingSchemaMismatch, isVideoByExt, DEFAULT_FORMATS, DEFAULT_FIELDS, DEFAULT_PATTERN, parsePositiveInt, pickSyncedKeyColumn, type RenameSource } from './helpers';
+import { buildDefaultPresets, computeMappingStats, isMappingSchemaMismatch, isVideoByExt, DEFAULT_FORMATS, DEFAULT_FIELDS, DEFAULT_PATTERN, parsePositiveInt, pickSyncedKeyColumn, type RenameSource } from './helpers';
 import ConversionPresets, { ConversionConfig } from './ConversionPresets';
 import Dropzone from './Dropzone';
 import FileGrid from './FileGrid';
 import OptionsCard from './OptionsCard';
 import RenameCard from './RenameCard';
-import ProgressBar from './ProgressBar';
+import SegmentedProgressBar from './SegmentedProgressBar';
 import Button from '../ui/Button';
 import { Image, Film, FolderOpen, ArrowRight, CheckCircle2, AlertTriangle, AlertCircle, Play, Square } from 'lucide-react';
 import { subscribeHistoryReexecute } from '../history/historyEvents';
@@ -28,6 +28,7 @@ export default function ConversionView() {
   const [keepExif, setKeepExif] = useState(false);
   const [usarRename, setUsarRename] = useState(true);
   const [patron, setPatron] = useState(DEFAULT_PATTERN);
+  const [wordSeparator, setWordSeparator] = useState('_');
   const [secuencia, setSecuencia] = useState(1);
   const [useFilenameSeq, setUseFilenameSeq] = useState(true);
   const [namingMode, setNamingMode] = useState<string>('code_name');
@@ -274,6 +275,33 @@ export default function ConversionView() {
       });
       if (!proceed) return;
     }
+    // Detect mapping Excel (ID + RENOMBRE columns) before falling back to catalog import.
+    if (files.length > 0) {
+      try {
+        const result = await api.dbParseMapping(excelPath, files);
+        if (result.mapping && Object.keys(result.mapping).length > 0) {
+          clearMapping();
+          setMappingPath(excelPath);
+          setMappingData(result.mapping);
+          setMappingColumns(result.columns ?? []);
+          setMappingIdColumn(result.id_column ?? '');
+          setMappingRenameColumn(result.rename_column ?? '');
+          setRenameSource('mapping');
+          setPatron('{renombre}{ext}');
+          setUsarRename(true);
+          setNamingMode('custom');
+          addToast({ message: `Mapeo cargado: ${Object.keys(result.mapping).length} entradas`, type: 'success' });
+          return;
+        }
+      } catch (err) {
+        if (!isMappingSchemaMismatch(err)) {
+          const msg = err instanceof Error ? err.message : String(err);
+          addToast({ message: `Error importando Excel: ${msg}`, type: 'error' });
+          return;
+        }
+        // Schema mismatch → not a mapping Excel, fall through to catalog import.
+      }
+    }
     try {
       const result = await api.importExcel(excelPath);
       clearMapping();
@@ -283,45 +311,6 @@ export default function ConversionView() {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       addToast({ message: `Error importando Excel: ${msg}`, type: 'error' });
-    }
-  };
-
-  const loadRenameExcel = async () => {
-    const d = await api.dialogFiles();
-    if (!d.paths.length) return;
-    const excelPath = d.paths[0];
-    try {
-      const result = await api.dbParseMapping(excelPath, files);
-      const columns = result.columns ?? [];
-      const detectedColumns = detectMappingColumns(columns);
-      setMappingPath(excelPath);
-      setMappingData(result.mapping);
-      setMappingColumns(columns);
-      setMappingIdColumn(result.id_column ?? detectedColumns.id_column ?? '');
-      setMappingRenameColumn(result.rename_column ?? detectedColumns.rename_column ?? '');
-      setRenameSource('mapping');
-      setPatron('{renombre}{ext}');
-      setUsarRename(true);
-      setNamingMode('custom');
-      addToast({
-        message: `Mapeo cargado: ${result.matchedFiles} archivo${result.matchedFiles !== 1 ? 's' : ''} coincidirán`,
-        type: 'success',
-      });
-    } catch (err) {
-      if (isMappingSchemaMismatch(err)) {
-        // B-05: don't silently switch to catalog import — ask the user first.
-        const proceed = await confirm({
-          title: 'Importar como base de datos',
-          description:
-            'Este Excel no tiene las columnas ID y nombre requeridas para renombrar. ' +
-            '¿Deseas importarlo como base de datos de catálogo?',
-          confirmLabel: 'Importar',
-        });
-        if (proceed) await importDatabaseExcel(excelPath);
-        return;
-      }
-      const msg = err instanceof Error ? err.message : String(err);
-      addToast({ message: `Error cargando Excel para renombrar: ${msg}`, type: 'error' });
     }
   };
 
@@ -348,6 +337,7 @@ export default function ConversionView() {
                 secuencia,
                 use_filename_seq: useFilenameSeq,
                 key_column: keyColumn || undefined,
+                word_separator: wordSeparator,
               },
         );
         setRenamePreview(result.preview);
@@ -357,7 +347,28 @@ export default function ConversionView() {
     }, 400);
 
     return () => window.clearTimeout(timer);
-  }, [files, usarRename, mappingMode, mappingData, patron, secuencia, useFilenameSeq, keyColumn]);
+  }, [files, usarRename, mappingMode, mappingData, patron, secuencia, useFilenameSeq, keyColumn, wordSeparator]);
+
+  // Auto-detect the best key column when files are added and a DB is loaded.
+  // This fixes the common case where the default key column (first column)
+  // doesn't contain the file codes, causing silent rename failures.
+  const keyDetectToken = useRef(0);
+  useEffect(() => {
+    if (mappingMode || files.length === 0 || dbColumns.length <= 1) return;
+    const token = ++keyDetectToken.current;
+    const timer = window.setTimeout(async () => {
+      try {
+        const result = await api.dbDetectKeyColumn(files);
+        if (token !== keyDetectToken.current) return;
+        if (result.key_column && result.matches > 0 && result.key_column !== keyColumn) {
+          setKeyColumn(result.key_column);
+        }
+      } catch {
+        // ignore — keep the default key column
+      }
+    }, 600);
+    return () => window.clearTimeout(timer);
+  }, [files, dbColumns, mappingMode, keyColumn]);
 
   const loadDbColumns = async () => {
     try {
@@ -372,29 +383,7 @@ export default function ConversionView() {
     }
   };
 
-  const generateDatabaseTemplate = async () => {
-    const d = await api.dialogSave({
-      title: 'Guardar plantilla de base de datos',
-      defaultPath: 'plantilla-base-datos.xlsx',
-      filters: [{ name: 'Excel', extensions: ['xlsx'] }],
-    });
-    if (!d.paths.length) return;
-    try {
-      const result = await api.generateTemplate(d.paths[0]);
-      const fileName = result.path.split(/[\\/]/).pop() || 'plantilla-base-datos.xlsx';
-      addToast({ message: `Plantilla guardada: ${fileName}`, type: 'success' });
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      addToast({ message: `Error generando plantilla: ${msg}`, type: 'error' });
-    }
-  };
-
-  const addFolder = async () => {
-    const r = await api.dialogFolder();
-    if (!r.paths.length) return;
-    const scanned = await api.scanFolder(r.paths[0]);
-    mergeFiles(scanned.files);
-  };
+  const addFolder = useCallback((paths: string[]) => mergeFiles(paths), [mergeFiles]);
 
   const selectDest = async () => {
     const r = await api.dialogDest();
@@ -436,6 +425,7 @@ export default function ConversionView() {
       resize_ancho: parsePositiveInt(resizeAncho),
       resize_alto: parsePositiveInt(resizeAlto),
       keep_exif: keepExif, usar_rename: usarRename, patron, secuencia,
+      word_separator: wordSeparator,
       use_filename_seq: useFilenameSeq,
       key_column: mappingMode ? undefined : (keyColumn || undefined),
       mapping_path: mappingMode && mappingPath ? mappingPath : undefined,
@@ -483,8 +473,11 @@ export default function ConversionView() {
   const onDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setDragOver(false);
-    const dropped = Array.from(e.dataTransfer.files).map((f: any) => f.path || f.name);
-    mergeFiles(dropped);
+    // Electron 32+ removed File.path; resolve via the webUtils bridge.
+    const dropped = Array.from(e.dataTransfer.files)
+      .map((f) => window.electronAPI?.getPathForFile(f) ?? '')
+      .filter((p) => p.length > 0);
+    if (dropped.length) mergeFiles(dropped);
   }, [mergeFiles]);
 
   const onPasteFiles = useCallback((paths: string[]) => { mergeFiles(paths); }, [mergeFiles]);
@@ -494,23 +487,23 @@ export default function ConversionView() {
   const isEmpty = files.length === 0;
   const destinoLabel = destino
     ? destino.split(/[\\/]/).pop() || destino
-    : 'Seleccionar carpeta de destino…';
+    : 'carpeta de destino';
+  const progressTotal = status?.total ?? files.length;
+  const progressCompleted = (status?.ok_count ?? 0) + (status?.err_count ?? 0);
 
   return (
     <div
-      className={`h-full flex flex-col ${isEmpty ? 'space-y-6' : 'space-y-4'}`}
+      className="flex h-full flex-col gap-4"
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
       onDrop={onDrop}
     >
-      {running && status && <ProgressBar progress={status.progress} />}
-
-      <Dropzone
+      <div className={isEmpty ? 'flex min-h-0 w-full flex-1' : undefined}>
+        <Dropzone
         dragOver={dragOver}
         onAddFiles={addFiles}
-        onAddFolder={addFolder}
+        onAddFolderPaths={addFolder}
         onImportDatabase={importDatabaseExcel}
-        onGenerateTemplate={generateDatabaseTemplate}
         fileCount={files.length - videoFiles.size}
         videoCount={videoFiles.size}
         onClear={clearFiles}
@@ -520,42 +513,41 @@ export default function ConversionView() {
             <ConversionPresets currentConfig={currentConfig} onLoadConfig={handleLoadConfig} className="hidden sm:block shrink-0" />
             <button
               onClick={selectDest}
-              className={`flex h-9 min-w-0 max-w-[min(260px,100%)] flex-1 items-center gap-2 rounded-lg border px-2.5 text-left transition-all group sm:max-w-[260px] sm:flex-none ${
-                destino
-                  ? 'bg-[var(--bg-elevated)] border-[var(--border-subtle)] hover:border-[var(--border-medium)]'
-                  : 'bg-[var(--accent-yellow)]/5 border-[var(--accent-yellow)]/30 hover:border-[var(--accent-yellow)]/50'
-              }`}
+              className="inline-flex min-w-0 max-w-[min(280px,100%)] items-center gap-2 rounded-full border border-[var(--border-subtle)] bg-[var(--bg-elevated)] px-4 py-2 text-sm font-medium text-[var(--text-secondary)] transition-all hover:border-[var(--border-medium)] hover:text-[var(--text-primary)] group"
             >
-              <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-colors ${
-                destino ? 'bg-[var(--bg-base)] text-[var(--text-muted)] group-hover:text-[var(--accent-primary)]' : 'bg-[var(--accent-yellow)]/10 text-[var(--accent-yellow)]'
-              }`}>
-                <FolderOpen className="h-3.5 w-3.5" />
-              </div>
-              <div className="flex min-w-0 flex-col">
-                <span className="text-[10px] font-medium leading-3 text-[var(--text-muted)]">Destino</span>
-                <span className={`truncate text-xs leading-4 ${destino ? 'font-medium text-[var(--text-primary)]' : 'text-[var(--accent-yellow)]'}`}>
-                  {destinoLabel}
-                </span>
-              </div>
-              {!destino && <AlertCircle className="ml-auto h-3.5 w-3.5 shrink-0 text-[var(--accent-yellow)]" />}
+              <FolderOpen className="h-4 w-4 shrink-0 text-[var(--text-muted)] group-hover:text-[var(--accent-primary)] transition-colors" />
+              <span className="min-w-0 truncate">
+                {destino ? destinoLabel : 'carpeta de destino'}
+              </span>
+              {!destino && <AlertCircle className="h-3.5 w-3.5 shrink-0 text-[var(--accent-yellow)]" />}
             </button>
           </div>
         ) : undefined}
         conversionAction={!isEmpty ? (
           !running ? (
-            <Button variant="primary" size="sm" onClick={doProcess} disabled={!allReady}>
-              <Play className="h-3.5 w-3.5 fill-current" />
+            <Button variant="primary" size="md" className="px-4" onClick={doProcess} disabled={!allReady}>
+              <Play className="h-4 w-4 fill-current" />
               {conversionEnabled ? 'Iniciar conversión' : 'Iniciar renombrado'}
-              <ArrowRight className="h-3.5 w-3.5 opacity-60" />
+              <ArrowRight className="h-4 w-4 opacity-60" />
             </Button>
           ) : (
-            <Button variant="danger" size="sm" onClick={cancelProcess}>
-              <Square className="h-3.5 w-3.5 fill-current" />
+            <Button variant="danger" size="md" className="px-4" onClick={cancelProcess}>
+              <Square className="h-4 w-4 fill-current" />
               Detener
             </Button>
           )
         ) : undefined}
-      />
+        progressIndicator={
+          running && status ? (
+            <SegmentedProgressBar
+              progress={status.progress}
+              completed={progressCompleted}
+              total={Math.max(progressTotal, 1)}
+            />
+          ) : undefined
+        }
+        />
+      </div>
 
       {!isEmpty && (
         <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 xl:grid-cols-12">
@@ -597,7 +589,7 @@ export default function ConversionView() {
                 </div>
               </div>
 
-              <div className="flex-1 overflow-hidden p-4">
+              <div className="min-h-0 flex-1 overflow-hidden p-4">
                 <FileGrid
                   files={files}
                   selectedFiles={selectedFiles}
@@ -609,7 +601,7 @@ export default function ConversionView() {
                 />
               </div>
 
-              <div className="shrink-0 flex items-center justify-between border-t border-[var(--border-subtle)] px-5 py-2.5 bg-[var(--bg-elevated)]/30">
+              <div className="shrink-0 flex items-center justify-between border-t border-[var(--border-subtle)] px-5 py-2 bg-[var(--bg-elevated)]/30">
                 <div className="flex items-center gap-4">
                   <div className="flex items-center gap-1.5 text-[11px] text-[var(--text-muted)]">
                     <Image className="h-3 w-3" />
@@ -715,8 +707,6 @@ export default function ConversionView() {
               hasVideos={videoFiles.size > 0}
               keyColumn={keyColumn}
               onKeyColumnChange={(col) => { setKeyColumn(col); if (col) setUsarRename(true); }}
-              onLoadRenameExcel={loadRenameExcel}
-              onGenerateTemplate={generateDatabaseTemplate}
               onMappingIdColumnChange={(col) => {
                 setMappingIdColumn(col);
                 reloadMappingWithColumns(col, mappingRenameColumn);
@@ -725,6 +715,8 @@ export default function ConversionView() {
                 setMappingRenameColumn(col);
                 reloadMappingWithColumns(mappingIdColumn, col);
               }}
+              wordSeparator={wordSeparator}
+              onWordSeparatorChange={setWordSeparator}
             />
           </div>
         </div>

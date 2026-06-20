@@ -47,11 +47,17 @@ function FileGridCell({ rowIndex, columnIndex, style, files, columnCount, select
 
 export default function FileGrid({ files, selectedFiles, selectedFile, onFileClick, onFileDoubleClick, onRemoveFile, videoFiles = new Set() }: FileGridProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [dimensions, setDimensions] = React.useState({ width: 800, height: 500 });
+  const [dimensions, setDimensions] = React.useState<{ width: number; height: number } | null>(null);
 
-  React.useEffect(() => {
+  // useLayoutEffect runs before the browser paints, so we can measure
+  // the container synchronously and avoid a flash of incorrect layout.
+  React.useLayoutEffect(() => {
     const el = containerRef.current;
     if (!el) return;
+    const rect = el.getBoundingClientRect();
+    if (rect.width > 0 && rect.height > 0) {
+      setDimensions({ width: Math.floor(rect.width), height: Math.floor(rect.height) });
+    }
     const observer = new ResizeObserver((entries) => {
       const { width, height } = entries[0].contentRect;
       setDimensions({ width: Math.floor(width), height: Math.floor(height) });
@@ -60,7 +66,7 @@ export default function FileGrid({ files, selectedFiles, selectedFile, onFileCli
     return () => observer.disconnect();
   }, []);
 
-  const columnCount = Math.max(1, Math.floor(dimensions.width / COL_WIDTH));
+  const columnCount = dimensions ? Math.max(1, Math.floor(dimensions.width / COL_WIDTH)) : 1;
   const rowCount = Math.ceil(files.length / columnCount);
 
   const cellProps = useMemo<CellData>(() => ({
@@ -69,7 +75,7 @@ export default function FileGrid({ files, selectedFiles, selectedFile, onFileCli
 
   return (
     <div ref={containerRef} className="h-full w-full">
-      {files.length > 0 && (
+      {files.length > 0 && dimensions && (
         <Grid
           columnCount={columnCount}
           columnWidth={COL_WIDTH}

@@ -187,3 +187,41 @@ class TestRenamerEngine:
 
         assert engine.patron == "img_{seq}{ext}"
         assert engine.aplicar(archivo) == "img_001.jpg"
+
+    def test_sep_placeholder_usa_separador_configurado(self, monkeypatch, tmp_path) -> None:
+        """{sep} se sustituye por el separador configurado (por defecto _)."""
+        monkeypatch.setattr(
+            "backend.core.renamer.get_field_names",
+            lambda: ["sgio", "nombre"],
+        )
+
+        engine = RenamerEngine("{sgio}{sep}{nombre}{ext}", secuencia_inicial=1, separador="_")
+        archivo = tmp_path / "1.jpg"
+        archivo.write_text("dummy")
+
+        resultado = engine.aplicar(
+            archivo,
+            codigo_manual="1",
+            datos_bd={"sgio": "454654001", "nombre": "producto"},
+        )
+
+        assert resultado == "454654001_producto.jpg"
+
+    def test_sep_placeholder_guion_medio(self, monkeypatch, tmp_path) -> None:
+        """{sep} respeta un separador distinto al predeterminado."""
+        monkeypatch.setattr(
+            "backend.core.renamer.get_field_names",
+            lambda: ["codigo", "nombre"],
+        )
+
+        engine = RenamerEngine("{codigo}{sep}{nombre}{ext}", secuencia_inicial=1, separador="-")
+        archivo = tmp_path / "1.jpg"
+        archivo.write_text("dummy")
+
+        resultado = engine.aplicar(
+            archivo,
+            codigo_manual="A",
+            datos_bd={"codigo": "A", "nombre": "foto"},
+        )
+
+        assert resultado == "A-foto.jpg"

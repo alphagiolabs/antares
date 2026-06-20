@@ -1,41 +1,49 @@
 import { useState, useEffect, useCallback, type ReactNode } from 'react';
 import Button from '../ui/Button';
 import { api } from '../../api';
-import { Folder, Images, Plus, RotateCcw, UploadCloud, FileImage, Film, Database, FileSpreadsheet } from 'lucide-react';
+import { Folder, Plus, RotateCcw, UploadCloud, FileImage, Film, Database } from 'lucide-react';
 
 interface DropzoneProps {
   dragOver: boolean;
   onAddFiles: () => void;
-  onAddFolder: () => void;
+  onAddFolderPaths: (paths: string[]) => void;
   onImportDatabase?: (excelPath: string) => void;
-  onGenerateTemplate?: () => void;
   fileCount?: number;
   onClear?: () => void;
   videoCount?: number;
   onPasteFiles?: (files: string[]) => void;
   centerControls?: ReactNode;
   conversionAction?: ReactNode;
+  progressIndicator?: ReactNode;
 }
 
 export default function Dropzone({
   dragOver,
   onAddFiles,
-  onAddFolder,
+  onAddFolderPaths,
   onImportDatabase,
-  onGenerateTemplate,
   fileCount = 0,
   onClear,
   videoCount = 0,
   onPasteFiles,
   centerControls,
   conversionAction,
+  progressIndicator,
 }: DropzoneProps) {
   const totalCount = fileCount + videoCount;
-  const imageCount = fileCount;
   const [pasting, setPasting] = useState(false);
 
   const SUPPORTED_IMAGE_FORMATS = ['JPG', 'JPEG', 'PNG', 'WEBP', 'TIFF', 'BMP', 'GIF', 'ICO', 'PDF'];
   const SUPPORTED_VIDEO_FORMATS = ['MP4', 'AVI', 'MOV', 'MKV', 'WMV', 'FLV', 'WEBM', 'M4V', '3GP', 'MPG', 'MPEG'];
+
+  const openFolderPicker = async () => {
+    try {
+      const r = await api.dialogFolder();
+      if (r.paths.length > 0) onAddFolderPaths(r.paths);
+    } catch (err) {
+      console.error('[Dropzone] Error al seleccionar carpeta:', err);
+    }
+  };
 
   const handlePaste = useCallback((e: ClipboardEvent) => {
     if (!onPasteFiles) return;
@@ -46,8 +54,7 @@ export default function Dropzone({
       if (item.kind === 'file') {
         const file = item.getAsFile();
         if (file) {
-          // Try to get path from Electron, fallback to name
-          const path = (file as any).path || file.name;
+          const path = window.electronAPI?.getPathForFile(file) ?? '';
           if (path) files.push(path);
         }
       }
@@ -66,94 +73,64 @@ export default function Dropzone({
   }, [handlePaste, onPasteFiles]);
 
   if (totalCount > 0) {
-    const secondaryActions = (
-      <>
-        <Button variant="ghost" size="sm" onClick={onAddFiles}>
-          <Plus className="h-3.5 w-3.5" />
-          Agregar
-        </Button>
-        <Button variant="ghost" size="sm" onClick={onAddFolder}>
-          <Folder className="w-3.5 h-3.5" />
-          Carpeta
-        </Button>
-        {onImportDatabase && (
-          <Button variant="ghost" size="sm" onClick={async () => {
-            const r = await api.dialogFiles();
-            const path = r?.paths?.[0];
-            if (path) onImportDatabase(path);
-          }}>
-            <Database className="h-3.5 w-3.5" />
-            <span className="hidden lg:inline">Base de datos</span>
-            <span className="lg:hidden">BD</span>
-          </Button>
-        )}
-        {onGenerateTemplate && (
-          <Button variant="ghost" size="sm" onClick={onGenerateTemplate}>
-            <FileSpreadsheet className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Plantilla BD</span>
-            <span className="sm:hidden">Plantilla</span>
-          </Button>
-        )}
-        <div className="mx-1 hidden h-4 w-px bg-[var(--border-medium)] sm:block" />
-        <Button variant="ghost" size="sm" onClick={onClear} className="text-[var(--accent-red)] hover:text-[var(--accent-red)]">
-          <RotateCcw className="h-3.5 w-3.5" />
-          Limpiar
-        </Button>
-      </>
-    );
+    const toolbarSeparator = 'mx-1 w-px shrink-0 self-center h-7 bg-[var(--border-subtle)]';
 
     return (
       <div
-        className={`rounded-2xl border transition-all duration-300 ${
+        className={`rounded-2xl border transition-colors duration-300 ${
           dragOver
-            ? 'border-[var(--accent-primary)] bg-[var(--accent-primary)]/10 shadow-[0_0_24px_var(--accent-primary-glow)] scale-[1.01]'
+            ? 'border-[var(--accent-primary)] bg-[var(--accent-primary)]/10 shadow-[0_0_24px_var(--accent-primary-glow)]'
             : pasting
             ? 'border-[var(--accent-green)] bg-[var(--accent-green)]/10'
             : 'bg-[var(--bg-surface)] border-[var(--border-subtle)]'
         }`}
       >
-        {/* Row 1: status + primary controls + conversion action */}
         <div
           data-testid="dropzone-loaded-row"
-          className="flex w-full items-center gap-3 px-4 py-2.5"
+          className="flex w-full items-center gap-2 px-5 py-2.5"
         >
-          <div className="flex shrink-0 items-center gap-3">
-            <div className={`flex h-9 w-9 items-center justify-center rounded-xl transition-all duration-300 ${
-              dragOver ? 'scale-110 bg-[var(--accent-primary)]/20 text-[var(--accent-primary)]' : 'bg-[var(--bg-elevated)] text-[var(--text-secondary)]'
-            }`}>
-              <Images className="h-4.5 w-4.5" />
-            </div>
-            <div className="flex flex-col">
-              <span className="text-sm font-semibold text-[var(--text-primary)]">
-                {imageCount} imagen{imageCount !== 1 ? 'es' : ''}
-                {videoCount > 0 && ` + ${videoCount} video${videoCount !== 1 ? 's' : ''}`}
-              </span>
-              <span className="text-[11px] text-[var(--text-muted)]">
-                {dragOver ? 'Suelta para agregar' : pasting ? 'Pegando archivos...' : 'Listo para convertir'}
-              </span>
-            </div>
-          </div>
-
-          <div className="mx-1 h-5 w-px shrink-0 bg-[var(--border-subtle)]" />
-
-          {centerControls && (
-            <div className="flex shrink-0 items-center">
-              {centerControls}
-            </div>
-          )}
-
-          <div className="ml-auto flex shrink-0 items-center">
-            {conversionAction}
-          </div>
-        </div>
-
-        {/* Row 2: secondary actions */}
-        <div className="flex w-full items-center gap-1 border-t border-[var(--border-subtle)] px-4 py-1.5">
           <div
             data-testid="dropzone-secondary-actions"
-            className="flex flex-wrap items-center gap-1"
+            className="flex shrink-0 items-center gap-1"
           >
-            {secondaryActions}
+            <Button variant="ghost" size="sm" onClick={onAddFiles}>
+              <Plus className="h-3.5 w-3.5" />
+              Agregar
+            </Button>
+            {onImportDatabase && (
+              <Button variant="ghost" size="sm" onClick={async () => {
+                const r = await api.dialogFiles();
+                const path = r?.paths?.[0];
+                if (path) onImportDatabase(path);
+              }}>
+                <Database className="h-3.5 w-3.5" />
+                <span className="hidden lg:inline">Base de datos</span>
+                <span className="lg:hidden">BD</span>
+              </Button>
+            )}
+          </div>
+
+          <div className={`${toolbarSeparator} hidden sm:block`} />
+
+          <div className="flex shrink-0 items-center">
+            <Button variant="ghost" size="sm" onClick={onClear} className="text-[var(--accent-red)] hover:text-[var(--accent-red)]">
+              <RotateCcw className="h-3.5 w-3.5" />
+              Limpiar
+            </Button>
+          </div>
+
+          {centerControls && (
+            <>
+              <div className={toolbarSeparator} />
+              <div className="flex min-w-0 flex-1 items-center justify-center">
+                {centerControls}
+              </div>
+            </>
+          )}
+
+          <div className="ml-auto flex min-w-0 shrink-0 items-center gap-3">
+            {progressIndicator}
+            {conversionAction}
           </div>
         </div>
       </div>
@@ -161,60 +138,62 @@ export default function Dropzone({
   }
 
   return (
-    <div
-      className={`flex min-h-[280px] flex-col items-center justify-center rounded-2xl border-2 border-dashed px-6 py-10 text-center transition-all duration-500 ${
-        dragOver
-          ? 'border-[var(--accent-primary)] bg-[var(--accent-primary)]/5 shadow-[0_0_40px_var(--accent-primary-glow)] scale-[1.02]'
-          : pasting
-          ? 'border-[var(--accent-green)] bg-[var(--accent-green)]/5'
-          : 'border-[var(--border-medium)] bg-[var(--bg-surface)] hover:border-[var(--border-medium)] hover:bg-[var(--bg-elevated)]/30'
-      }`}
-    >
-      <div className="mb-6">
-        <div className={`mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)] shadow-sm transition-transform duration-500 ${dragOver ? 'scale-110' : ''}`}>
-          <UploadCloud className={`h-7 w-7 transition-colors duration-300 ${dragOver ? 'text-[var(--accent-primary)]' : 'text-[var(--text-muted)]'}`} />
-        </div>
-        <h3 className="mb-2 text-xl font-semibold text-[var(--text-primary)]">
-          {dragOver ? 'Suelta los archivos aquí' : pasting ? 'Pegando archivos...' : 'Arrastra imágenes o videos aquí'}
-        </h3>
-        <p className="mx-auto max-w-sm text-xs leading-relaxed text-[var(--text-muted)] mb-4">
-          También puedes usar Ctrl+V para pegar desde el portapapeles
-        </p>
-
-        <div className="flex flex-wrap items-center justify-center gap-1.5 mb-5 max-w-md">
-          <div className="flex items-center gap-1 text-[10px] text-[var(--text-muted)] mr-1">
-            <FileImage className="h-3 w-3" />
-            <span>Imágenes:</span>
+    <div className="flex min-h-0 w-full flex-1 items-center justify-center p-4">
+      <div
+        className={`flex aspect-square w-[min(380px,calc(100vw-2rem))] max-h-[min(380px,calc(100vh-12rem))] flex-col items-center justify-center rounded-2xl border-2 border-dashed px-4 py-5 text-center transition-all duration-500 ${
+          dragOver
+            ? 'border-[var(--accent-primary)] bg-[var(--accent-primary)]/5 shadow-[0_0_40px_var(--accent-primary-glow)] scale-[1.02]'
+            : pasting
+            ? 'border-[var(--accent-green)] bg-[var(--accent-green)]/5'
+            : 'border-[var(--border-medium)] bg-[var(--bg-surface)] hover:border-[var(--border-medium)] hover:bg-[var(--bg-elevated)]/30'
+        }`}
+      >
+        <div className="mb-3 w-full min-w-0 px-1">
+          <div className={`mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)] shadow-sm transition-transform duration-500 ${dragOver ? 'scale-110' : ''}`}>
+            <UploadCloud className={`h-6 w-6 transition-colors duration-300 ${dragOver ? 'text-[var(--accent-primary)]' : 'text-[var(--text-muted)]'}`} />
           </div>
-          {SUPPORTED_IMAGE_FORMATS.map((fmt) => (
-            <span key={fmt} className="px-1.5 py-0.5 rounded-md bg-[var(--bg-elevated)] text-[var(--text-secondary)] text-[10px] font-mono border border-[var(--border-subtle)]">
-              {fmt}
-            </span>
-          ))}
-        </div>
-        <div className="flex flex-wrap items-center justify-center gap-1.5 max-w-md">
-          <div className="flex items-center gap-1 text-[10px] text-[var(--text-muted)] mr-1">
-            <Film className="h-3 w-3" />
-            <span>Videos:</span>
-          </div>
-          {SUPPORTED_VIDEO_FORMATS.slice(0, 6).map((fmt) => (
-            <span key={fmt} className="px-1.5 py-0.5 rounded-md bg-[var(--bg-elevated)] text-[var(--text-secondary)] text-[10px] font-mono border border-[var(--border-subtle)]">
-              {fmt}
-            </span>
-          ))}
-          <span className="text-[10px] text-[var(--text-muted)]">+{SUPPORTED_VIDEO_FORMATS.length - 6} más</span>
-        </div>
-      </div>
+          <h3 className="mb-1.5 text-base font-semibold leading-snug text-[var(--text-primary)]">
+            {dragOver ? 'Suelta los archivos aquí' : pasting ? 'Pegando archivos...' : 'Arrastra imágenes o videos aquí'}
+          </h3>
+          <p className="mx-auto mb-3 max-w-[260px] text-[11px] leading-relaxed text-[var(--text-muted)]">
+            También puedes usar Ctrl+V para pegar desde el portapapeles
+          </p>
 
-      <div className="flex items-center gap-3">
-        <Button variant="secondary" size="sm" onClick={onAddFiles}>
-          <Plus className="h-3.5 w-3.5" />
-          Seleccionar archivos
-        </Button>
-        <Button variant="secondary" size="sm" onClick={onAddFolder}>
-          <Folder className="h-3.5 w-3.5" />
-          Escanear carpeta
-        </Button>
+          <div className="mb-2.5 flex flex-wrap items-center justify-center gap-1">
+            <div className="mr-0.5 flex items-center gap-1 text-[9px] text-[var(--text-muted)]">
+              <FileImage className="h-2.5 w-2.5" />
+              <span>Imágenes:</span>
+            </div>
+            {SUPPORTED_IMAGE_FORMATS.map((fmt) => (
+              <span key={fmt} className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-elevated)] px-1 py-0.5 font-mono text-[9px] text-[var(--text-secondary)]">
+                {fmt}
+              </span>
+            ))}
+          </div>
+          <div className="flex flex-wrap items-center justify-center gap-1">
+            <div className="mr-0.5 flex items-center gap-1 text-[9px] text-[var(--text-muted)]">
+              <Film className="h-2.5 w-2.5" />
+              <span>Videos:</span>
+            </div>
+            {SUPPORTED_VIDEO_FORMATS.slice(0, 6).map((fmt) => (
+              <span key={fmt} className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-elevated)] px-1 py-0.5 font-mono text-[9px] text-[var(--text-secondary)]">
+                {fmt}
+              </span>
+            ))}
+            <span className="text-[9px] text-[var(--text-muted)]">+{SUPPORTED_VIDEO_FORMATS.length - 6} más</span>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-center gap-2">
+          <Button variant="secondary" size="sm" onClick={onAddFiles}>
+            <Plus className="h-3.5 w-3.5" />
+            Seleccionar archivos
+          </Button>
+          <Button variant="secondary" size="sm" onClick={openFolderPicker}>
+            <Folder className="h-3.5 w-3.5" />
+            Subir carpeta
+          </Button>
+        </div>
       </div>
     </div>
   );

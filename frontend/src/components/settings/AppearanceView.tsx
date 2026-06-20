@@ -319,7 +319,7 @@ function toStoredBool(value?: string, fallback = false) {
 
 function SettingRow({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
-    <div className="grid min-h-[40px] grid-cols-[minmax(0,1fr)_minmax(120px,190px)] items-center gap-4 border-t border-[var(--border-subtle)] px-4 py-2.5 first:border-t-0 sm:grid-cols-[minmax(0,1fr)_136px]">
+    <div className="grid min-h-[40px] grid-cols-[minmax(0,1fr)_minmax(120px,190px)] items-center gap-4 border-t border-[var(--border-subtle)] px-4 py-2.5 first:border-t-0 sm:grid-cols-[minmax(0,1fr)_160px]">
       <div className="min-w-0">
         <div className="text-[12px] font-semibold leading-4 text-[var(--text-primary)]">{label}</div>
         {hint && <div className="mt-0.5 text-[11px] leading-4 text-[var(--text-secondary)]">{hint}</div>}
@@ -557,10 +557,8 @@ export default function AppearanceView() {
   }
 
   return (
-    <div data-testid="appearance-view" className="h-full min-h-0 w-full overflow-auto bg-[var(--bg-base)] px-5 py-4 text-[var(--text-primary)] animate-fade-in">
-      <div data-testid="appearance-workspace" className="mx-auto min-h-0 w-full max-w-[760px]">
-        <h1 className="mb-9 text-[19px] font-semibold tracking-normal text-[var(--text-primary)]">Aspecto</h1>
-
+    <div data-testid="appearance-view" className="h-full min-h-0 w-full overflow-auto bg-[var(--bg-base)] px-6 py-5 text-[var(--text-primary)] animate-fade-in">
+      <div data-testid="appearance-workspace" className="mx-auto min-h-0 w-full max-w-[880px]">
         <section className="overflow-visible rounded-lg border border-[var(--border-medium)] bg-[var(--bg-surface)]">
           <div className="flex flex-col gap-3 border-b border-[var(--border-subtle)] px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -676,7 +674,7 @@ export default function AppearanceView() {
               const value = visibleTheme[item.key] || '#000000';
               return (
                 <SettingRow key={item.key} label={item.label}>
-                  <label className="flex h-7 w-full max-w-[136px] items-center gap-2 rounded-lg border border-[var(--border-medium)] bg-[var(--bg-base)] px-2">
+                  <label className="flex h-7 w-full max-w-[160px] items-center gap-2 rounded-lg border border-[var(--border-medium)] bg-[var(--bg-base)] px-2">
                     <input
                       aria-label={item.label}
                       type="color"

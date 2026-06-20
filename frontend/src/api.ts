@@ -23,6 +23,7 @@ declare global {
       autoUpdateCheck: () => Promise<{ success: boolean; reason?: string }>;
       autoUpdateInstall: () => Promise<{ success: boolean; reason?: string }>;
       onAutoUpdateStatus: (callback: (data: { status: string; version: string | null; progress: number; message?: string }) => void) => () => void;
+      getPathForFile: (file: File) => string;
     };
   }
 }
@@ -37,7 +38,6 @@ const LONG_RUNNING_METHODS = new Set([
   'db_import',
   'db_export',
   'db_clear',
-  'scan_folder',
   'preview_image',
   'formatos_generate',
   'sellador_apply',
@@ -148,6 +148,7 @@ export interface ProcessBody {
   mapping_path?: string;
   id_column?: string;
   rename_column?: string;
+  word_separator?: string;
 }
 
 export interface PreviewBody {
@@ -155,6 +156,7 @@ export interface PreviewBody {
   patron: string;
   secuencia: number;
   use_filename_seq: boolean;
+  word_separator?: string;
   key_column?: string;
   mapping?: Record<string, string>;
   mapping_path?: string;
@@ -167,6 +169,12 @@ export interface PreviewImageBody {
   formato: string;
   calidad: number;
   resize?: number[] | null;
+}
+
+export interface DbDetectKeyColumnResult {
+  key_column: string;
+  matches: number;
+  columns: Array<{ name: string; matches: number }>;
 }
 
 export interface TechnicalReportsListBody {
@@ -208,8 +216,8 @@ export const api = {
   formats: () => _invoke<{ formats: string[] }>('formats'),
 
   dialogFiles: () => _invoke<{ paths: string[] }>('dialog_files'),
-  dialogFolder: () => _invoke<{ paths: string[] }>('dialog_folder'),
   dialogDest: () => _invoke<{ paths: string[] }>('dialog_dest'),
+  dialogFolder: () => _invoke<{ paths: string[] }>('dialog_folder'),
   dialogSave: (params?: { title?: string; defaultPath?: string; filters?: Array<{ name: string; extensions: string[] }> }) => _invoke<{ paths: string[] }>('dialog_save', params),
 
   startProcess: (body: ProcessBody) => _invoke<{ started: boolean }>('process_start', body),
@@ -222,12 +230,13 @@ export const api = {
 
   isVideo: (path: string) => _invoke<{ is_video: boolean }>('is_video', { path }),
 
+  dbDetectKeyColumn: (files: string[]) => _invoke<DbDetectKeyColumnResult>('db_detect_key_column', { files }),
+
   getRecords: () => _invoke<{ records: DBRecord[]; fields: string[] }>('db_records'),
   importExcel: (path: string) => _invoke<{ imported: number }>('db_import', { path }),
   exportExcel: (path: string) => _invoke<{ exported: number }>('db_export', { path }),
   generateTemplate: (path: string) => _invoke<{ path: string }>('db_template', { path }),
   clearDatabase: () => _invoke<{ cleared: number }>('db_clear'),
-  scanFolder: (folder: string) => _invoke<{ files: string[] }>('scan_folder', { folder }),
 
   getFields: () => _invoke<{ fields: DBField[] }>('db_fields'),
   updateFields: (fields: DBField[]) => _invoke<{ fields: DBField[] }>('db_fields_update', { fields }),

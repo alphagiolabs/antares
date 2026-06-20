@@ -227,6 +227,223 @@
   .mc-chip-active {
     @apply inline-flex items-center px-5 py-2 rounded-pill bg-[var(--accent-orange)] text-[var(--text-on-accent)] text-sm font-medium border border-[var(--accent-orange)] transition-all duration-200;
   }
+
+  .app-date-picker {
+    position: relative;
+    width: 100%;
+  }
+
+  .app-date-picker-label {
+    display: block;
+    margin-bottom: 0.25rem;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-muted);
+  }
+
+  .app-date-picker-trigger {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    gap: 0.5rem;
+    border: 1px solid var(--border-subtle);
+    border-radius: 0.5rem;
+    background: var(--bg-elevated);
+    color: var(--text-primary);
+    cursor: pointer;
+    font-family: inherit;
+    outline: none;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+  }
+
+  .app-date-picker-trigger:hover:not(:disabled) {
+    border-color: var(--border-medium);
+  }
+
+  .app-date-picker-trigger:focus-visible,
+  .app-date-picker-trigger.is-open {
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 0 3px var(--accent-primary-glow);
+  }
+
+  .app-date-picker-trigger:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+
+  .app-date-picker-trigger-sm {
+    padding: 0.25rem 0.5rem;
+    font-size: 11px;
+  }
+
+  .app-date-picker-trigger-md {
+    padding: 0.375rem 0.625rem;
+    font-size: 12px;
+  }
+
+  .app-date-picker-trigger-icon {
+    flex-shrink: 0;
+    color: var(--text-muted);
+  }
+
+  .app-date-picker-trigger-value {
+    flex: 1;
+    min-width: 0;
+    text-align: left;
+    font-weight: 500;
+  }
+
+  .app-date-picker-trigger-value.is-placeholder {
+    color: var(--text-muted);
+    font-weight: 450;
+  }
+
+  .app-date-picker-popup {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    z-index: 60;
+    width: min(100%, 292px);
+    padding: 14px;
+    border: 1px solid var(--border-subtle);
+    border-radius: 14px;
+    background: var(--bg-surface);
+    color: var(--text-primary);
+    box-shadow:
+      0 18px 40px color-mix(in srgb, var(--bg-base) 55%, transparent),
+      0 0 0 1px color-mix(in srgb, var(--border-medium) 35%, transparent);
+    animation: scaleIn 0.18s var(--ease-smooth) forwards;
+  }
+
+  .app-date-picker-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    margin-bottom: 12px;
+  }
+
+  .app-date-picker-month {
+    flex: 1;
+    text-align: center;
+    font-size: 0.88rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    letter-spacing: -0.01em;
+  }
+
+  .app-date-picker-nav {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    border: 1px solid var(--border-subtle);
+    border-radius: 999px;
+    background: var(--bg-elevated);
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 0;
+    transition: all 0.2s ease;
+  }
+
+  .app-date-picker-nav:hover {
+    border-color: var(--accent-primary);
+    color: var(--accent-primary);
+    background: color-mix(in srgb, var(--accent-primary) 10%, var(--bg-elevated));
+  }
+
+  .app-date-picker-weekdays,
+  .app-date-picker-days {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 2px;
+  }
+
+  .app-date-picker-weekdays {
+    margin-bottom: 6px;
+  }
+
+  .app-date-picker-weekday {
+    padding: 4px 0;
+    text-align: center;
+    font-size: 0.62rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+  }
+
+  .app-date-picker-day {
+    aspect-ratio: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--text-primary);
+    font-size: 0.8rem;
+    font-weight: 500;
+    cursor: pointer;
+    padding: 0;
+    font-family: inherit;
+    transition: all 0.15s ease;
+  }
+
+  .app-date-picker-day.is-outside {
+    color: var(--text-muted);
+    opacity: 0.55;
+  }
+
+  .app-date-picker-day:hover:not(.is-selected) {
+    background: var(--bg-elevated);
+    border-color: var(--border-subtle);
+  }
+
+  .app-date-picker-day.is-today:not(.is-selected) {
+    border-color: color-mix(in srgb, var(--accent-primary) 55%, transparent);
+    color: var(--accent-primary);
+    font-weight: 700;
+  }
+
+  .app-date-picker-day.is-selected {
+    background: var(--accent-primary);
+    border-color: var(--accent-primary);
+    color: var(--text-on-accent);
+    font-weight: 700;
+    box-shadow: 0 6px 16px color-mix(in srgb, var(--accent-primary) 35%, transparent);
+  }
+
+  .app-date-picker-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border-subtle);
+  }
+
+  .app-date-picker-action {
+    border: none;
+    background: transparent;
+    color: var(--accent-primary);
+    font-size: 0.78rem;
+    font-weight: 600;
+    cursor: pointer;
+    padding: 4px 6px;
+    border-radius: 6px;
+    font-family: inherit;
+    transition: background-color 0.2s ease, color 0.2s ease;
+  }
+
+  .app-date-picker-action:hover {
+    background: color-mix(in srgb, var(--accent-primary) 12%, transparent);
+  }
+
+  .app-date-picker-action.is-primary {
+    margin-left: auto;
+  }
 }
 
 @layer utilities {
@@ -304,6 +521,194 @@
 
 .animate-pulse {
   animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* ─── Login Screen: S-Tier animations (transform + opacity only) ─── */
+/* Performance: all keyframes use compositor-only props per Motion.dev tier list */
+
+/* Conic orb rotation — S-Tier (transform rotate only, no blur) */
+@keyframes lg-orb-spin {
+  0% { transform: translate(-50%, -50%) rotate(0deg) scale(1.4); }
+  100% { transform: translate(-50%, -50%) rotate(360deg) scale(1.4); }
+}
+.lg-orb {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 120vmin;
+  height: 120vmin;
+  border-radius: 50%;
+  will-change: transform;
+  animation: lg-orb-spin 40s linear infinite;
+  pointer-events: none;
+  opacity: 0.6;
+}
+
+/* Sparkle twinkle — S-Tier (opacity + scale only) */
+@keyframes lg-sparkle-twinkle {
+  0%, 100% { opacity: 0; transform: scale(0.5); }
+  50% { opacity: 0.7; transform: scale(1); }
+}
+.lg-sparkle {
+  border-radius: 50%;
+  background: var(--accent-primary);
+  will-change: transform, opacity;
+  animation: lg-sparkle-twinkle ease-in-out infinite;
+}
+
+/* Card entrance — S-Tier (translateY + scale + opacity) */
+@keyframes lg-card-in {
+  0% { opacity: 0; transform: translateY(24px) scale(0.96); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+.lg-card-enter { animation: lg-card-in 0.7s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+/* Error shake — S-Tier (translateX only) */
+@keyframes lg-shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-6px); }
+  40% { transform: translateX(6px); }
+  60% { transform: translateX(-4px); }
+  80% { transform: translateX(4px); }
+}
+.lg-shake { animation: lg-shake 0.4s ease-in-out; }
+
+/* Logo pulse glow — S-Tier (scale + opacity) */
+@keyframes lg-logo-pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.05); opacity: 0.9; }
+}
+.lg-logo-glow {
+  will-change: transform, opacity;
+  animation: lg-logo-pulse 3s ease-in-out infinite;
+  box-shadow: 0 4px 24px color-mix(in srgb, var(--accent-primary) 30%, transparent);
+}
+
+/* Input focus — transition is cheap (border-color only) */
+.lg-input { transition: border-color 0.3s, box-shadow 0.3s; }
+.lg-input:focus {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-primary) 18%, transparent);
+}
+
+/* Button hover — S-Tier (translateY) + cheap box-shadow transition */
+.lg-btn { transition: transform 0.2s, box-shadow 0.3s, background-color 0.2s; }
+.lg-btn:hover:not(:disabled) {
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--accent-primary) 30%, transparent);
+}
+
+/* Aurora blobs — drift via transform only */
+@keyframes lg-aurora-drift {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(8%, -6%) scale(1.08); }
+  66% { transform: translate(-5%, 4%) scale(0.96); }
+}
+.lg-aurora-blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(60px);
+  will-change: transform;
+  pointer-events: none;
+  animation: lg-aurora-drift 28s ease-in-out infinite;
+}
+.lg-aurora-blob--indigo {
+  width: 55%;
+  height: 55%;
+  top: 10%;
+  left: 5%;
+  background: color-mix(in srgb, #5E6AD2 30%, transparent);
+}
+.lg-aurora-blob--teal {
+  width: 45%;
+  height: 50%;
+  bottom: 15%;
+  right: 10%;
+  background: color-mix(in srgb, #22C7A9 30%, transparent);
+  animation-delay: -9s;
+  animation-duration: 32s;
+}
+.lg-aurora-blob--magenta {
+  width: 40%;
+  height: 40%;
+  top: 40%;
+  left: 35%;
+  background: color-mix(in srgb, #B026FF 30%, transparent);
+  animation-delay: -18s;
+  animation-duration: 24s;
+}
+
+/* Shimmer title */
+@keyframes lg-shimmer {
+  0% { background-position: 200% center; }
+  100% { background-position: -200% center; }
+}
+.lg-shimmer-text {
+  background: linear-gradient(
+    90deg,
+    var(--text-primary) 0%,
+    var(--accent-primary-hover) 50%,
+    var(--text-primary) 100%
+  );
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: lg-shimmer 6s linear infinite;
+}
+
+/* Interactive spotlight on form panel */
+.lg-spotlight {
+  background: radial-gradient(
+    300px circle at calc(var(--mx, 0.5) * 100%) calc(var(--my, 0.5) * 100%),
+    color-mix(in srgb, var(--accent-primary) 8%, transparent),
+    transparent 70%
+  );
+}
+
+/* 3D form card depth layers */
+.lg-form-card {
+  transform-style: preserve-3d;
+  perspective: 1000px;
+}
+.lg-depth-logo { transform: translateZ(30px); }
+.lg-depth-input { transform: translateZ(15px); }
+
+/* Magnetic submit button ripple */
+.lg-btn-ripple {
+  position: absolute;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--text-on-accent) 35%, transparent);
+  transform: scale(0);
+  animation: lg-ripple 0.6s ease-out forwards;
+  pointer-events: none;
+}
+@keyframes lg-ripple {
+  to { transform: scale(4); opacity: 0; }
+}
+
+/* Stagger entrance for form children (via inline animation-delay) */
+.lg-depth-logo, .lg-depth-input {
+  animation: lg-card-in 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Reduced motion — disable all animations */
+@media (prefers-reduced-motion: reduce) {
+  .lg-orb,
+  .lg-sparkle,
+  .lg-card-enter,
+  .lg-shake,
+  .lg-logo-glow,
+  .lg-aurora-blob,
+  .lg-shimmer-text,
+  .lg-depth-logo,
+  .lg-depth-input { animation: none !important; }
+  .lg-card-enter { opacity: 1; transform: none; }
+  .lg-orb { opacity: 0.3; }
+  .lg-shimmer-text {
+    background: none;
+    color: var(--text-primary);
+    -webkit-background-clip: unset;
+    background-clip: unset;
+  }
 }
 
 

@@ -7,7 +7,7 @@ import {
 import { api } from '../../api';
 import { useToast } from '../../hooks/useToast';
 import PreviewPanel, { renderPreviewHtml } from './PreviewPanel';
-import { REPORT_FIELDS, TEMPLATE_HEADERS } from './constants';
+import { REPORT_FIELDS } from './constants';
 import {
   excelSerialToDate, isDateColumn,
   validateTemplateStructure, matchesRecordId, naturalSortByName,
@@ -117,6 +117,46 @@ function Step({ number, title, icon, children, disabled }: StepProps) {
         <span className="text-[var(--text-secondary)]">{icon}</span>
       </div>
       <div className="pl-7">{children}</div>
+    </div>
+  );
+}
+
+interface SegmentedOption<T extends string> {
+  value: T;
+  label: string;
+}
+
+function SegmentedControl<T extends string>({
+  value,
+  onChange,
+  options,
+  'aria-label': ariaLabel,
+}: {
+  value: T;
+  onChange: (next: T) => void;
+  options: SegmentedOption<T>[];
+  'aria-label'?: string;
+}) {
+  return (
+    <div role="group" aria-label={ariaLabel} className="flex gap-1 rounded-lg bg-[var(--bg-input)] p-1">
+      {options.map((option) => {
+        const active = value === option.value;
+        return (
+          <button
+            key={option.value}
+            type="button"
+            onClick={() => onChange(option.value)}
+            aria-pressed={active}
+            className={`flex-1 rounded-md px-2.5 py-2 text-[11px] font-medium transition-all duration-150 ${
+              active
+                ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-sm ring-1 ring-[var(--border-medium)]'
+                : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+            }`}
+          >
+            {option.label}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -416,22 +456,6 @@ export default function PreviewPanelView() {
     return () => window.removeEventListener('keydown', handler);
   }, [isFocusMode, canPrevRow, canNextRow, selectedIndex]);
 
-  // ─── Download template Excel ───
-  const handleDownloadTemplate = async () => {
-    const XLSX = await import('xlsx');
-    const ws = XLSX.utils.aoa_to_sheet([TEMPLATE_HEADERS]);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Plantilla');
-    const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-    const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'Plantilla_Importacion.xlsx';
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
   const handlePrint = () => {
     const iframe = panelRef.current;
     if (iframe?.contentWindow) iframe.contentWindow.print();
@@ -693,9 +717,6 @@ export default function PreviewPanelView() {
             <button onClick={() => setShowColumnModal(true)} className="w-full mt-2 border border-dashed border-[var(--text-secondary)] hover:border-[var(--text-primary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] rounded-lg p-2 text-center hover:bg-[var(--bg-elevated)] transition-all flex items-center justify-center gap-2 text-[11px]">
               <span>+</span> Agregar Columna Personalizada
             </button>
-            <button onClick={handleDownloadTemplate} className="w-full mt-2 border border-dashed border-[var(--border-medium)] hover:border-[var(--text-secondary)] rounded-lg p-2 text-center hover:bg-[var(--bg-elevated)] transition-all flex items-center justify-center gap-2 text-[11px] text-[var(--text-secondary)]">
-              📥 Descargar Plantilla Excel
-            </button>
           </Step>
 
           {/* Step 4: Images */}
@@ -749,7 +770,7 @@ export default function PreviewPanelView() {
               />
             </div>
             <select
-              className="w-full h-8 rounded-lg border border-[var(--border-medium)] bg-white text-black font-bold px-2 text-[12px] outline-none disabled:opacity-50"
+              className="w-full h-8 rounded-lg border border-[var(--border-medium)] bg-[var(--bg-elevated)] text-[var(--text-primary)] font-semibold px-2 text-[12px] outline-none focus:border-[var(--accent-primary)] disabled:opacity-50"
               value={selectedIndex}
               onChange={e => setSelectedIndex(e.target.value)}
               disabled={exportScope === 'all'}
@@ -760,64 +781,55 @@ export default function PreviewPanelView() {
               ))}
             </select>
 
-            <div className="mt-3 rounded-lg border border-[var(--border-medium)] bg-[var(--bg-elevated)] p-2">
-              <div className="mb-2 flex items-center justify-between">
-                <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--text-secondary)]">Exportación</span>
-                <span className="text-[10px] text-[var(--text-muted)]">{exportScope === 'all' ? 'PDF consolidado' : 'PDF'}</span>
-              </div>
-
-              <div className="mb-2 grid grid-cols-2 gap-1">
-                <button
-                  type="button"
-                  onClick={() => setExportScope('single')}
-                  className={`rounded-md px-2 py-1.5 text-[10px] font-semibold transition-colors ${exportScope === 'single' ? 'bg-[var(--accent-primary)] text-[var(--text-on-accent)]' : 'border border-[var(--border-medium)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}
-                >
-                  Solo actual
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setExportScope('all')}
-                  className={`rounded-md px-2 py-1.5 text-[10px] font-semibold transition-colors ${exportScope === 'all' ? 'bg-[var(--accent-primary)] text-[var(--text-on-accent)]' : 'border border-[var(--border-medium)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}
-                >
-                  Todo ({data.length})
-                </button>
-              </div>
-
-              <div className="mb-2">
-                <div className="mb-1 text-[10px] font-medium text-[var(--text-secondary)]">Calidad</div>
-                <div className="grid grid-cols-2 gap-1">
-                  <button
-                    type="button"
-                    onClick={() => setPdfQuality('high')}
-                    className={`rounded-md px-2 py-1.5 text-[10px] font-semibold transition-colors ${pdfQuality === 'high' ? 'bg-green-600 text-white' : 'border border-[var(--border-medium)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}
-                  >
-                    Buena calidad
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setPdfQuality('low')}
-                    className={`rounded-md px-2 py-1.5 text-[10px] font-semibold transition-colors ${pdfQuality === 'low' ? 'bg-amber-600 text-white' : 'border border-[var(--border-medium)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}
-                  >
-                    Baja calidad
-                  </button>
+            <div className="mt-3 space-y-3 border-t border-[var(--border-subtle)] pt-3">
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[10px] font-medium text-[var(--text-muted)]">Alcance</span>
+                  <span className="text-[10px] text-[var(--text-muted)]">
+                    {exportScope === 'all' ? 'PDF consolidado' : 'PDF individual'}
+                  </span>
                 </div>
+                <SegmentedControl
+                  aria-label="Alcance de exportación"
+                  value={exportScope}
+                  onChange={setExportScope}
+                  options={[
+                    { value: 'single', label: 'Solo actual' },
+                    { value: 'all', label: `Todo (${data.length})` },
+                  ]}
+                />
               </div>
 
-              <button
-                onClick={handleDownloadPdf}
-                disabled={(exportScope === 'single' && selectedIndex === '') || data.length === 0 || isPdfLoading}
-                className="mb-2 flex w-full items-center justify-center gap-2 bg-[var(--accent-primary)] hover:bg-[var(--accent-primary-hover)] text-[var(--text-on-accent)] font-semibold p-2.5 rounded-lg disabled:opacity-40 transition-colors text-[12px]"
-              >
-                {isPdfLoading ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
-                {isPdfLoading ? (pdfLoadingMessage || 'Generando PDF...') : exportScope === 'all' ? 'Descargar PDF Consolidado' : 'Descargar PDF'}
-              </button>
-              <button
-                onClick={handlePrint}
-                disabled={selectedIndex === '' || exportScope === 'all'}
-                className="flex w-full items-center justify-center gap-2 border border-[var(--border-medium)] hover:border-[var(--text-secondary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] font-semibold p-2 rounded-lg disabled:opacity-40 transition-colors text-[11px]"
-              >
-                <Printer size={14} /> Imprimir Vista Previa
-              </button>
+              <div className="space-y-1.5">
+                <span className="text-[10px] font-medium text-[var(--text-muted)]">Calidad</span>
+                <SegmentedControl
+                  aria-label="Calidad del PDF"
+                  value={pdfQuality}
+                  onChange={setPdfQuality}
+                  options={[
+                    { value: 'high', label: 'Buena calidad' },
+                    { value: 'low', label: 'Baja calidad' },
+                  ]}
+                />
+              </div>
+
+              <div className="space-y-2 pt-0.5">
+                <button
+                  onClick={handleDownloadPdf}
+                  disabled={(exportScope === 'single' && selectedIndex === '') || data.length === 0 || isPdfLoading}
+                  className="flex w-full items-center justify-center gap-2 rounded-lg bg-[var(--accent-primary)] p-2.5 text-[12px] font-semibold text-[var(--text-on-accent)] shadow-[0_0_0_1px_color-mix(in_srgb,var(--accent-primary)_40%,transparent)] transition-colors hover:bg-[var(--accent-primary-hover)] disabled:opacity-40"
+                >
+                  {isPdfLoading ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
+                  {isPdfLoading ? (pdfLoadingMessage || 'Generando PDF...') : exportScope === 'all' ? 'Descargar PDF Consolidado' : 'Descargar PDF'}
+                </button>
+                <button
+                  onClick={handlePrint}
+                  disabled={selectedIndex === '' || exportScope === 'all'}
+                  className="flex w-full items-center justify-center gap-2 rounded-lg border border-[var(--border-medium)] bg-[var(--bg-elevated)] p-2 text-[11px] font-medium text-[var(--text-secondary)] transition-colors hover:border-[var(--border-active)] hover:text-[var(--text-primary)] disabled:opacity-40"
+                >
+                  <Printer size={14} /> Imprimir Vista Previa
+                </button>
+              </div>
             </div>
           </Step>
 

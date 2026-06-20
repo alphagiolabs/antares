@@ -1,3 +1,4 @@
+import DatePicker from '../../ui/DatePicker';
 import { ARIA_LABELS } from '../constants';
 import type { HeaderFormState } from '../types';
 
@@ -24,13 +25,12 @@ export default function HeaderForm({ value, onChange, disabled }: Props) {
       </div>
       <div className="flex flex-col gap-1">
         <label className="text-[11px] font-medium text-[var(--text-muted)]">Fecha de Corte</label>
-        <input
+        <DatePicker
           aria-label={ARIA_LABELS.fechaInput}
-          type="date"
-          className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-2.5 py-1.5 text-xs text-[var(--text-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-primary)] disabled:opacity-50"
           value={value.fechaCorte}
-          onChange={(e) => onChange({ ...value, fechaCorte: e.target.value })}
+          onChange={(fechaCorte) => onChange({ ...value, fechaCorte })}
           disabled={disabled}
+          size="md"
         />
       </div>
       <div className="flex flex-col gap-1 col-span-2">

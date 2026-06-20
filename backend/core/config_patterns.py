@@ -38,7 +38,7 @@ def _validate_pattern(pattern: str, available_vars: set[str]) -> bool:
     import re
     placeholders = set(re.findall(r"\{(\w+)\}", pattern))
     # {seq} y {ext} siempre están disponibles
-    allowed = available_vars | {"seq", "ext"}
+    allowed = available_vars | {"seq", "ext", "sep"}
     return placeholders.issubset(allowed)
 
 

@@ -5,9 +5,9 @@ const BACKEND_METHODS = [
   'db_fields', 'db_fields_update', 'db_fields_reset',
   'db_columns',
   'rename_patterns_get', 'rename_patterns_update', 'rename_patterns_reset',
-  'scan_folder',
   'process_start', 'process_status', 'process_cancel',
   'preview', 'preview_image', 'is_video',
+  'db_detect_key_column',
   'formatos_list', 'formatos_generate', 'formatos_upload', 'formatos_delete', 'formatos_update_mapping',
   'history_list', 'history_get', 'history_delete', 'history_delete_many', 'history_save',
   'history_export',
@@ -27,9 +27,9 @@ const BACKEND_METHODS = [
 
 const NATIVE_METHODS = [
   'dialog_files',
-  'dialog_folder',
   'dialog_dest',
   'dialog_save',
+  'dialog_folder',
   'html_to_pdf',
 ];
 
@@ -40,7 +40,6 @@ const LONG_RUNNING_METHODS = new Set([
   'db_import',
   'db_export',
   'db_clear',
-  'scan_folder',
   'preview_image',
   'formatos_generate',
   'image_optimizer_zip',

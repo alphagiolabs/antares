@@ -13,20 +13,24 @@ export const TAB_DEFINITIONS = [
 
 export type TabId = (typeof TAB_DEFINITIONS)[number]['id'];
 
+export const DEFAULT_TAB: TabId = 'previewPanel';
+
 export const FULL_BLEED_TABS = new Set<TabId>(
   TAB_DEFINITIONS.filter((tab) => tab.fullBleed).map((tab) => tab.id),
 );
 
-export type ConfigSectionId = 'appearance' | 'history';
+export type ConfigSectionId = 'appearance' | 'history' | 'panel';
 
 export interface ConfigSectionDefinition {
   id: ConfigSectionId;
   label: string;
   shortcut: string;
   shortcutKey: string;
+  shortcutShift?: boolean;
 }
 
 export const CONFIG_SECTION_DEFINITIONS: readonly ConfigSectionDefinition[] = [
   { id: 'appearance', label: 'Apariencia', shortcut: 'Ctrl+7', shortcutKey: '7' },
   { id: 'history', label: 'Historial', shortcut: 'Ctrl+6', shortcutKey: '6' },
+  { id: 'panel', label: 'Panel', shortcut: 'Ctrl+Shift+P', shortcutKey: 'p', shortcutShift: true },
 ] as const;

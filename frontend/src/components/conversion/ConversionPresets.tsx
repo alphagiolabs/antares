@@ -1,4 +1,5 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { Save, FolderOpen, ChevronDown, Trash2, Check, Settings2 } from 'lucide-react';
 
 export interface ConversionConfig {
@@ -129,18 +130,35 @@ export default function ConversionPresets({ currentConfig, onLoadConfig, classNa
   const [saveMode, setSaveMode] = useState(false);
   const [saveName, setSaveName] = useState('');
   const [customPresets, setCustomPresets] = useState<SavedPreset[]>(loadPresets);
-  const dropdownRef = useRef<HTMLDivElement>(null);
+  const [menuPosition, setMenuPosition] = useState<{ top: number; right: number } | null>(null);
+  const anchorRef = useRef<HTMLDivElement>(null);
+
+  const updateMenuPosition = useCallback(() => {
+    const anchor = anchorRef.current;
+    if (!anchor) return;
+    const rect = anchor.getBoundingClientRect();
+    setMenuPosition({ top: rect.bottom + 8, right: window.innerWidth - rect.right });
+  }, []);
+
+  const closeMenu = useCallback(() => {
+    setOpen(false);
+    setSaveMode(false);
+  }, []);
 
   useEffect(() => {
-    const onClick = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setOpen(false);
-        setSaveMode(false);
-      }
+    if (!open) {
+      setMenuPosition(null);
+      return undefined;
+    }
+    updateMenuPosition();
+    const onLayoutChange = () => updateMenuPosition();
+    window.addEventListener('resize', onLayoutChange);
+    window.addEventListener('scroll', onLayoutChange, true);
+    return () => {
+      window.removeEventListener('resize', onLayoutChange);
+      window.removeEventListener('scroll', onLayoutChange, true);
     };
-    document.addEventListener('mousedown', onClick);
-    return () => document.removeEventListener('mousedown', onClick);
-  }, []);
+  }, [open, updateMenuPosition]);
 
   const handleSave = () => {
     const name = saveName.trim();
@@ -167,13 +185,16 @@ export default function ConversionPresets({ currentConfig, onLoadConfig, classNa
 
   const handleLoad = (preset: SavedPreset) => {
     onLoadConfig(preset.config);
-    setOpen(false);
+    closeMenu();
   };
 
   return (
-    <div className={`relative ${className}`} ref={dropdownRef}>
+    <div className={className} ref={anchorRef}>
       <button
+        type="button"
         onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-haspopup="menu"
         className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium bg-[var(--bg-elevated)] text-[var(--text-secondary)] border border-[var(--border-subtle)] hover:border-[var(--border-medium)] hover:text-[var(--text-primary)] transition-all"
       >
         <Settings2 className="h-4 w-4" />
@@ -181,8 +202,14 @@ export default function ConversionPresets({ currentConfig, onLoadConfig, classNa
         <ChevronDown className={`h-3.5 w-3.5 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
 
-      {open && (
-        <div className="absolute right-0 top-full mt-2 w-80 rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] shadow-2xl z-50 overflow-hidden animate-scale-in">
+      {open && menuPosition && createPortal(
+        <>
+          <div className="fixed inset-0 z-[120]" onClick={closeMenu} aria-hidden="true" />
+          <div
+            role="menu"
+            style={{ top: menuPosition.top, right: menuPosition.right }}
+            className="fixed z-[130] w-80 rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] shadow-2xl overflow-hidden animate-scale-in"
+          >
           <div className="px-4 py-3 border-b border-[var(--border-subtle)] flex items-center justify-between">
             <span className="text-[11px] font-bold uppercase tracking-[0.15em] text-[var(--text-muted)]">Presets</span>
             <button
@@ -265,7 +292,9 @@ export default function ConversionPresets({ currentConfig, onLoadConfig, classNa
               </>
             )}
           </div>
-        </div>
+          </div>
+        </>,
+        document.body,
       )}
     </div>
   );

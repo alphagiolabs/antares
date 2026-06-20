@@ -67,7 +67,7 @@ describe('AppearanceView', () => {
 
     renderAppearance();
 
-    expect(await screen.findByRole('heading', { name: 'Aspecto' })).toBeInTheDocument();
+    expect(await screen.findByTestId('appearance-view')).toBeInTheDocument();
     expect(screen.getByText('Usa claro, oscuro o el tema del sistema')).toBeInTheDocument();
     expect(screen.getAllByText('themePreview').length).toBeGreaterThan(0);
     expect(screen.getByRole('button', { name: /Codex/i })).toBeInTheDocument();
@@ -116,7 +116,7 @@ describe('AppearanceView', () => {
 
     renderAppearance();
 
-    expect(await screen.findByRole('heading', { name: 'Aspecto' })).toBeInTheDocument();
+    expect(await screen.findByTestId('appearance-view')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Imported Focus/i })).toBeInTheDocument();
     expect(document.documentElement.style.getPropertyValue('--bg-base')).toBe('#101826');
     expect(document.documentElement.style.getPropertyValue('--accent-primary')).toBe('#14B8A6');
@@ -144,7 +144,7 @@ describe('AppearanceView', () => {
     expect(workspace).toHaveClass('min-h-0');
     expect(workspace).toHaveClass('mx-auto');
     expect(workspace).toHaveClass('w-full');
-    expect(workspace).toHaveClass('max-w-[760px]');
+    expect(workspace).toHaveClass('max-w-[880px]');
   });
 
   it('imports a theme JSON and applies it to the live interface', async () => {
@@ -291,7 +291,7 @@ describe('AppearanceView', () => {
 
     renderAppearance();
 
-    await screen.findByRole('heading', { name: 'Aspecto' });
+    await screen.findByTestId('appearance-view');
 
     expect(document.documentElement.style.getPropertyValue('--text-primary')).toBe('#111827');
     expect(document.documentElement.style.getPropertyValue('--text-secondary')).toBe('#475467');

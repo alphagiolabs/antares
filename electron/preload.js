@@ -1,4 +1,4 @@
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webUtils } = require('electron');
 const { ALLOWED_RENDERER_METHODS } = require('./ipc-methods');
 
 const isDev = process.env.NODE_ENV !== 'production';
@@ -32,6 +32,17 @@ try {
       const listener = (event, data) => callback(data);
       ipcRenderer.on('auto-update-status', listener);
       return () => ipcRenderer.removeListener('auto-update-status', listener);
+    },
+    // Electron 32+ removed File.path; webUtils.getPathForFile is the
+    // supported way to resolve a File from <input> or drop events to an
+    // absolute filesystem path. Exposed here because the renderer runs with
+    // contextIsolation and cannot import electron modules directly.
+    getPathForFile: (file) => {
+      try {
+        return webUtils.getPathForFile(file) || '';
+      } catch {
+        return '';
+      }
     },
   });
   if (isDev) {

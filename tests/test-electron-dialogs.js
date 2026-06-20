@@ -37,13 +37,49 @@ async function run() {
   assert(calls[0].options.filters[0].extensions.includes('mp4'), 'dialog_files should accept MP4 videos');
   assert(calls[0].options.filters[0].extensions.includes('mkv'), 'dialog_files should accept MKV videos');
 
-  const folder = await handleDialogCall('dialog_folder', {}, dialog, win);
-  assert(folder.result.paths[0] === 'C:/tmp/data.xlsx', 'dialog_folder should return selected folder path');
-  assert(calls[1].options.properties.includes('openDirectory'), 'dialog_folder should use openDirectory');
-
   const save = await handleDialogCall('dialog_save', {}, dialog, win);
   assert(save.result.paths[0] === 'C:/tmp/export.xlsx', 'dialog_save should return saved file path');
-  assert(calls[2].options.title === 'Guardar archivo', 'dialog_save should set a save title');
+  assert(calls[1].options.title === 'Guardar archivo', 'dialog_save should set a save title');
+
+  // dialog_folder: should open a directory picker and recursively return
+  // only files with supported extensions.
+  const folderFs = require('fs');
+  const folderOs = require('os');
+  const folderPath = require('path');
+  const tempFolderDir = await folderFs.promises.mkdtemp(folderPath.join(folderOs.tmpdir(), 'antares-folder-test-'));
+  try {
+    await folderFs.promises.mkdir(folderPath.join(tempFolderDir, 'sub'), { recursive: true });
+    await folderFs.promises.writeFile(folderPath.join(tempFolderDir, 'photo.jpg'), 'x');
+    await folderFs.promises.writeFile(folderPath.join(tempFolderDir, 'clip.mp4'), 'x');
+    await folderFs.promises.writeFile(folderPath.join(tempFolderDir, 'notes.txt'), 'x');
+    await folderFs.promises.writeFile(folderPath.join(tempFolderDir, 'sub', 'deep.png'), 'x');
+
+    const folderDialog = {
+      async showOpenDialog(win, options) {
+        calls.push({ kind: 'folder', win, options });
+        assert(options.properties.includes('openDirectory'), 'dialog_folder should use openDirectory');
+        return { canceled: false, filePaths: [tempFolderDir] };
+      },
+      async showSaveDialog() { return { canceled: true }; },
+    };
+
+    const folderResult = await handleDialogCall('dialog_folder', {}, folderDialog, win);
+    assert(folderResult.handled === true, 'dialog_folder should be handled by Electron');
+    assert(folderResult.result.paths.length === 3, 'dialog_folder should return 3 supported files (jpg, mp4, png) and skip txt');
+    assert(folderResult.result.paths.some((p) => p.endsWith('photo.jpg')), 'dialog_folder should include top-level jpg');
+    assert(folderResult.result.paths.some((p) => p.endsWith('clip.mp4')), 'dialog_folder should include top-level mp4');
+    assert(folderResult.result.paths.some((p) => folderPath.basename(p) === 'deep.png'), 'dialog_folder should include nested png from subfolder');
+    assert(!folderResult.result.paths.some((p) => p.endsWith('notes.txt')), 'dialog_folder should exclude unsupported txt');
+
+    const canceledFolder = await handleDialogCall('dialog_folder', {}, {
+      async showOpenDialog() { return { canceled: true, filePaths: [] }; },
+      async showSaveDialog() { return { canceled: true }; },
+    }, win);
+    assert(canceledFolder.handled === true, 'dialog_folder should handle cancellation');
+    assert(canceledFolder.result.paths.length === 0, 'dialog_folder should return empty paths on cancel');
+  } finally {
+    await folderFs.promises.rm(tempFolderDir, { recursive: true, force: true });
+  }
 
   const ignored = await handleDialogCall('db_records', {}, dialog, win);
   assert(ignored.handled === false, 'non-dialog methods should not be handled');

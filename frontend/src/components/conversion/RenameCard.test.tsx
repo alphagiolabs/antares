@@ -23,23 +23,6 @@ const baseProps = {
 };
 
 describe('RenameCard', () => {
-  it('offers one Excel loader for every rename data source', () => {
-    const onLoadRenameExcel = vi.fn();
-    render(
-      <RenameCard
-        {...baseProps}
-        dbColumns={[]}
-        dbRecords={[]}
-        onLoadRenameExcel={onLoadRenameExcel}
-      />
-    );
-
-    fireEvent.click(screen.getByRole('button', { name: /Cargar Excel para renombrar/i }));
-
-    expect(onLoadRenameExcel).toHaveBeenCalledOnce();
-    expect(screen.queryByText(/barra superior/i)).not.toBeInTheDocument();
-  });
-
   it('keeps selected rename columns synchronized with the current database columns', async () => {
     const onPatronChange = vi.fn();
     const { rerender } = render(<RenameCard {...baseProps} onPatronChange={onPatronChange} />);
@@ -105,5 +88,26 @@ describe('RenameCard', () => {
     await waitFor(() => {
       expect(onPatronChange).toHaveBeenCalledWith('{archivo}-{cliente}{ext}');
     });
+  });
+
+  it('shows separator controls when the custom pattern uses {sep}', () => {
+    const onWordSeparatorChange = vi.fn();
+    render(
+      <RenameCard
+        {...baseProps}
+        dbColumns={[]}
+        dbRecords={[]}
+        patron="{sgio}{sep}{seq}{ext}"
+        wordSeparator="_"
+        onWordSeparatorChange={onWordSeparatorChange}
+      />
+    );
+
+    expect(screen.getByText('Separador')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Guion medio/i }));
+    expect(onWordSeparatorChange).toHaveBeenCalledWith('-');
+
+    fireEvent.click(screen.getByRole('button', { name: /Editor avanzado/i }));
+    expect(screen.getByRole('button', { name: '{sep}' })).toBeInTheDocument();
   });
 });

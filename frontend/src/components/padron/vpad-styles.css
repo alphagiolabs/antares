@@ -315,7 +315,8 @@
 
 .vpad-field input,
 .vpad-field select,
-.vpad-field textarea {
+.vpad-field textarea,
+.vpad-field .app-date-picker-trigger {
     width: 100%;
     padding: 9px 12px;
     border: 1px solid var(--vpad-border);
@@ -330,13 +331,16 @@
 
 .vpad-field input:hover,
 .vpad-field select:hover,
-.vpad-field textarea:hover {
+.vpad-field textarea:hover,
+.vpad-field .app-date-picker-trigger:hover:not(:disabled) {
     border-color: var(--vpad-border-strong);
 }
 
 .vpad-field input:focus,
 .vpad-field select:focus,
-.vpad-field textarea:focus {
+.vpad-field textarea:focus,
+.vpad-field .app-date-picker-trigger:focus-visible,
+.vpad-field .app-date-picker-trigger.is-open {
     border-color: var(--vpad-accent);
     box-shadow: 0 0 0 3px color-mix(in srgb, var(--vpad-accent) 15%, transparent);
     background: var(--vpad-input);
@@ -1504,7 +1508,8 @@
 
 [data-theme="light"] .vpad-field input,
 [data-theme="light"] .vpad-field select,
-[data-theme="light"] .vpad-field textarea {
+[data-theme="light"] .vpad-field textarea,
+[data-theme="light"] .vpad-field .app-date-picker-trigger {
     border-color: rgba(0, 0, 0, 0.12);
     background: #ffffff;
     color: #1f2937;
@@ -1512,13 +1517,16 @@
 
 [data-theme="light"] .vpad-field input:hover,
 [data-theme="light"] .vpad-field select:hover,
-[data-theme="light"] .vpad-field textarea:hover {
+[data-theme="light"] .vpad-field textarea:hover,
+[data-theme="light"] .vpad-field .app-date-picker-trigger:hover:not(:disabled) {
     border-color: rgba(0, 0, 0, 0.2);
 }
 
 [data-theme="light"] .vpad-field input:focus,
 [data-theme="light"] .vpad-field select:focus,
-[data-theme="light"] .vpad-field textarea:focus {
+[data-theme="light"] .vpad-field textarea:focus,
+[data-theme="light"] .vpad-field .app-date-picker-trigger:focus-visible,
+[data-theme="light"] .vpad-field .app-date-picker-trigger.is-open {
     border-color: rgba(0, 0, 0, 0.35);
     box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.06);
     background: #ffffff;
