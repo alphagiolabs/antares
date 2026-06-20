@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from backend.core.config_fields import get_field_names
 from backend.core.mapping_index import MappingIndex
 from backend.utils.validators import obtener_codigo_desde_nombre, sanitizar_nombre
+
+SequenceMode = Literal["record", "global", "filename"]
 
 # Pre-compiled regex patterns for clean-up in aplicar()
 _RE_MULTIPLE_UNDERSCORES = re.compile(r"_+")
@@ -33,6 +35,7 @@ class RenamerEngine:
         patron: str | None = None,
         secuencia_inicial: int = 1,
         separador: str = "_",
+        sequence_mode: SequenceMode = "filename",
     ) -> None:
         """Inicializa el motor de renombrado.
 
@@ -40,6 +43,9 @@ class RenamerEngine:
             patron: Cadena con placeholders, ej: "{categoria}_{codigo}_{nombre}{ext}".
             secuencia_inicial: Número inicial para {seq}.
             separador: Carácter usado para sustituir {sep} en el patrón.
+            sequence_mode: Modo de numeración: ``record`` (por fila), ``global``
+                (contador continuo) o ``filename`` (respeta la secuencia del
+                nombre del archivo).
         """
         if patron is None:
             fields = get_field_names()
@@ -52,6 +58,8 @@ class RenamerEngine:
         self.patron: str = patron
         self.secuencia: int = int(secuencia_inicial)
         self.separador: str = separador
+        self.sequence_mode: SequenceMode = sequence_mode
+        self._record_sequences: dict[str, int] = {}
 
     @staticmethod
     def build_mapping_patron(mapping_keys: list[str]) -> str:
@@ -93,6 +101,7 @@ class RenamerEngine:
         codigo_manual: str | None = None,
         file_seq: str | None = None,
         file_mapping: dict[str, str] | MappingIndex | None = None,
+        sequence_group: str | None = None,
     ) -> str:
         """Genera el nuevo nombre para un archivo.
 
@@ -100,8 +109,11 @@ class RenamerEngine:
             ruta_origen: Path o str de la imagen origen.
             datos_bd: Diccionario opcional con datos ya consultados de la BD.
             codigo_manual: Cadena opcional para forzar el código a buscar.
-            file_seq: Secuencia extraída del nombre de archivo. Si se proporciona,
-                      se usa en lugar del contador auto-incremental.
+            file_seq: Secuencia extraída del nombre de archivo. Se usa en modo
+                ``filename``; se ignora en modo ``record``.
+            file_mapping: Mapeo directo opcional (id -> nuevo nombre).
+            sequence_group: Clave de fila usada por el modo ``record`` para
+                mantener un contador independiente por grupo.
 
         Returns:
             Nuevo nombre de archivo (solo nombre, no ruta completa).
@@ -123,7 +135,15 @@ class RenamerEngine:
         if datos_bd is None:
             datos_bd = {}
 
-        seq_value = file_seq if file_seq is not None else str(self.secuencia).zfill(3)
+        if self.sequence_mode == "record" and sequence_group:
+            normalized_group = sequence_group.strip().casefold()
+            next_value = self._record_sequences.get(normalized_group, 1)
+            self._record_sequences[normalized_group] = next_value + 1
+            seq_value = str(next_value).zfill(3)
+        elif self.sequence_mode == "filename" and file_seq is not None:
+            seq_value = file_seq
+        else:
+            seq_value = str(self.secuencia).zfill(3)
 
         mapping: dict[str, str] = {"seq": seq_value, "ext": ext, "sep": self.separador}
 
@@ -164,6 +184,7 @@ class RenamerEngine:
         codigos_manuales: dict[str, str] | None = None,
         file_seqs: dict[str, str] | None = None,
         file_mapping: dict[str, str] | MappingIndex | None = None,
+        sequence_groups: dict[str, str] | None = None,
     ) -> list[tuple[str, str, bool]]:
         """Genera una vista previa del renombrado para un lote.
 
@@ -172,14 +193,18 @@ class RenamerEngine:
             lookup_fn: Función opcional para buscar datos en catálogo (code -> dict | None).
             codigos_manuales: Diccionario opcional {nombre_archivo: codigo}.
             file_seqs: Diccionario opcional {nombre_archivo: secuencia_del_archivo}.
+            sequence_groups: Diccionario opcional {nombre_archivo: clave_fila}
+                usado por el modo ``record`` para mantener contadores por grupo.
 
         Returns:
             Lista de tuplas (ruta_origen, nombre_sugerido, datos_encontrados).
         """
         codigos_manuales = codigos_manuales or {}
         file_seqs = file_seqs or {}
+        sequence_groups = sequence_groups or {}
         resultados: list[tuple[str, str, bool]] = []
         seq_backup = self.secuencia
+        record_sequences_backup = self._record_sequences.copy()
 
         try:
             for ruta in rutas:
@@ -193,8 +218,16 @@ class RenamerEngine:
                 codigo = codigos_manuales.get(ruta.name, obtener_codigo_desde_nombre(ruta.name))
                 datos = lookup_fn(codigo) if lookup_fn else None
                 fseq = file_seqs.get(ruta.name)
-                nombre_nuevo = self.aplicar(ruta, datos_bd=datos, codigo_manual=codigo, file_seq=fseq)
+                group = sequence_groups.get(ruta.name)
+                nombre_nuevo = self.aplicar(
+                    ruta,
+                    datos_bd=datos,
+                    codigo_manual=codigo,
+                    file_seq=fseq,
+                    sequence_group=group,
+                )
                 resultados.append((str(ruta), nombre_nuevo, datos is not None))
         finally:
             self.secuencia = seq_backup
+            self._record_sequences = record_sequences_backup
         return resultados

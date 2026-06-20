@@ -225,3 +225,34 @@ class TestRenamerEngine:
         )
 
         assert resultado == "A-foto.jpg"
+
+    def test_secuencia_por_fila_es_independiente_e_ignora_el_sufijo(self, monkeypatch, tmp_path) -> None:
+        monkeypatch.setattr("backend.core.renamer.get_field_names", lambda: ["nis", "sgio"])
+        engine = RenamerEngine("{sgio}_{seq}{ext}", sequence_mode="record")
+        archivo = tmp_path / "foto.jpg"
+        archivo.write_text("x")
+
+        fila_a = {"nis": "4210502", "sgio": "69841274"}
+        fila_b = {"nis": "4210544", "sgio": "69841278"}
+
+        assert engine.aplicar(archivo, datos_bd=fila_a, file_seq="7", sequence_group="4210502") == "69841274_001.jpg"
+        assert engine.aplicar(archivo, datos_bd=fila_b, file_seq="9", sequence_group="4210544") == "69841278_001.jpg"
+        assert engine.aplicar(archivo, datos_bd=fila_a, file_seq="1", sequence_group="4210502") == "69841274_002.jpg"
+
+    def test_preview_lote_restaura_contador_por_fila(self, monkeypatch, tmp_path) -> None:
+        monkeypatch.setattr("backend.core.renamer.get_field_names", lambda: ["nis", "sgio"])
+        engine = RenamerEngine("{sgio}_{seq}{ext}", sequence_mode="record")
+        a = tmp_path / "a.jpg"
+        b = tmp_path / "b.jpg"
+        a.write_text("x")
+        b.write_text("x")
+        fila = {"nis": "4210502", "sgio": "69841274"}
+
+        preview = engine.preview_lote(
+            [a, b],
+            lookup_fn=lambda _code: fila,
+            sequence_groups={"a.jpg": "4210502", "b.jpg": "4210502"},
+        )
+
+        assert [item[1] for item in preview] == ["69841274_001.jpg", "69841274_002.jpg"]
+        assert engine.aplicar(a, datos_bd=fila, sequence_group="4210502") == "69841274_001.jpg"
