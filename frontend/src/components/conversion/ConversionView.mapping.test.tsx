@@ -132,4 +132,42 @@ describe('ConversionView mapping auto-detection', () => {
     await waitFor(() => expect(mockApi.dbParseMapping).toHaveBeenCalled(), { timeout: 5000 });
     await waitFor(() => expect(mockApi.importExcel).toHaveBeenCalled(), { timeout: 5000 });
   });
+
+  it('sends record sequence mode to preview and processing', async () => {
+    mockApi.getDbColumns.mockResolvedValue({
+      columns: ['codigo'],
+      records: [{ codigo: '4210502' }],
+      total: 1,
+    });
+    mockApi.dialogFiles.mockResolvedValueOnce({ paths: ['C:\\fotos\\4210502 (7).jpg'] });
+    mockApi.dialogDest.mockResolvedValueOnce({ paths: ['C:\\salida'] });
+    renderView();
+
+    await waitFor(() => expect(mockApi.getDbColumns).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole('button', { name: /Seleccionar archivos/i }));
+    await waitFor(() => expect(mockApi.dialogFiles).toHaveBeenCalled());
+    await waitFor(() => expect(mockApi.preview).toHaveBeenCalledWith(
+      expect.objectContaining({ sequence_mode: 'record' }),
+    ));
+
+    const perRowLabel = screen.getByText('Por fila de BD');
+    const perRowToggle = perRowLabel.parentElement?.parentElement?.querySelector('[role="switch"]');
+    expect(perRowToggle).not.toBeNull();
+    fireEvent.click(perRowToggle as HTMLElement);
+    await waitFor(() => expect(mockApi.preview).toHaveBeenLastCalledWith(
+      expect.objectContaining({ sequence_mode: 'global' }),
+    ));
+    fireEvent.click(perRowToggle as HTMLElement);
+    await waitFor(() => expect(mockApi.preview).toHaveBeenLastCalledWith(
+      expect.objectContaining({ sequence_mode: 'record' }),
+    ));
+
+
+    fireEvent.click(screen.getByRole('button', { name: /carpeta de destino/i }));
+    await waitFor(() => expect(mockApi.dialogDest).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole('button', { name: /Iniciar conversión/i }));
+    await waitFor(() => expect(mockApi.startProcess).toHaveBeenCalledWith(
+      expect.objectContaining({ sequence_mode: 'record' }),
+    ));
+  });
 });

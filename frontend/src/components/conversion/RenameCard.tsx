@@ -416,7 +416,12 @@ export default function RenameCard(props: RenameCardProps) {
                     {usesSeq && (
                       <>
                         <div className="flex items-center justify-between gap-2">
-                          <span className="text-[11px] text-[var(--text-secondary)]">Desde archivo</span>
+                          <div>
+                            <span className="block text-[11px] text-[var(--text-secondary)]">Por fila de BD</span>
+                            {useFilenameSeq && (
+                              <span className="block text-[10px] text-[var(--text-muted)]">Cada fila comienza en 001</span>
+                            )}
+                          </div>
                           <Toggle checked={useFilenameSeq} onChange={onToggleFilenameSeq} />
                         </div>
                         {!useFilenameSeq && (

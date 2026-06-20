@@ -129,6 +129,8 @@ export async function restartBackend(): Promise<{ success: boolean; state: strin
 
 // ─── API methods ───────────────────────────────────────────────────────────
 
+export type SequenceMode = 'record' | 'global' | 'filename';
+
 export interface ProcessBody {
   files: string[];
   destino: string;
@@ -149,6 +151,7 @@ export interface ProcessBody {
   id_column?: string;
   rename_column?: string;
   word_separator?: string;
+  sequence_mode?: SequenceMode;
 }
 
 export interface PreviewBody {
@@ -162,6 +165,7 @@ export interface PreviewBody {
   mapping_path?: string;
   id_column?: string;
   rename_column?: string;
+  sequence_mode?: SequenceMode;
 }
 
 export interface PreviewImageBody {
@@ -305,6 +309,8 @@ export const api = {
   formatosUpload: (body: { nombre: string; filename: string; content_b64: string; persisted?: boolean; filename_pattern?: string }) =>
     _invoke<{ format: FormatInfo }>('formatos_upload', body),
   formatosDelete: (format_id: string) => _invoke<{ deleted: boolean }>('formatos_delete', { format_id }),
+  formatosGetTemplate: (format_id: string) =>
+    _invoke<{ pdf_base64: string; filename: string }>('formatos_get_template', { format_id }),
   formatosUpdateMapping: (format_id: string, mapping: VisualMapping) =>
     _invoke<{ format: FormatInfo }>('formatos_update_mapping', { format_id, mapping }),
 

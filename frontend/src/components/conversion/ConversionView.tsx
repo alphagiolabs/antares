@@ -314,6 +314,8 @@ export default function ConversionView() {
     }
   };
 
+  const sequenceMode = useFilenameSeq ? 'record' : 'global';
+
   useEffect(() => {
     if (!usarRename || files.length === 0) {
       setRenamePreview([]);
@@ -338,6 +340,7 @@ export default function ConversionView() {
                 use_filename_seq: useFilenameSeq,
                 key_column: keyColumn || undefined,
                 word_separator: wordSeparator,
+                sequence_mode: sequenceMode,
               },
         );
         setRenamePreview(result.preview);
@@ -347,7 +350,7 @@ export default function ConversionView() {
     }, 400);
 
     return () => window.clearTimeout(timer);
-  }, [files, usarRename, mappingMode, mappingData, patron, secuencia, useFilenameSeq, keyColumn, wordSeparator]);
+  }, [files, usarRename, mappingMode, mappingData, patron, secuencia, useFilenameSeq, keyColumn, wordSeparator, sequenceMode]);
 
   // Auto-detect the best key column when files are added and a DB is loaded.
   // This fixes the common case where the default key column (first column)
@@ -432,6 +435,7 @@ export default function ConversionView() {
       mapping: mappingMode && !mappingPath ? mappingData ?? undefined : undefined,
       id_column: mappingMode ? mappingIdColumn || undefined : undefined,
       rename_column: mappingMode ? mappingRenameColumn || undefined : undefined,
+      sequence_mode: sequenceMode,
     });
   };
 

@@ -110,4 +110,11 @@ describe('RenameCard', () => {
     fireEvent.click(screen.getByRole('button', { name: /Editor avanzado/i }));
     expect(screen.getByRole('button', { name: '{sep}' })).toBeInTheDocument();
   });
+
+  it('presents the enabled sequence as per database row', () => {
+    render(<RenameCard {...baseProps} patron="{sgio}_{seq}{ext}" />);
+    expect(screen.getByText('Por fila de BD')).toBeInTheDocument();
+    expect(screen.getByText('Cada fila comienza en 001')).toBeInTheDocument();
+    expect(screen.queryByText('Desde archivo')).not.toBeInTheDocument();
+  });
 });
