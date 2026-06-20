@@ -39,9 +39,9 @@ def _resolve_sequence_mode(params: dict[str, Any]) -> SequenceMode:
     return "filename" if params.get("use_filename_seq", True) else "global"
 
 
-def _record_group_key(datos: dict[str, Any], key_column: str, fallback: str) -> str:
+def _record_group_key(datos: dict[str, Any] | None, key_column: str, fallback: str) -> str:
     """Calcula la clave estable de fila usada por el modo ``record``."""
-    raw_value = datos.get(key_column) if key_column else None
+    raw_value = datos.get(key_column) if key_column and datos else None
     value = str(raw_value or fallback).strip()
     return value.casefold()
 
@@ -49,7 +49,7 @@ def _record_group_key(datos: dict[str, Any], key_column: str, fallback: str) -> 
 def _apply_catalog_rename(
     engine: RenamerEngine,
     path: str | Path,
-    datos: dict[str, Any],
+    datos: dict[str, Any] | None,
     codigo: str,
     parsed_sequence: str,
     key_column: str,
@@ -169,7 +169,6 @@ def preview(params: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
     files = params.get("files", [])
     patron = params.get("patron", "")
     secuencia = params.get("secuencia", 1)
-    use_filename_seq = params.get("use_filename_seq", True)
     use_column_rename = params.get("use_column_rename", False)
     key_column = params.get("key_column", "")
     file_mapping = params.get("mapping") or None
@@ -294,12 +293,12 @@ def preview(params: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
                 finally:
                     engine.secuencia = seq_backup
                     engine._record_sequences = record_sequences_backup
-                payload: dict[str, Any] = {
+                auto_payload: dict[str, Any] = {
                     "preview": [{"origen": Path(orig).name, "nuevo": nuev, "en_bd": en_bd} for orig, nuev, en_bd in res],
                 }
                 if collisions:
-                    payload["collisions"] = collisions
-                return payload
+                    auto_payload["collisions"] = collisions
+                return auto_payload
 
         db_cache = buscar_lote_por_codigos(codigos_list)
         def lookup(codigo: str) -> dict[str, Any] | None:
@@ -855,10 +854,7 @@ def _prepare_chunk_tasks(
                 stem = p.stem
                 # Intentamos buscar por el código parseado o por el stem completo
                 datos = db_cache.get(codigo) or db_cache.get(stem)
-                if datos:
-                    nuevo_nombre = _apply_catalog_rename(engine, p, datos, codigo, seq, key_column)
-                else:
-                    nuevo_nombre = p.name
+                nuevo_nombre = _apply_catalog_rename(engine, p, datos, codigo, seq, key_column) if datos else p.name
             elif use_column_rename:
                 codigo, seq = parse_filename_parts(p.name)
                 datos = db_cache.get(str(global_offset + idx))
