@@ -217,6 +217,11 @@ class RenamerEngine:
                         continue
                 codigo = codigos_manuales.get(ruta.name, obtener_codigo_desde_nombre(ruta.name))
                 datos = lookup_fn(codigo) if lookup_fn else None
+                if datos is None and self.sequence_mode == "record":
+                    # Sin coincidencia en BD: conservar nombre original y no
+                    # consumir contador de secuencia por fila.
+                    resultados.append((str(ruta), ruta.name, False))
+                    continue
                 fseq = file_seqs.get(ruta.name)
                 group = sequence_groups.get(ruta.name)
                 nombre_nuevo = self.aplicar(

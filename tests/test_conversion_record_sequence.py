@@ -137,3 +137,38 @@ def test_conversion_mantiene_secuencia_por_fila_entre_bloques(monkeypatch, tmp_p
         "69841274_002.jpg",
         "69841278_002.jpg",
     ]
+
+
+def test_preview_archivo_sin_fila_conserva_nombre_y_no_consume_contador(monkeypatch, tmp_path) -> None:
+    """Un archivo sin coincidencia en BD conserva su nombre original y no
+    consume un numero de secuencia en modo record."""
+    names = ["4210502 (7).jpg", "DESCONOCIDO (3).jpg", "4210502 (1).jpg"]
+    files = [str(tmp_path / name) for name in names]
+    for path in files:
+        Path(path).write_text("x")
+
+    rows = {
+        "4210502": {"nis": "4210502", "sgio": "69841274"},
+    }
+    monkeypatch.setattr(conversion, "_resolve_key_column", lambda key, _files, _columns: key)
+    monkeypatch.setattr("backend.core.config_fields.get_field_names", lambda: ["nis", "sgio"])
+    monkeypatch.setattr(
+        "backend.core.database.buscar_por_columna",
+        lambda codes, _column: {code: rows[code] for code in codes if code in rows},
+    )
+
+    result = conversion.preview({
+        "files": files,
+        "patron": "{sgio}_{seq}{ext}",
+        "secuencia": 1,
+        "sequence_mode": "record",
+        "use_filename_seq": True,
+        "key_column": "nis",
+    })
+
+    assert [item["nuevo"] for item in result["preview"]] == [
+        "69841274_001.jpg",
+        "DESCONOCIDO (3).jpg",
+        "69841274_002.jpg",
+    ]
+    assert [item["en_bd"] for item in result["preview"]] == [True, False, True]

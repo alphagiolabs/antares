@@ -858,11 +858,11 @@ def _prepare_chunk_tasks(
             elif use_column_rename:
                 codigo, seq = parse_filename_parts(p.name)
                 datos = db_cache.get(str(global_offset + idx))
-                nuevo_nombre = _apply_catalog_rename(engine, p, datos, codigo, seq, "")
+                nuevo_nombre = _apply_catalog_rename(engine, p, datos, codigo, seq, "") if datos else p.name
             else:
                 codigo, seq = parse_filename_parts(p.name)
                 datos = db_cache.get(codigo)
-                nuevo_nombre = _apply_catalog_rename(engine, p, datos, codigo, seq, "")
+                nuevo_nombre = _apply_catalog_rename(engine, p, datos, codigo, seq, "") if datos else p.name
             if is_video_file or not conversion_enabled:
                 out_path = Path(destino) / nuevo_nombre
             else:
