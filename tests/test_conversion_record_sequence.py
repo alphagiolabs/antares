@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from backend.core.jobs import Job
 from backend.handlers import conversion
 
 
@@ -62,4 +63,77 @@ def test_preview_reinicia_secuencia_por_fila_en_orden_del_lote(monkeypatch, tmp_
         "69841274_002.jpg",
         "69841278_002.jpg",
         "69841278_003.jpg",
+    ]
+
+
+class _ImmediateFuture:
+    def __init__(self, result):
+        self._result = result
+
+    def result(self):
+        return self._result
+
+    def cancelled(self):
+        return False
+
+    def cancel(self):
+        return False
+
+
+class _RecordingScheduler:
+    def __init__(self) -> None:
+        self.submitted = []
+
+    def submit_heavy(self, fn, task, *, block=False, cancel_check=None):
+        self.submitted.append(task)
+        return _ImmediateFuture(fn(task))
+
+
+def test_conversion_mantiene_secuencia_por_fila_entre_bloques(monkeypatch, tmp_path) -> None:
+    src = tmp_path / "in"
+    dst = tmp_path / "out"
+    src.mkdir()
+    dst.mkdir()
+    names = ["4210502 (7).jpg", "4210544 (9).jpg", "4210502 (1).jpg", "4210544 (2).jpg"]
+    files = [str(src / name) for name in names]
+    for path in files:
+        Path(path).write_text("x")
+
+    rows = {
+        "4210502": {"nis": "4210502", "sgio": "69841274"},
+        "4210544": {"nis": "4210544", "sgio": "69841278"},
+    }
+    scheduler = _RecordingScheduler()
+    monkeypatch.setattr(conversion, "get_scheduler", lambda: scheduler)
+    monkeypatch.setattr(conversion, "es_video", lambda _path: False)
+    monkeypatch.setattr(conversion, "copiar_archivo", lambda *_args: None)
+    monkeypatch.setattr(conversion, "_calculate_chunk_size", lambda: 2)
+    monkeypatch.setattr(conversion, "_resolve_key_column", lambda key, _files, _columns: key)
+    monkeypatch.setattr(conversion, "_notify_complete", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr("backend.core.history.save_run", lambda **_kwargs: None)
+    monkeypatch.setattr("backend.core.config_fields.get_field_names", lambda: ["nis", "sgio"])
+    monkeypatch.setattr(
+        "backend.core.database.buscar_por_columna",
+        lambda codes, _column: {code: rows[code] for code in codes if code in rows},
+    )
+
+    job = Job(id="record-seq", job_type="conversion", params={
+        "files": files,
+        "destino": str(dst),
+        "formato": "JPEG",
+        "conversion_enabled": False,
+        "usar_rename": True,
+        "patron": "{sgio}_{seq}{ext}",
+        "sequence_mode": "record",
+        "use_filename_seq": True,
+        "key_column": "nis",
+        "secuencia": 1,
+    })
+    conversion._run_conversion_job(job)
+
+    assert [task[1].name for task in scheduler.submitted] == [
+        "69841274_001.jpg",
+        "69841278_001.jpg",
+        "69841274_002.jpg",
+        "69841278_002.jpg",
     ]

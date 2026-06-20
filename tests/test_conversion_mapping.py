@@ -224,15 +224,13 @@ def test_prepare_chunk_renames_windows_parenthesized_sequence(monkeypatch, tmp_p
         return {"4210502": {"nis": "4210502", "sgio": "69841274"}}
 
     monkeypatch.setattr("backend.core.database.buscar_por_columna", buscar_por_nis)
-    engine = conversion.RenamerEngine("{sgio}_{seq}{ext}", 1)
-
+    engine = conversion.RenamerEngine("{sgio}_{seq}{ext}", 1, sequence_mode="filename")
     tasks = conversion._prepare_chunk_tasks(
         [str(source_file)],
         destino=str(tmp_path / "out"),
         engine=engine,
         conversion_enabled=False,
         ext_dest=None,
-        use_filename_seq=True,
         lookup_fn=lambda _codes: {},
         key_column="nis",
     )

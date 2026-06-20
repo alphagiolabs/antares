@@ -503,7 +503,16 @@ def _run_conversion_job(job: Job) -> None:
                 return
             log_message(f"Modo: Renombrado por mapeo directo ({len(file_mapping)} entradas)", "info", state=state)
 
-        engine = RenamerEngine(patron, secuencia, separador=word_separator) if usar_rename else None
+        engine = (
+            RenamerEngine(
+                patron,
+                secuencia,
+                separador=word_separator,
+                sequence_mode=_resolve_sequence_mode(params),
+            )
+            if usar_rename
+            else None
+        )
         try:
             rw = int(resize_ancho) if resize_ancho is not None else None
             rh = int(resize_alto) if resize_alto is not None else None
@@ -559,7 +568,6 @@ def _run_conversion_job(job: Job) -> None:
                     engine=engine,
                     conversion_enabled=conversion_enabled,
                     ext_dest=ext_dest,
-                    use_filename_seq=use_filename_seq,
                     lookup_fn=buscar_lote_por_codigos,
                     use_column_rename=use_column_rename,
                     global_offset=chunk_start,
@@ -806,7 +814,6 @@ def _prepare_chunk_tasks(
     engine: RenamerEngine | None,
     conversion_enabled: bool,
     ext_dest: str | None,
-    use_filename_seq: bool,
     lookup_fn,
     use_column_rename: bool = False,
     global_offset: int = 0,
@@ -849,20 +856,17 @@ def _prepare_chunk_tasks(
                 # Intentamos buscar por el código parseado o por el stem completo
                 datos = db_cache.get(codigo) or db_cache.get(stem)
                 if datos:
-                    fseq = seq if use_filename_seq else None
-                    nuevo_nombre = engine.aplicar(p, datos_bd=datos, codigo_manual=codigo, file_seq=fseq)
+                    nuevo_nombre = _apply_catalog_rename(engine, p, datos, codigo, seq, key_column)
                 else:
                     nuevo_nombre = p.name
             elif use_column_rename:
                 codigo, seq = parse_filename_parts(p.name)
                 datos = db_cache.get(str(global_offset + idx))
-                fseq = seq if use_filename_seq else None
-                nuevo_nombre = engine.aplicar(p, datos_bd=datos, codigo_manual=codigo, file_seq=fseq)
+                nuevo_nombre = _apply_catalog_rename(engine, p, datos, codigo, seq, "")
             else:
                 codigo, seq = parse_filename_parts(p.name)
                 datos = db_cache.get(codigo)
-                fseq = seq if use_filename_seq else None
-                nuevo_nombre = engine.aplicar(p, datos_bd=datos, codigo_manual=codigo, file_seq=fseq)
+                nuevo_nombre = _apply_catalog_rename(engine, p, datos, codigo, seq, "")
             if is_video_file or not conversion_enabled:
                 out_path = Path(destino) / nuevo_nombre
             else:
