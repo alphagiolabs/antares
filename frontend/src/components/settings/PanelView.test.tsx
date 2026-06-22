@@ -6,16 +6,13 @@ import PanelView from './PanelView';
 vi.mock('../../lib/supabase', () => ({
   supabase: {
     auth: {
-      admin: {
-        listUsers: vi.fn(),
-        createUser: vi.fn(),
-        updateUserById: vi.fn(),
-        deleteUser: vi.fn(),
-      },
       signOut: vi.fn(),
       getUser: vi.fn(),
     },
     rpc: vi.fn(),
+    functions: {
+      invoke: vi.fn(),
+    },
     from: vi.fn(() => ({
       select: vi.fn(() => ({
         eq: vi.fn(() => ({
@@ -89,10 +86,10 @@ describe('PanelView', () => {
     expect(screen.getByRole('button', { name: /Crear/i })).toBeDisabled();
   });
 
-  it('creates user with supabase admin API', async () => {
+  it('creates user via admin-create-user edge function', async () => {
     const { supabase } = await import('../../lib/supabase');
     (supabase.rpc as any).mockResolvedValue({ data: [], error: null });
-    (supabase.auth.admin.createUser as any).mockResolvedValue({
+    (supabase.functions.invoke as any).mockResolvedValue({
       data: { user: { id: 'new-user-id', email: 'new@test.com' } },
       error: null,
     });
@@ -114,10 +111,8 @@ describe('PanelView', () => {
     fireEvent.click(createButton);
 
     await waitFor(() => {
-      expect(supabase.auth.admin.createUser).toHaveBeenCalledWith({
-        email: 'new@test.com',
-        password: 'secret123',
-        email_confirm: true,
+      expect(supabase.functions.invoke).toHaveBeenCalledWith('admin-create-user', {
+        body: { email: 'new@test.com', password: 'secret123', email_confirm: true, role: 'user' },
       });
     });
   });

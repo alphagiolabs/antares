@@ -78,10 +78,8 @@ export default function PanelView() {
     }
 
     setActionLoading('create');
-    const { data, error: createError } = await supabase.auth.admin.createUser({
-      email,
-      password: newPassword,
-      email_confirm: true,
+    const { data, error: createError } = await supabase.functions.invoke('admin-create-user', {
+      body: { email, password: newPassword, email_confirm: true, role: newRole },
     });
 
     if (createError) {
@@ -90,16 +88,10 @@ export default function PanelView() {
       return;
     }
 
-    if (newRole === 'admin' && data.user?.id) {
-      const { error: adminError } = await supabase.rpc('admin_set_admin', {
-        p_user_id: data.user.id,
-        p_is_admin: true,
-      });
-      if (adminError) {
-        addToast({ message: adminError.message, type: 'error' });
-        setActionLoading(null);
-        return;
-      }
+    if (data?.error) {
+      addToast({ message: data.error, type: 'error' });
+      setActionLoading(null);
+      return;
     }
 
     addToast({ message: t('panel.userCreated'), type: 'success' });
@@ -148,9 +140,12 @@ export default function PanelView() {
     }
     if (!confirm(t('panel.confirmDelete', { email: u.email }))) return;
     setActionLoading(`delete-${u.user_id}`);
-    const { error: deleteError } = await supabase.auth.admin.deleteUser(u.user_id);
-    if (deleteError) {
-      addToast({ message: deleteError.message, type: 'error' });
+    const { data, error: deleteError } = await supabase.functions.invoke('admin-delete-user', {
+      body: { user_id: u.user_id },
+    });
+    const errorMsg = deleteError?.message ?? data?.error;
+    if (errorMsg) {
+      addToast({ message: errorMsg, type: 'error' });
     } else {
       addToast({ message: t('panel.userDeleted'), type: 'success' });
       await loadUsers();
