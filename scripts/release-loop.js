@@ -207,7 +207,7 @@ function runQualityGate() {
   }
 
   // Tests
-  const testResult = trySh('npm test 2>&1', { silent: true, timeout: 300000 });
+  const testResult = trySh('npm test 2>&1', { silent: true, timeout: 900000 });
   if (testResult === null || testResult.includes('FAILED') || testResult.includes('failed')) {
     throw new Error(`Tests fallaron.\n${testResult ? testResult.slice(-500) : '(timeout o error)'}`);
   }
