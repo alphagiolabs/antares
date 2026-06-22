@@ -21,13 +21,22 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 20
           cache: 'npm'
 
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
+
+      - name: Install Pango/GTK via MSYS2 (for WeasyPrint)
+        run: |
+          C:\msys64\usr\bin\bash -lc 'pacman -S mingw-w64-x86_64-pango --noconfirm'
+          echo "C:\msys64\mingw64\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
+          if (Test-Path "C:\msys64\mingw64\bin\python.exe") {
+            Remove-Item "C:\msys64\mingw64\bin\python.exe" -Force
+          }
+          echo "WEASYPRINT_DLL_DIRECTORIES=C:\msys64\mingw64\bin" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: Install dependencies
         run: |
