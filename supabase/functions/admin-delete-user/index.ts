@@ -1,14 +1,24 @@
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
+
 interface DeleteUserBody {
   user_id?: string;
 }
 
 Deno.serve(async (req: Request) => {
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { status: 200, headers: corsHeaders });
+  }
+
   if (req.method !== "POST") {
     return new Response(JSON.stringify({ error: "Method not allowed" }), {
       status: 405,
-      headers: { "Content-Type": "application/json" },
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 
@@ -19,19 +29,18 @@ Deno.serve(async (req: Request) => {
     if (!targetUserId) {
       return new Response(
         JSON.stringify({ error: "user_id es obligatorio" }),
-        { status: 400, headers: { "Content-Type": "application/json" } },
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-    // Verify the caller is authenticated
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
       return new Response(
         JSON.stringify({ error: "This endpoint requires a valid Bearer token" }),
-        { status: 401, headers: { "Content-Type": "application/json" } },
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
@@ -39,12 +48,11 @@ Deno.serve(async (req: Request) => {
       global: { headers: { Authorization: authHeader } },
     });
 
-    // Check caller is admin
     const { data: { user: callerUser } } = await userClient.auth.getUser();
     if (!callerUser) {
       return new Response(
         JSON.stringify({ error: "This endpoint requires a valid Bearer token" }),
-        { status: 401, headers: { "Content-Type": "application/json" } },
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
@@ -57,19 +65,17 @@ Deno.serve(async (req: Request) => {
     if (!profile?.is_admin) {
       return new Response(
         JSON.stringify({ error: "Solo los administradores pueden eliminar usuarios" }),
-        { status: 403, headers: { "Content-Type": "application/json" } },
+        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
-    // Prevent self-deletion
     if (targetUserId === callerUser.id) {
       return new Response(
         JSON.stringify({ error: "No puedes eliminar tu propia cuenta" }),
-        { status: 400, headers: { "Content-Type": "application/json" } },
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
-    // Delete user with service role key (Admin API)
     const adminClient = createClient(supabaseUrl, serviceRoleKey, {
       auth: { autoRefreshToken: false, persistSession: false },
     });
@@ -79,18 +85,18 @@ Deno.serve(async (req: Request) => {
     if (deleteError) {
       return new Response(
         JSON.stringify({ error: deleteError.message }),
-        { status: 400, headers: { "Content-Type": "application/json" } },
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
     return new Response(
       JSON.stringify({ success: true }),
-      { status: 200, headers: { "Content-Type": "application/json" } },
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (err) {
     return new Response(
       JSON.stringify({ error: err instanceof Error ? err.message : "Internal server error" }),
-      { status: 500, headers: { "Content-Type": "application/json" } },
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   }
 });
