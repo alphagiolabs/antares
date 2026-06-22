@@ -217,7 +217,7 @@ function runQualityGate() {
   if (failurePattern.test(testResult)) {
     throw new Error(`Tests fallaron.\n${testResult.slice(-500)}`);
   }
-  // Also catch pytest's FAILED markers
+  // Also catch pytest's FAILED markers (but not in the context of a pure PASSED run)
   if (testResult.includes('FAILED') && !testResult.includes('PASSED')) {
     throw new Error(`Tests fallaron.\n${testResult.slice(-500)}`);
   }
