@@ -5,6 +5,12 @@ Todas las versiones notables de ANTARES se documentan aquí.
 Formato basado en [Keep a Changelog](https://keepachangelog.com/),
 y este proyecto sigue [Semantic Versioning](https://semver.org/).
 
+## [0.10.9] — 2026-06-22
+
+### Fixed
+- Supabase en builds de CI: el workflow `release.yml` no pasaba `VITE_SUPABASE_URL` ni `VITE_SUPABASE_ANON_KEY` al paso `Build Frontend`, por lo que Vite embebía `undefined` en el bundle y la app instalada mostraba "Supabase no configurado" al intentar ingresar. Agregadas las variables desde GitHub Secrets al paso de build.
+- `supabase.ts`: en builds de producción, si faltan las variables de entorno ahora se lanza un error explícito en lugar de un `console.warn` silencioso, para que el CI falle antes de publicar un instalador roto.
+
 ## [0.10.8] — 2026-06-22
 
 ### Fixed

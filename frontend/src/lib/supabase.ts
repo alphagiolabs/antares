@@ -4,10 +4,14 @@ const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
 
 if (!supabaseUrl || !supabaseAnonKey) {
-  console.warn(
+  const msg =
     '[supabase] Faltan VITE_SUPABASE_URL o VITE_SUPABASE_ANON_KEY en el entorno. ' +
-    'Copia frontend/.env.example a frontend/.env.local y rellena los valores.',
-  );
+    'En local: copia frontend/.env.example a frontend/.env.local y rellena los valores. ' +
+    'En CI: configura los secrets VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY en GitHub.';
+  if (import.meta.env.PROD) {
+    throw new Error(msg);
+  }
+  console.warn(msg);
 }
 
 export const supabase: SupabaseClient | null = supabaseUrl && supabaseAnonKey
