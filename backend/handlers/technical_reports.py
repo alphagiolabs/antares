@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import base64
-from typing import Any
+from typing import Any, cast
 
 from backend.handlers.common import with_locale
 
@@ -160,7 +160,7 @@ def _sanitize_html_for_pdf(html: str) -> str:
     preserving safe inline styles.
     """
     import re
-    safe = html
+    safe: str = html
     # Remove dangerous tags entirely
     safe = re.sub(r"<script[^>]*>[\s\S]*?</script>", "", safe, flags=re.IGNORECASE)
     safe = re.sub(r"<iframe[^>]*>[\s\S]*?</iframe>", "", safe, flags=re.IGNORECASE)
@@ -182,14 +182,14 @@ def _sanitize_html_for_pdf(html: str) -> str:
     def _neutralise_url(m: re.Match) -> str:
         url_content = m.group(2).strip().strip("'\"")
         if url_content.lower().startswith("data:"):
-            return m.group(0)
+            return str(m.group(0))
         return "url('')"
     safe = re.sub(r"url\(\s*(['\"]?)(.+?)\1\s*\)", _neutralise_url, safe, flags=re.IGNORECASE)
     # Inject a restrictive CSP meta tag if not already present
     csp_meta = '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; style-src \'unsafe-inline\'; img-src data:; font-src data:;">'
     if "Content-Security-Policy" not in safe:
         safe = safe.replace("<head>", f"<head>{csp_meta}", 1) if "<head" in safe else csp_meta + safe
-    return safe
+    return cast(str, safe)
 
 
 @with_locale

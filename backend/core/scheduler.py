@@ -170,7 +170,7 @@ class WorkScheduler:
                 vm = psutil.virtual_memory()
                 m["system_ram_total_mb"] = int(vm.total / (1024 * 1024))
                 m["system_ram_available_mb"] = int(vm.available / (1024 * 1024))
-                m["system_ram_percent"] = float(vm.percent)
+                m["system_ram_percent"] = int(vm.percent)
             except ImportError:
                 pass
             return m

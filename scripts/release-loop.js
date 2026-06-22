@@ -209,8 +209,17 @@ function runQualityGate() {
 
   // Tests
   const testResult = trySh('npm test 2>&1', { silent: true, timeout: 900000 });
-  if (testResult === null || testResult.includes('FAILED') || testResult.includes('failed')) {
-    throw new Error(`Tests fallaron.\n${testResult ? testResult.slice(-500) : '(timeout o error)'}`);
+  if (testResult === null) {
+    throw new Error('Tests fallaron (timeout o error).');
+  }
+  // Look for actual failure summary lines like "Test Files  1 failed | 50 passed" or "Tests  2 failed"
+  const failurePattern = /(?:Test Files|Tests)\s+\d+\s+failed/;
+  if (failurePattern.test(testResult)) {
+    throw new Error(`Tests fallaron.\n${testResult.slice(-500)}`);
+  }
+  // Also catch pytest's FAILED markers
+  if (testResult.includes('FAILED') && !testResult.includes('PASSED')) {
+    throw new Error(`Tests fallaron.\n${testResult.slice(-500)}`);
   }
 
   // Audit

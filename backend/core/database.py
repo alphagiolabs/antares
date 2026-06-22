@@ -7,7 +7,7 @@ import re
 import sqlite3
 import unicodedata
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from backend.core.config_fields import get_field_names, load_fields, save_fields
 from backend.core.exceptions import DatabaseError
@@ -520,7 +520,8 @@ def parse_id_rename_mapping(
         Para obtener también las columnas detectadas y todas las disponibles, usa
         :func:`parse_id_rename_mapping_full`.
     """
-    return parse_id_rename_mapping_full(excel_path, id_column, rename_column)["mapping"]
+    result = parse_id_rename_mapping_full(excel_path, id_column, rename_column)
+    return cast(dict[str, str], result["mapping"])
 
 
 def parse_id_rename_mapping_full(
