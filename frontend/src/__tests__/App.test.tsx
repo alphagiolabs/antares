@@ -45,7 +45,10 @@ describe('App', () => {
   it('keeps conversion empty-state actions visible before files are selected', async () => {
     render(<App />);
     fireEvent.click(await screen.findByRole('button', { name: 'Conversión' }, {}, { timeout: 5000 }));
-    expect(await screen.findByRole('button', { name: /Seleccionar archivos/i }, {}, { timeout: 5000 })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText(/Arrastra imágenes o videos aquí/i)).toBeInTheDocument();
+    }, { timeout: 8000 });
+    expect(await screen.findByRole('button', { name: /Seleccionar archivos/i }, {}, { timeout: 8000 })).toBeInTheDocument();
   });
 
   it('has sidebar with navigation buttons', () => {

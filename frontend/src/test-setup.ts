@@ -1,4 +1,12 @@
 import '@testing-library/jest-dom';
+import { cleanup } from '@testing-library/react';
+import { afterEach } from 'vitest';
+
+afterEach(() => {
+  cleanup();
+  localStorage.clear();
+  sessionStorage.clear();
+});
 
 const defaultTheme = {
   name: 'Precision Linear', bg: '#0A0D12', bg_secondary: '#111522',
