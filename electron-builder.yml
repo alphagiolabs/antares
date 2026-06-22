@@ -44,6 +44,7 @@ files:
   - "!node_modules/@electron/**/*"
   - "frontend/dist/**/*"
   - "electron/**/*"
+  - "shared/**/*"
   - "assets/icon.ico"
   - "node_modules/**/*"
   - "!**/node_modules/**/*.map"
