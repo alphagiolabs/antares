@@ -38,6 +38,7 @@ function sh(command, opts = {}) {
     cwd: ROOT,
     encoding: 'utf8',
     stdio: opts.silent ? 'pipe' : 'pipe',
+    maxBuffer: 50 * 1024 * 1024,
     ...opts,
   });
   return (result || '').toString().trim();
