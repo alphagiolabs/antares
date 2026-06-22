@@ -9,6 +9,7 @@ export interface FlyerRecord {
   reservorio: string;
   sector: string;
   zonasAfectadas: string;
+  districtColor?: string;
   titleSize2up?: number;
   titleSize3up?: number;
   districtSize2up?: number;

@@ -20,6 +20,49 @@ const defaultBrand: BrandConfig = {
   logoDerecho: DEFAULT_BRAND.logoDerecho,
 };
 
+const LOGO_MAX_BYTES = 5 * 1024 * 1024; // 5 MB
+const LOGO_ALLOWED_TYPES = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+  "image/gif",
+  "image/bmp",
+]);
+// Reuse a single FileReader per side so a quick re-pick aborts the previous
+// in-flight decode instead of racing two onload callbacks.
+const logoReaders: Record<keyof BrandConfig, FileReader | null> = {
+  logoIzquierdo: null,
+  logoDerecho: null,
+};
+
+function readLogoAsDataUrl(
+  side: keyof BrandConfig,
+  file: File,
+  onError: (message: string) => void,
+  onResult: (dataUrl: string) => void,
+): void {
+  if (!LOGO_ALLOWED_TYPES.has(file.type)) {
+    onError("El logo debe ser PNG, JPEG, WebP, GIF o BMP.");
+    return;
+  }
+  if (file.size > LOGO_MAX_BYTES) {
+    onError(`El logo no puede superar 5 MB (recibido: ${(file.size / 1024 / 1024).toFixed(1)} MB).`);
+    return;
+  }
+  let reader = logoReaders[side];
+  if (reader) {
+    try { reader.abort(); } catch { /* already complete */ }
+  }
+  reader = new FileReader();
+  logoReaders[side] = reader;
+  reader.onload = () => {
+    if (typeof reader.result === "string") onResult(reader.result);
+    else onError("No se pudo leer el logo.");
+  };
+  reader.onerror = () => onError("Error leyendo el archivo de logo.");
+  reader.readAsDataURL(file);
+}
+
 export default function VolantesView() {
   const { addToast } = useToast();
   const [records, setRecords] = useState<FlyerRecord[]>([]);
@@ -98,14 +141,12 @@ export default function VolantesView() {
     (side: keyof BrandConfig) => (event: ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0];
       if (!file) return;
-      const reader = new FileReader();
-      reader.onload = () => {
-        setBrand((current) => ({
-          ...current,
-          [side]: String(reader.result),
-        }));
-      };
-      reader.readAsDataURL(file);
+      readLogoAsDataUrl(
+        side,
+        file,
+        (message) => addToast({ message, type: "error" }),
+        (dataUrl) => setBrand((current) => ({ ...current, [side]: dataUrl })),
+      );
       event.target.value = "";
     };
 
@@ -117,15 +158,13 @@ export default function VolantesView() {
     (side: keyof BrandConfig) => (event: DragEvent<HTMLLabelElement>) => {
       event.preventDefault();
       const file = event.dataTransfer.files?.[0];
-      if (!file || !file.type.startsWith("image/")) return;
-      const reader = new FileReader();
-      reader.onload = () => {
-        setBrand((current) => ({
-          ...current,
-          [side]: String(reader.result),
-        }));
-      };
-      reader.readAsDataURL(file);
+      if (!file) return;
+      readLogoAsDataUrl(
+        side,
+        file,
+        (message) => addToast({ message, type: "error" }),
+        (dataUrl) => setBrand((current) => ({ ...current, [side]: dataUrl })),
+      );
     };
 
   const handleImport = async (
@@ -150,10 +189,11 @@ export default function VolantesView() {
   };
 
   const handleAddRecord = (): void => {
+    const today = new Date().toISOString().slice(0, 10);
     const newRecord: FlyerRecord = {
       id: toSlugId(),
       distrito: "NUEVO DISTRITO",
-      fecha: "2026-04-03",
+      fecha: today,
       horaInicio: "08:00",
       horaFin: "16:00",
       reservorio: "NUEVO RESERVORIO",

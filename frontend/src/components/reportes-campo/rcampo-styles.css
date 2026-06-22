@@ -238,6 +238,14 @@
 
 .rcampo-section {
     margin-bottom: 2px;
+    border-radius: 6px;
+    border: 1px solid transparent;
+    transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.rcampo-section.is-open {
+    border-color: var(--rcampo-border);
+    background: color-mix(in srgb, var(--rcampo-surface) 60%, var(--rcampo-base) 40%);
 }
 
 .rcampo-section-header {
@@ -245,12 +253,12 @@
     align-items: center;
     justify-content: space-between;
     cursor: pointer;
-    padding: 5px 6px;
+    padding: 7px 8px;
     background: transparent;
     border: none;
     width: 100%;
-    border-radius: 4px;
-    transition: background 0.1s ease;
+    border-radius: 5px;
+    transition: background 0.12s ease;
 }
 
 .rcampo-section-header:hover {
@@ -265,7 +273,51 @@
     color: var(--rcampo-secondary);
     display: flex;
     align-items: center;
+    gap: 6px;
+}
+
+.rcampo-section-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    border-radius: 4px;
+    background: color-mix(in srgb, var(--rcampo-accent) 15%, transparent);
+    color: var(--rcampo-accent);
+    flex-shrink: 0;
+}
+
+.rcampo-section-icon svg {
+    width: 10px;
+    height: 10px;
+}
+
+.rcampo-section.is-open .rcampo-section-title {
+    color: var(--rcampo-primary);
+}
+
+.rcampo-section.is-open .rcampo-section-icon {
+    background: var(--rcampo-accent);
+    color: var(--rcampo-on-accent);
+}
+
+.rcampo-section-meta {
+    display: flex;
+    align-items: center;
     gap: 5px;
+}
+
+.rcampo-section-badge {
+    font-size: 0.56rem;
+    font-weight: 500;
+    font-family: "SF Mono", "Cascadia Code", monospace;
+    padding: 1px 5px;
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--rcampo-accent) 12%, transparent);
+    color: var(--rcampo-accent);
+    letter-spacing: 0.02em;
+    line-height: 1.4;
 }
 
 .rcampo-section-title svg {
@@ -276,11 +328,12 @@
 
 .rcampo-section-toggle {
     color: var(--rcampo-muted);
-    transition: transform 0.15s ease;
+    transition: transform 0.2s ease, color 0.15s ease;
 }
 
 .rcampo-section-toggle.open {
     transform: rotate(180deg);
+    color: var(--rcampo-accent);
 }
 
 .rcampo-section-toggle svg {
@@ -291,25 +344,38 @@
 .rcampo-section-body {
     display: flex;
     flex-direction: column;
-    gap: 5px;
-    padding: 2px 6px 6px;
+    gap: 6px;
+    padding: 4px 8px 10px;
 }
 
 .rcampo-field {
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: 3px;
+    padding: 4px 0 4px 8px;
+    border-left: 2px solid transparent;
+    border-radius: 1px;
+    transition: border-color 0.15s ease;
+}
+
+.rcampo-field.has-value {
+    border-left-color: var(--rcampo-accent);
 }
 
 .rcampo-field-label {
-    font-size: 0.68rem;
+    font-size: 0.66rem;
     font-weight: 600;
     letter-spacing: 0.04em;
     text-transform: uppercase;
-    color: var(--rcampo-primary);
+    color: var(--rcampo-secondary);
     display: flex;
     align-items: center;
-    gap: 2px;
+    gap: 3px;
+    transition: color 0.15s ease;
+}
+
+.rcampo-field.has-value .rcampo-field-label {
+    color: var(--rcampo-primary);
 }
 
 .rcampo-field-label .required {
@@ -324,21 +390,40 @@
     border: none;
     border-bottom: 1px solid var(--rcampo-border);
     border-radius: 0;
-    padding: 4px 0;
+    padding: 5px 0;
     font-size: 0.75rem;
     color: var(--rcampo-primary);
-    transition: border-color 0.15s ease;
+    transition: border-color 0.2s ease, background 0.2s ease;
     outline: none;
+    color-scheme: dark;
+}
+
+.rcampo-input[type="date"]::-webkit-calendar-picker-indicator {
+    cursor: pointer;
+    opacity: 0.5;
+    transition: opacity 0.2s ease;
+}
+
+.rcampo-input[type="date"]::-webkit-calendar-picker-indicator:hover {
+    opacity: 1;
 }
 
 .rcampo-input::placeholder,
 .rcampo-textarea::placeholder {
-    color: transparent;
+    color: color-mix(in srgb, var(--rcampo-muted) 50%, transparent);
+    font-style: italic;
+    font-weight: 400;
+}
+
+.rcampo-input:hover,
+.rcampo-textarea:hover {
+    border-bottom-color: var(--rcampo-border-strong);
 }
 
 .rcampo-input:focus,
 .rcampo-textarea:focus {
     border-bottom-color: var(--rcampo-accent);
+    background: color-mix(in srgb, var(--rcampo-accent) 4%, transparent);
 }
 
 .rcampo-textarea {
@@ -360,7 +445,7 @@
     flex: 1;
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: 3px;
 }
 
 .rcampo-logo-label {
@@ -369,33 +454,66 @@
     text-transform: uppercase;
     letter-spacing: 0.04em;
     font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 3px;
+}
+
+.rcampo-logo-label svg {
+    color: var(--rcampo-muted);
 }
 
 .rcampo-logo-btn {
     width: 100%;
-    height: 40px;
+    height: 44px;
     border: 1px dashed var(--rcampo-border-strong);
-    border-radius: 4px;
+    border-radius: 6px;
     background: var(--rcampo-input);
     color: var(--rcampo-secondary);
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: all 0.2s ease;
     overflow: hidden;
     position: relative;
 }
 
+.rcampo-logo-placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    color: var(--rcampo-muted);
+    transition: color 0.15s ease;
+}
+
+.rcampo-logo-placeholder span {
+    font-size: 0.52rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-weight: 500;
+}
+
 .rcampo-logo-btn:hover {
     border-color: var(--rcampo-accent);
-    background: var(--rcampo-hover);
-    color: var(--rcampo-primary);
+    border-style: dashed;
+    background: color-mix(in srgb, var(--rcampo-accent) 6%, var(--rcampo-surface));
+    color: var(--rcampo-accent);
+}
+
+.rcampo-logo-btn:hover .rcampo-logo-placeholder {
+    color: var(--rcampo-accent);
 }
 
 .rcampo-logo-btn.has-logo {
     border-style: solid;
+    border-color: var(--rcampo-border);
     background: var(--rcampo-elevated);
+}
+
+.rcampo-logo-btn.has-logo:hover {
+    border-color: var(--rcampo-accent);
 }
 
 .rcampo-logo-btn img {
@@ -425,12 +543,14 @@
     align-items: center;
     justify-content: center;
     opacity: 0;
-    transition: opacity 0.1s ease;
+    transition: opacity 0.12s ease, transform 0.12s ease;
     z-index: 2;
+    transform: scale(0.8);
 }
 
 .rcampo-logo-slot:hover .rcampo-logo-remove {
     opacity: 1;
+    transform: scale(1);
 }
 
 .rcampo-logo-remove svg {
@@ -585,8 +705,14 @@
 
 .rcampo-divider {
     height: 1px;
-    background: var(--rcampo-border);
-    margin: 8px 6px;
+    background: linear-gradient(
+        90deg,
+        transparent 0%,
+        var(--rcampo-border) 20%,
+        var(--rcampo-border) 80%,
+        transparent 100%
+    );
+    margin: 6px 8px;
 }
 
 @media (max-width: 900px) {

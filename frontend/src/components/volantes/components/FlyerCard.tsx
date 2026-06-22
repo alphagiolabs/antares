@@ -23,6 +23,10 @@ const buildCardStyle = (record: FlyerRecord, scale: number): Record<string, stri
     "--flyer-scale": String(scale),
   };
 
+  if (record.districtColor) {
+    vars["--district-color"] = record.districtColor;
+  }
+
   const add = (name: string, value: number | undefined) => {
     if (value && value !== 100) vars[name] = String(value / 100);
   };
