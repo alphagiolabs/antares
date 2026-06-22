@@ -77,6 +77,21 @@ async function run() {
     }, win);
     assert(canceledFolder.handled === true, 'dialog_folder should handle cancellation');
     assert(canceledFolder.result.paths.length === 0, 'dialog_folder should return empty paths on cancel');
+
+    // dialog_folder with pickOnly: returns the raw folder path without
+    // scanning its contents. Used by the optimizer's "save to folder" flow
+    // so we don't recursively list files we're about to overwrite anyway.
+    const pickOnlyDialog = {
+      async showOpenDialog(win, options) {
+        calls.push({ kind: 'pickOnly', win, options });
+        return { canceled: false, filePaths: ['C:/tmp/out'] };
+      },
+      async showSaveDialog() { return { canceled: true }; },
+    };
+    const pickOnlyResult = await handleDialogCall('dialog_folder', { pickOnly: true }, pickOnlyDialog, win);
+    assert(pickOnlyResult.handled === true, 'dialog_folder with pickOnly should be handled');
+    assert(pickOnlyResult.result.paths.length === 0, 'dialog_folder with pickOnly should not scan files');
+    assert(pickOnlyResult.result.folder === 'C:/tmp/out', 'dialog_folder with pickOnly should return the raw folder path');
   } finally {
     await folderFs.promises.rm(tempFolderDir, { recursive: true, force: true });
   }
@@ -91,11 +106,18 @@ async function run() {
       this.options = options;
       this.closed = false;
       this.listeners = {};
+      this.lastFilter = null;
       this.webContents = {
         session: {
           webRequest: {
-            onBeforeRequest: (_filter, callback) => {
-              this.onBeforeRequest = callback;
+            onBeforeRequest: (filter, callback) => {
+              // Support both register (callback=fn) and unregister
+              // (callback=null) calls. We keep the last non-null callback
+              // so tests can still invoke it directly.
+              this.lastFilter = filter;
+              if (callback) {
+                this.onBeforeRequest = callback;
+              }
             },
           },
         },

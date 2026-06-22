@@ -2,7 +2,12 @@ import base64
 
 import pytest
 
-from backend.handlers.formatos import formatos_generate, formatos_upload
+from backend.handlers.formatos import (
+    formatos_generate,
+    formatos_get_template,
+    formatos_render_template_page,
+    formatos_upload,
+)
 
 
 def test_formatos_upload_rejects_non_pdf_content() -> None:
@@ -12,6 +17,22 @@ def test_formatos_upload_rejects_non_pdf_content() -> None:
                 "nombre": "malicioso",
                 "filename": "malicioso.pdf",
                 "content_b64": base64.b64encode(b"not-a-pdf").decode("ascii"),
+            }
+        )
+
+
+def test_formatos_upload_rejects_filename_with_path_traversal() -> None:
+    # Regression guard for BP-CRÍTICO-2: a crafted filename with path
+    # separators used to be concatenated verbatim into the destination
+    # path, letting the IPC caller write outside `_UPLOADS_DIR` after
+    # Path.resolve() normalised the `..` segments. The handler must now
+    # sanitise the filename and reject the request if it can't be made safe.
+    with pytest.raises(ValueError):
+        formatos_upload(
+            {
+                "nombre": "malicioso",
+                "filename": "../../malware.pdf",
+                "content_b64": base64.b64encode(b"%PDF-evil").decode("ascii"),
             }
         )
 
@@ -37,3 +58,67 @@ def test_formatos_generate_writes_to_output_path_without_base64(monkeypatch, tmp
     assert result == {"filename": "salida.pdf", "saved_path": str(output_path.resolve())}
     assert output_path.read_bytes() == b"%PDF-large"
     assert "pdf_base64" not in result
+
+
+def test_formatos_get_template_returns_pdf_base64(monkeypatch) -> None:
+    def fake_get_template_pdf(fmt_id: str) -> tuple[bytes, str]:
+        assert fmt_id == "template-d"
+        return b"%PDF-1.4", "Formato D"
+
+    monkeypatch.setattr("backend.core.formatos.get_template_pdf", fake_get_template_pdf)
+
+    result = formatos_get_template({"format_id": "template-d"})
+
+    assert result["filename"] == "Formato D"
+    assert base64.b64decode(result["pdf_base64"]) == b"%PDF-1.4"
+
+
+def test_formatos_render_template_page_returns_image(monkeypatch) -> None:
+    def fake_render_template_page(fmt_id: str, page_num: int, max_width: int = 1200) -> dict:
+        assert fmt_id == "template-d"
+        assert page_num == 1
+        assert max_width == 1200
+        return {
+            "image_base64": "aW1n",
+            "page_width": 595.0,
+            "page_height": 842.0,
+            "mime_type": "image/png",
+        }
+
+    monkeypatch.setattr("backend.core.formatos.render_template_page", fake_render_template_page)
+
+    result = formatos_render_template_page({"format_id": "template-d", "page_num": 1})
+
+    assert result["image_base64"] == "aW1n"
+    assert result["page_width"] == 595.0
+    assert result["page_height"] == 842.0
+    assert result["mime_type"] == "image/png"
+
+
+def test_formatos_render_template_page_rejects_non_positive_page_num() -> None:
+    # Regression guard for A1: `page_num=0` or negative used to bubble a
+    # generic ValueError from deep inside sellador_preview. The handler
+    # must validate at the boundary and raise a localised, specific error.
+    with pytest.raises(ValueError, match="page_num"):
+        formatos_render_template_page({"format_id": "template-d", "page_num": 0})
+
+
+def test_formatos_render_template_page_rejects_non_numeric_page_num() -> None:
+    # `int("abc")` previously raised an unhelpful ValueError with no
+    # field name. The handler should now report `page_num inválido`.
+    with pytest.raises(ValueError, match="page_num"):
+        formatos_render_template_page({"format_id": "template-d", "page_num": "abc"})
+
+
+def test_formatos_render_template_page_rejects_oversized_max_width() -> None:
+    # Without an upper bound, a renderer could ask for a 50000px preview
+    # and burn CPU + memory. The handler must clamp at the boundary.
+    with pytest.raises(ValueError, match="max_width"):
+        formatos_render_template_page({"format_id": "template-d", "page_num": 1, "max_width": 99999})
+
+
+def test_formatos_generate_rejects_non_numeric_desde() -> None:
+    # Regression guard for the parse_positive_int migration: `int(None)`
+    # previously raised a TypeError with a cryptic message.
+    with pytest.raises(ValueError, match="desde"):
+        formatos_generate({"format_id": "template-d", "desde": None, "hasta": 5})
