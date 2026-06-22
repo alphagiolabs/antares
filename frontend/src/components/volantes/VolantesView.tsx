@@ -353,7 +353,10 @@ export default function VolantesView() {
               {selectedRecord ? (
                 <div className="vgen-editor">
                   <div className="vgen-section vgen-section-logos">
-                    <label className="vgen-label">Logos</label>
+                    <label className="vgen-label">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" /><polyline points="21 15 16 10 5 21" /></svg>
+                      Logos
+                    </label>
                     <div className="vgen-logos-grid">
                       <label
                         className="v-upload-box"
@@ -429,7 +432,10 @@ export default function VolantesView() {
                   </div>
 
                   <div className="vgen-section">
-                    <label className="vgen-label">Ubicacion</label>
+                    <label className="vgen-label">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" /><circle cx="12" cy="10" r="3" /></svg>
+                      Ubicacion
+                    </label>
                     <div className="vgen-section-fields">
                       <div className="vgen-row">
                         <div className="vgen-field vgen-field-13">
@@ -461,7 +467,10 @@ export default function VolantesView() {
                   </div>
 
                   <div className="vgen-section">
-                    <label className="vgen-label">Programacion</label>
+                    <label className="vgen-label">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>
+                      Programacion
+                    </label>
                     <div className="vgen-section-fields">
                       <div className="vgen-row">
                         <div className="vgen-field">
@@ -510,7 +519,10 @@ export default function VolantesView() {
                   </div>
 
                   <div className="vgen-section vgen-section-grow">
-                    <label className="vgen-label">Zonas Afectadas</label>
+                    <label className="vgen-label">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6" /><line x1="8" y1="2" x2="8" y2="18" /><line x1="16" y1="6" x2="16" y2="22" /></svg>
+                      Zonas Afectadas
+                    </label>
                     <textarea
                       className="vgen-input vgen-textarea-flex"
                       onChange={(e) =>
@@ -522,6 +534,66 @@ export default function VolantesView() {
                       }
                       value={selectedRecord.zonasAfectadas}
                     />
+                  </div>
+
+                  <div className="vgen-section">
+                    <label className="vgen-label">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="13.5" cy="6.5" r="2.5" /><path d="M17 2H7a5 5 0 0 0 0 10h10a5 5 0 0 0 0-10z" /><circle cx="8.5" cy="17.5" r="2.5" /><path d="M17 14H7a5 5 0 0 0 0 10h10" /></svg>
+                      Configuracion
+                    </label>
+                    <div className="vgen-section-fields">
+                      <label className="vgen-label-sm">Color pastilla Distrito</label>
+                      <div className="vgen-district-color-row">
+                        {[
+                          "#55caeb",
+                          "#1a9fc4",
+                          "#18416d",
+                          "#2ecc71",
+                          "#e67e22",
+                          "#e74c3c",
+                          "#9b59b6",
+                          "#f1c40f",
+                        ].map((preset) => (
+                          <button
+                            key={preset}
+                            type="button"
+                            className={`vgen-color-swatch${
+                              (selectedRecord.districtColor ?? "#55caeb") === preset
+                                ? " active"
+                                : ""
+                            }`}
+                            style={{ background: preset }}
+                            onClick={() =>
+                              updateSelectedRecord({ districtColor: preset })
+                            }
+                            title={preset}
+                          />
+                        ))}
+                        <label
+                          className="vgen-color-swatch vgen-color-custom"
+                          title="Color personalizado"
+                          style={{
+                            background:
+                              selectedRecord.districtColor &&
+                              ![
+                                "#55caeb","#1a9fc4","#18416d","#2ecc71",
+                                "#e67e22","#e74c3c","#9b59b6","#f1c40f",
+                              ].includes(selectedRecord.districtColor)
+                                ? selectedRecord.districtColor
+                                : "conic-gradient(red,yellow,lime,aqua,blue,magenta,red)",
+                          }}
+                        >
+                          <input
+                            type="color"
+                            value={selectedRecord.districtColor ?? "#55caeb"}
+                            onChange={(e) =>
+                              updateSelectedRecord({ districtColor: e.target.value })
+                            }
+                            style={{ opacity: 0, position: "absolute", width: 0, height: 0 }}
+                          />
+                        </label>
+                      </div>
+                    </div>
                   </div>
                 </div>
               ) : (
