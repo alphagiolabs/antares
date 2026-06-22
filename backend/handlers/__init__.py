@@ -21,6 +21,7 @@ from backend.handlers.sellador import HANDLERS as SELLADOR_HANDLERS
 from backend.handlers.technical_reports import HANDLERS as TECH_REPORTS_HANDLERS
 from backend.handlers.templates import HANDLERS as TEMPLATES_HANDLERS
 from backend.handlers.theme import HANDLERS as THEME_HANDLERS
+from backend.handlers.ubicaciones import HANDLERS as UBICACIONES_HANDLERS
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -38,6 +39,7 @@ HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
     **OPTIMIZER_HANDLERS,
     **SELLADOR_HANDLERS,
     **JOBS_HANDLERS,
+    **UBICACIONES_HANDLERS,
 }
 
 # Backward-compatible aliases for tests

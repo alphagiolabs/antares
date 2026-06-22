@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 
 interface ThumbnailProps {
   path: string;
@@ -9,7 +9,9 @@ interface ThumbnailProps {
 export default function Thumbnail({ path, size = 48, variant = 'compact' }: ThumbnailProps) {
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState(false);
+  const [inView, setInView] = useState(false);
   const isCard = variant === 'card';
+  const containerRef = useRef<HTMLDivElement>(null);
 
   const filename = useMemo(() => path.split(/[\\/]/).pop() || path, [path]);
   const ext = useMemo(() => filename.split('.').pop()?.toUpperCase() ?? '', [filename]);
@@ -18,8 +20,27 @@ export default function Thumbnail({ path, size = 48, variant = 'compact' }: Thum
   const handleLoad = useCallback(() => setLoaded(true), []);
   const handleError = useCallback(() => { setError(true); setLoaded(true); }, []);
 
+  // Lazy-load: only set the img src when the thumbnail is near the viewport.
+  // This prevents the renderer from opening hundreds of file:// handles
+  // simultaneously when a large batch of images is loaded.
+  useEffect(() => {
+    if (!containerRef.current || inView) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          setInView(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: '200px' },
+    );
+    observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, [inView]);
+
   return (
     <div
+      ref={containerRef}
       className={`relative shrink-0 group overflow-hidden bg-dark-input ${
         isCard
           ? 'w-full h-full rounded-[10px] border border-white/10 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]'
@@ -33,7 +54,7 @@ export default function Thumbnail({ path, size = 48, variant = 'compact' }: Thum
         </div>
       )}
 
-      {!error ? (
+      {inView && !error ? (
         <img
           src={src}
           alt=""
@@ -44,7 +65,7 @@ export default function Thumbnail({ path, size = 48, variant = 'compact' }: Thum
           onLoad={handleLoad}
           onError={handleError}
         />
-      ) : (
+      ) : error ? (
         <div className="h-full w-full flex items-center justify-center bg-dark-elevated">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-txt-muted">
             <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
@@ -52,7 +73,7 @@ export default function Thumbnail({ path, size = 48, variant = 'compact' }: Thum
             <polyline points="21 15 16 10 5 21" />
           </svg>
         </div>
-      )}
+      ) : null}
 
       <div className="absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-black/70 to-transparent opacity-80" />
       <span

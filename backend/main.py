@@ -101,6 +101,7 @@ HEAVY_METHODS = {
     "panel_aviso_corte_parse_excel",
     "panel_aviso_corte_compute_match",
     "panel_aviso_corte_render_pdf",
+    "generar_ubicaciones",
 }
 
 

@@ -67,7 +67,7 @@ def _apply_catalog_rename(
 def _detect_best_key_column(
     files: list[str],
     db_columns: list[str],
-    sample_size: int = 50,
+    sample_size: int = 30,
 ) -> str:
     """Auto-detect which DB column contains the file codes.
 
@@ -141,24 +141,40 @@ def _resolve_key_column(
     if len(columns) == 1:
         return columns[0]
 
-    best = _detect_best_key_column(files, columns)
-    # Keep the user's choice if it matches equally well as the best
-    if key_column and key_column in columns:
-        from backend.core.database import buscar_por_columna
+    # Parse codes once and reuse for both best-detection and user comparison
+    from backend.core.database import buscar_por_columna
 
-        codigos = []
-        stems = []
-        for f in files[:50]:
-            p = Path(f)
-            code, _ = parse_filename_parts(p.name)
-            codigos.append(code)
-            stems.append(p.stem)
-        search_keys = list(set(codigos + stems))
-        user_matches = len(buscar_por_columna(search_keys, key_column))
-        best_matches = len(buscar_por_columna(search_keys, best))
-        if user_matches >= best_matches and user_matches > 0:
-            return key_column
-    return best
+    sample_files = files[:30]
+    codigos: list[str] = []
+    stems: list[str] = []
+    for f in sample_files:
+        p = Path(f)
+        code, _ = parse_filename_parts(p.name)
+        codigos.append(code)
+        stems.append(p.stem)
+    search_keys = list(set(codigos + stems))
+    if not search_keys:
+        return columns[0]
+
+    # Probe all columns in a single pass, remembering the user's count
+    best_col = columns[0]
+    best_count = -1
+    user_count = -1
+    for col in columns:
+        try:
+            count = len(buscar_por_columna(search_keys, col))
+        except Exception:
+            count = -1
+        if col == key_column:
+            user_count = count
+        if count > best_count:
+            best_count = count
+            best_col = col
+
+    # Keep the user's choice if it matches equally well as the best
+    if key_column and key_column in columns and user_count >= 0 and user_count >= best_count and user_count > 0:
+        return key_column
+    return best_col
 
 
 @with_locale
@@ -747,8 +763,8 @@ def db_detect_key_column(params: dict[str, Any]) -> dict[str, Any]:
     if len(db_cols) == 1:
         return {"key_column": db_cols[0], "matches": 0, "columns": [{"name": db_cols[0], "matches": 0}]}
 
-    # Parse codes from a sample of files
-    sample_files = files[:50]
+    # Parse codes from a sample of files (30 is enough for detection)
+    sample_files = files[:30]
     codigos: list[str] = []
     stems: list[str] = []
     for f in sample_files:

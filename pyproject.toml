@@ -27,6 +27,7 @@ dependencies = [
     "jsonschema>=4.0.0",
     "lxml>=6.1.0",
     "psutil>=5.9.0",
+    "playwright>=1.40.0",
 ]
 
 [project.optional-dependencies]

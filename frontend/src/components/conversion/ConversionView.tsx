@@ -35,7 +35,6 @@ export default function ConversionView() {
   const [formats, setFormats] = useState<string[]>(DEFAULT_FORMATS);
   const [fields, setFields] = useState<string[]>(DEFAULT_FIELDS);
   const [patterns, setPatterns] = useState<RenamePattern[]>([]);
-  const [videoFiles, setVideoFiles] = useState<Set<string>>(new Set());
   const [dragOver, setDragOver] = useState(false);
   const [dbColumns, setDbColumns] = useState<string[]>([]);
   const [dbRecords, setDbRecords] = useState<DBRecord[]>([]);
@@ -222,7 +221,14 @@ export default function ConversionView() {
 
   const mergeFiles = useCallback((incoming: string[]) => {
     if (!incoming.length) return;
-    setFiles((prev) => Array.from(new Set([...prev, ...incoming])));
+    // For large incoming batches, avoid the O(n) Set scan of the entire
+    // existing list by using a Set for dedup and converting back to array.
+    setFiles((prev) => {
+      if (prev.length === 0) return incoming;
+      const existing = new Set(prev);
+      const newItems = incoming.filter((f) => !existing.has(f));
+      return newItems.length ? [...prev, ...newItems] : prev;
+    });
     setSelectedFile((prev) => prev || incoming[0]);
   }, []);
 
@@ -316,25 +322,34 @@ export default function ConversionView() {
 
   const sequenceMode = useFilenameSeq ? 'record' : 'global';
 
+  // Preview debounce: increased to 600ms and guarded by a cancellation token
+  // so rapid file additions don't stack multiple backend calls.
+  const previewToken = useRef(0);
   useEffect(() => {
     if (!usarRename || files.length === 0) {
       setRenamePreview([]);
       return undefined;
     }
 
+    const token = ++previewToken.current;
+    // For very large file lists, sample the first 200 files for the preview
+    // to avoid sending a massive payload to the backend on every keystroke.
+    const PREVIEW_SAMPLE_LIMIT = 200;
+    const previewFiles = files.length > PREVIEW_SAMPLE_LIMIT ? files.slice(0, PREVIEW_SAMPLE_LIMIT) : files;
+
     const timer = window.setTimeout(async () => {
       try {
         const result = await api.preview(
           mappingMode && mappingData
             ? {
-                files,
+                files: previewFiles,
                 patron: '{renombre}{ext}',
                 secuencia: 1,
                 use_filename_seq: false,
                 mapping: mappingData,
               }
             : {
-                files,
+                files: previewFiles,
                 patron,
                 secuencia,
                 use_filename_seq: useFilenameSeq,
@@ -343,11 +358,13 @@ export default function ConversionView() {
                 sequence_mode: sequenceMode,
               },
         );
+        if (token !== previewToken.current) return; // a newer change superseded us
         setRenamePreview(result.preview);
       } catch {
+        if (token !== previewToken.current) return;
         setRenamePreview([]);
       }
-    }, 400);
+    }, 600);
 
     return () => window.clearTimeout(timer);
   }, [files, usarRename, mappingMode, mappingData, patron, secuencia, useFilenameSeq, keyColumn, wordSeparator, sequenceMode]);
@@ -355,13 +372,17 @@ export default function ConversionView() {
   // Auto-detect the best key column when files are added and a DB is loaded.
   // This fixes the common case where the default key column (first column)
   // doesn't contain the file codes, causing silent rename failures.
+  // Only sends a sample of files to avoid large IPC payloads.
   const keyDetectToken = useRef(0);
   useEffect(() => {
     if (mappingMode || files.length === 0 || dbColumns.length <= 1) return;
     const token = ++keyDetectToken.current;
+    // The backend only samples the first 50 files anyway, so we can send
+    // a small sample instead of the full array to reduce IPC payload size.
+    const sampleFiles = files.length > 50 ? files.slice(0, 50) : files;
     const timer = window.setTimeout(async () => {
       try {
-        const result = await api.dbDetectKeyColumn(files);
+        const result = await api.dbDetectKeyColumn(sampleFiles);
         if (token !== keyDetectToken.current) return;
         if (result.key_column && result.matches > 0 && result.key_column !== keyColumn) {
           setKeyColumn(result.key_column);
@@ -369,7 +390,7 @@ export default function ConversionView() {
       } catch {
         // ignore — keep the default key column
       }
-    }, 600);
+    }, 800);
     return () => window.clearTimeout(timer);
   }, [files, dbColumns, mappingMode, keyColumn]);
 
@@ -412,12 +433,15 @@ export default function ConversionView() {
     setPatron(preset.pattern);
   };
 
-  useEffect(() => {
+  // Compute video files via useMemo instead of useEffect+setState.
+  // This avoids an extra render cycle and keeps videoFiles stable when
+  // files hasn't changed.
+  const videoFiles = useMemo(() => {
     const videoSet = new Set<string>();
     for (const file of files) {
       if (isVideoByExt(file)) videoSet.add(file);
     }
-    setVideoFiles(videoSet);
+    return videoSet;
   }, [files]);
 
   const doProcess = async () => {

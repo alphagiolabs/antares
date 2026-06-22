@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 
 export function useFileSelection(files: string[]) {
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
@@ -7,21 +7,24 @@ export function useFileSelection(files: string[]) {
 
   useEffect(() => { filesRef.current = files; }, [files]);
 
-  // Remove deleted files from selection
+  // Build a Set for O(1) lookup instead of O(n) Array.includes
+  const filesSet = useMemo(() => new Set(files), [files]);
+
+  // Remove deleted files from selection — uses filesSet for O(1) lookups
   useEffect(() => {
     setSelectedFiles((prev) => {
       let needsUpdate = false;
       for (const f of prev) {
-        if (!files.includes(f)) { needsUpdate = true; break; }
+        if (!filesSet.has(f)) { needsUpdate = true; break; }
       }
       if (!needsUpdate) return prev;
-      const next = new Set(prev);
+      const next = new Set<string>();
       for (const f of prev) {
-        if (!files.includes(f)) next.delete(f);
+        if (filesSet.has(f)) next.add(f);
       }
       return next;
     });
-  }, [files]);
+  }, [filesSet]);
 
   const handleFileClick = useCallback((e: React.MouseEvent, path: string) => {
     if (e.ctrlKey || e.metaKey) {

@@ -9,6 +9,7 @@ export const TAB_DEFINITIONS = [
   { id: 'imageOptimizer', label: 'Optimizador', commandLabel: 'Optimizador de Imágenes', shortcut: 'Ctrl+9', shortcutKey: '9', fullBleed: true },
   { id: 'previewPanel', label: 'Generador Reportes', commandLabel: 'Generador de Reportes', shortcut: 'Ctrl+0', shortcutKey: '0', fullBleed: true },
   { id: 'panelAvisoCorte', label: 'Aviso de Corte', shortcut: 'Ctrl+2', shortcutKey: '2', fullBleed: true },
+  { id: 'ubicaciones', label: 'Ubicaciones', commandLabel: 'Herramienta de Ubicaciones', shortcut: 'Ctrl+U', shortcutKey: 'u', fullBleed: true },
 ] as const;
 
 export type TabId = (typeof TAB_DEFINITIONS)[number]['id'];

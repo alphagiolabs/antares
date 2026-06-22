@@ -26,7 +26,18 @@ interface CellData {
 const COL_WIDTH = 152;
 const ROW_HEIGHT = 198;
 
-function FileGridCell({ rowIndex, columnIndex, style, files, columnCount, selectedFiles, selectedFile, onFileClick, onFileDoubleClick, onRemoveFile, videoFiles }: { ariaAttributes: { "aria-colindex": number; role: "gridcell" }; rowIndex: number; columnIndex: number; style: React.CSSProperties } & CellData) {
+type CellComponentProps = {
+  ariaAttributes: { "aria-colindex": number; role: "gridcell" };
+  rowIndex: number;
+  columnIndex: number;
+  style: React.CSSProperties;
+} & CellData;
+
+// Cell component: memoized so react-window doesn't re-render all visible
+// cells when cellProps changes identity (e.g. on selection changes).
+const MemoizedFileGridCell = React.memo(function FileGridCell(
+  { rowIndex, columnIndex, style, files, columnCount, selectedFiles, selectedFile, onFileClick, onFileDoubleClick, onRemoveFile, videoFiles }: CellComponentProps
+): React.ReactElement | null {
   const idx = rowIndex * columnCount + columnIndex;
   if (idx >= files.length) return <div style={style} />;
   const f = files[idx];
@@ -43,14 +54,12 @@ function FileGridCell({ rowIndex, columnIndex, style, files, columnCount, select
       />
     </div>
   );
-}
+});
 
 export default function FileGrid({ files, selectedFiles, selectedFile, onFileClick, onFileDoubleClick, onRemoveFile, videoFiles = new Set() }: FileGridProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = React.useState<{ width: number; height: number } | null>(null);
 
-  // useLayoutEffect runs before the browser paints, so we can measure
-  // the container synchronously and avoid a flash of incorrect layout.
   React.useLayoutEffect(() => {
     const el = containerRef.current;
     if (!el) return;
@@ -84,7 +93,7 @@ export default function FileGrid({ files, selectedFiles, selectedFile, onFileCli
           rowCount={rowCount}
           rowHeight={ROW_HEIGHT}
           overscanCount={3}
-          cellComponent={FileGridCell}
+          cellComponent={MemoizedFileGridCell as (props: CellComponentProps) => React.ReactElement | null}
           cellProps={cellProps}
         />
       )}

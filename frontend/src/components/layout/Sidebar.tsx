@@ -26,6 +26,7 @@ const ICONS: Record<TabId, ComponentType<{ className?: string }>> = {
   imageOptimizer: ImageOptimizerIcon,
   previewPanel: PreviewPanelIcon,
   panelAvisoCorte: PanelAvisoCorteIcon,
+  ubicaciones: MapPinIcon,
 };
 
 function readStoredExpanded(): boolean {
@@ -117,6 +118,15 @@ function PanelAvisoCorteIcon({ className }: { className?: string }) {
       <path d="M3 9h18" />
       <path d="M9 21V9" />
       <rect x="12" y="12" width="6" height="6" rx="1" />
+    </svg>
+  );
+}
+
+function MapPinIcon({ className }: { className?: string }) {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z" />
+      <circle cx="12" cy="10" r="3" />
     </svg>
   );
 }
