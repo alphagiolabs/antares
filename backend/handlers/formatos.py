@@ -5,9 +5,10 @@ import base64
 from pathlib import Path
 from typing import Any
 
-from backend.handlers.common import with_locale
+from backend.handlers.common import parse_positive_int, with_locale
 
 _PDF_MAGIC = b"%PDF"
+_MAX_PREVIEW_WIDTH = 2400
 
 
 @with_locale
@@ -19,8 +20,8 @@ def formatos_list(params: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
 def formatos_generate(params: dict[str, Any]) -> dict[str, str]:
     from backend.core.formatos import generate_pdf
     fmt_id = params.get("format_id", "")
-    desde = int(params.get("desde", 1))
-    hasta = int(params.get("hasta", 1))
+    desde = parse_positive_int(params.get("desde", 1), "desde")
+    hasta = parse_positive_int(params.get("hasta", 1), "hasta")
     pdf_bytes, filename = generate_pdf(fmt_id, desde, hasta)
     output_path = str(params.get("output_path") or "").strip()
     if output_path:
@@ -53,6 +54,21 @@ def formatos_delete(params: dict[str, Any]) -> dict[str, bool]:
     return {"deleted": delete_format(params.get("format_id", ""))}
 
 @with_locale
+def formatos_get_template(params: dict[str, Any]) -> dict[str, str]:
+    from backend.core.formatos import get_template_pdf
+    fmt_id = params.get("format_id", "")
+    pdf_bytes, filename = get_template_pdf(fmt_id)
+    return {"pdf_base64": base64.b64encode(pdf_bytes).decode("ascii"), "filename": filename}
+
+@with_locale
+def formatos_render_template_page(params: dict[str, Any]) -> dict[str, Any]:
+    from backend.core.formatos import render_template_page
+    fmt_id = params.get("format_id", "")
+    page_num = parse_positive_int(params.get("page_num", 1), "page_num")
+    max_width = parse_positive_int(params.get("max_width", 1200), "max_width", maximum=_MAX_PREVIEW_WIDTH)
+    return render_template_page(fmt_id, page_num, max_width=max_width)
+
+@with_locale
 def formatos_update_mapping(params: dict[str, Any]) -> dict[str, Any]:
     from backend.core.formatos import update_mapping
     entry = update_mapping(params.get("format_id", ""), params.get("mapping", {}))
@@ -68,5 +84,7 @@ HANDLERS = {
     "formatos_generate": formatos_generate,
     "formatos_upload": formatos_upload,
     "formatos_delete": formatos_delete,
+    "formatos_get_template": formatos_get_template,
+    "formatos_render_template_page": formatos_render_template_page,
     "formatos_update_mapping": formatos_update_mapping,
 }

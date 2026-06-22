@@ -167,6 +167,16 @@ def _sanitize_html_for_pdf(html: str) -> str:
     safe = re.sub(r"<object[^>]*>[\s\S]*?</object>", "", safe, flags=re.IGNORECASE)
     safe = re.sub(r"<embed[^>]*>", "", safe, flags=re.IGNORECASE)
     safe = re.sub(r"<link[^>]*/?>", "", safe, flags=re.IGNORECASE)
+    # Strip inline event handlers (onload=, onerror=, ...) and javascript:/vbscript: URIs
+    safe = re.sub(r"\son[a-z]+\s*=\s*\"[^\"]*\"", "", safe, flags=re.IGNORECASE)
+    safe = re.sub(r"\son[a-z]+\s*=\s*'[^']*'", "", safe, flags=re.IGNORECASE)
+    safe = re.sub(r"\son[a-z]+\s*=\s*[^\s>]+", "", safe, flags=re.IGNORECASE)
+    safe = re.sub(
+        r"(href|src|xlink:href)\s*=\s*(['\"]?)\s*(?:javascript|vbscript):[^\"'>\s]*\2",
+        r"\1=\2\2",
+        safe,
+        flags=re.IGNORECASE,
+    )
     # Neutralise CSS url() that references external / local resources
     # Allow data: URLs (inline images) but block file://, http://, https://, etc.
     def _neutralise_url(m: re.Match) -> str:

@@ -41,30 +41,27 @@ def _resolve_preview_dpi(rect_width: float, rect_height: float, target_width: in
     return int(max(round(dpi), _MIN_PREVIEW_DPI))
 
 
-def render_pdf_page_preview(
-    pdf_path: str,
-    page_num: int,
-    max_width: int = _PREVIEW_MAX_WIDTH,
-) -> dict[str, float | str]:
+def _require_fitz():
     try:
         import fitz  # type: ignore[import-untyped]  # pymupdf
     except ImportError as exc:
         msg = "PyMuPDF no está instalado. Ejecuta: pip install pymupdf"
         raise ValueError(msg) from exc
+    return fitz
 
+
+def _render_doc_page(doc, page_num: int, max_width: int) -> dict[str, float | str]:
     import base64
 
-    path = Path(pdf_path).expanduser().resolve()
-    with fitz.open(path) as doc:
-        if page_num < 1 or page_num > doc.page_count:
-            msg = f"Página {page_num} fuera de rango"
-            raise ValueError(msg)
-        page = doc.load_page(page_num - 1)
-        rect = page.rect
-        target_width = max(640, min(int(max_width), _PREVIEW_MAX_WIDTH))
-        dpi = _resolve_preview_dpi(rect.width, rect.height, target_width)
-        pixmap = page.get_pixmap(dpi=dpi, alpha=False)
-        png_bytes = pixmap.tobytes("png")
+    if page_num < 1 or page_num > doc.page_count:
+        msg = f"Página {page_num} fuera de rango"
+        raise ValueError(msg)
+    page = doc.load_page(page_num - 1)
+    rect = page.rect
+    target_width = max(640, min(int(max_width), _PREVIEW_MAX_WIDTH))
+    dpi = _resolve_preview_dpi(rect.width, rect.height, target_width)
+    pixmap = page.get_pixmap(dpi=dpi, alpha=False)
+    png_bytes = pixmap.tobytes("png")
 
     return {
         "image_base64": base64.b64encode(png_bytes).decode("ascii"),
@@ -75,3 +72,24 @@ def render_pdf_page_preview(
         "render_dpi": float(dpi),
         "mime_type": "image/png",
     }
+
+
+def render_pdf_page_preview(
+    pdf_path: str,
+    page_num: int,
+    max_width: int = _PREVIEW_MAX_WIDTH,
+) -> dict[str, float | str]:
+    fitz = _require_fitz()
+    path = Path(pdf_path).expanduser().resolve()
+    with fitz.open(path) as doc:
+        return _render_doc_page(doc, page_num, max_width)
+
+
+def render_pdf_bytes_page_preview(
+    pdf_bytes: bytes,
+    page_num: int,
+    max_width: int = _PREVIEW_MAX_WIDTH,
+) -> dict[str, float | str]:
+    fitz = _require_fitz()
+    with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
+        return _render_doc_page(doc, page_num, max_width)

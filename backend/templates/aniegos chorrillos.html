@@ -386,8 +386,8 @@
             <div class="no-photos">No se encontraron imágenes asociadas a esta orden.</div>
             {% else %}
             <!-- Layout based on image count -->
-            <div class="photo-grid layout-{{ img_count if img_count in [1, 2, 3, 4, 5, 6] else 'grid' }}">
-                {% for img in report.images %}
+            <div class="photo-grid layout-{{ img_count if img_count in [1, 2, 3, 4, 5, 6] else '6' }}">
+                {% for img in report.images[:6] %}
                 <div class="photo-item">
                     <img src="{{ img.path }}" alt="{{ img.name }}">
                 </div>

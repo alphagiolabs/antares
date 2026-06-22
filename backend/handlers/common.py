@@ -21,6 +21,35 @@ def with_locale(fn: Callable[..., Any]) -> Callable[..., Any]:
     return wrapper
 
 
+def parse_positive_int(value: Any, label: str, *, maximum: int | None = None) -> int:
+    """Parse and validate a positive integer from IPC params.
+
+    Centralised so formatos/sellador/optimizer handlers produce the same
+    localised error messages instead of letting raw `int(None)`/`int("abc")`
+    `TypeError`/`ValueError` bubble up to the renderer.
+
+    Args:
+        value: Raw value from params dict (may be str, int, None, etc).
+        label: Human-readable field name for error messages.
+        maximum: Optional upper bound (inclusive).
+
+    Returns:
+        Parsed integer guaranteed to be > 0 and <= maximum when provided.
+    """
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError) as exc:
+        msg = f"{label} inválido"
+        raise ValueError(msg) from exc
+    if parsed <= 0:
+        msg = f"{label} debe ser mayor a cero"
+        raise ValueError(msg)
+    if maximum is not None and parsed > maximum:
+        msg = f"{label} debe ser menor o igual a {maximum}"
+        raise ValueError(msg)
+    return parsed
+
+
 def validate_params(*required_params):
     """Decorator to validate required parameters.
 

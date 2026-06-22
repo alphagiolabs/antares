@@ -91,6 +91,7 @@ HEAVY_METHODS = {
     "preview_image",
     "formatos_generate",
     "image_optimizer_zip",
+    "image_optimizer_save_files",
     "sellador_apply",
     "sellador_inspect_pdf",
     "sellador_render_page",

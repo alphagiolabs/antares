@@ -373,7 +373,9 @@ def buscar_lote_por_codigos(codigos: list[str]) -> dict[str, dict[str, Any]]:
         # Batch query: fetch all records where ANY field matches ANY of the codes.
         # Use chunks to avoid SQLite variable limit (999 per query).
         result: dict[str, dict[str, Any]] = {}
-        CHUNK = 900 // len(field_names)  # safe margin for SQLite param limit
+        # safe margin for SQLite param limit; clamp to >=1 so a schema with
+        # >900 fields cannot produce CHUNK == 0 (range step of 0 -> ValueError).
+        CHUNK = max(1, 900 // len(field_names))
         for i in range(0, len(unique_codes), CHUNK):
             chunk = unique_codes[i:i + CHUNK]
             placeholders = ", ".join(["?"] * len(chunk))

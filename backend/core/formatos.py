@@ -19,6 +19,8 @@ from typing import Any
 
 from pypdf import PdfReader
 
+from backend.utils.validators import is_safe_user_path, sanitizar_nombre
+
 logger = logging.getLogger(__name__)
 
 MAX_UPLOAD_PDF_BYTES = 50 * 1024 * 1024
@@ -142,12 +144,18 @@ def _load_catalog() -> None:
 
 
 def _save_catalog() -> None:
+    # Hold the lock for the entire snapshot + write so concurrent
+    # delete/upload calls cannot interleave and corrupt catalog.json.
+    # Write to a temp file and atomically replace to avoid leaving a
+    # partially-written catalog if the process is interrupted mid-write.
     with _formats_lock:
         persistable = [fmt for fmt in _formats.values() if fmt.get("persisted", True)]
-    with open(_CATALOG_PATH, "w", encoding="utf-8") as f:
-        json.dump(persistable, f, ensure_ascii=False, indent=2)
-        f.flush()
-        os.fsync(f.fileno())
+        tmp_path = _CATALOG_PATH.with_suffix(_CATALOG_PATH.suffix + ".tmp")
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            json.dump(persistable, f, ensure_ascii=False, indent=2)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp_path, _CATALOG_PATH)
 
 
 def _resolve_path(fmt: dict[str, Any]) -> Path:
@@ -227,30 +235,41 @@ def delete_format(fmt_id: str) -> bool:
         entry = _formats.get(fmt_id)
         if entry is None:
             return False
-        if entry["origen"] == "builtin":
+        is_builtin = entry["origen"] == "builtin"
+        if is_builtin:
             entry["enabled"] = False
         else:
             _formats.pop(fmt_id, None)
-    try:
-        os.remove(_resolve_path(entry))
-    except FileNotFoundError:
-        pass
-    except Exception:
-        logger.exception("Error eliminando archivo de formato %s", fmt_id)
-    _save_catalog()
+        # Only uploaded formats own a file on disk that we should remove.
+        # Builtins live in the read-only `formatos/` (or `data/formatos/`)
+        # distribution directory and must survive disable/enable cycles —
+        # removing them would brick the builtin until reinstall.
+        if not is_builtin:
+            try:
+                os.remove(_resolve_path(entry))
+            except FileNotFoundError:
+                pass
+            except OSError:
+                logger.exception("Error eliminando archivo de formato %s", fmt_id)
+        _save_catalog()
     return True
 
 
 def update_mapping(fmt_id: str, mapping: dict[str, Any]) -> dict[str, Any] | None:
+    # Hold the lock for the full read+mutate+persist so concurrent
+    # update_mapping / list_formats / delete_format calls cannot interleave
+    # and produce a corrupt catalog.json or lose updates. Returning a
+    # snapshot copy keeps the caller from mutating the live entry after
+    # we release the lock.
     with _formats_lock:
         entry = _formats.get(fmt_id)
-    if entry is None:
-        return None
-    entry["mapping"] = mapping
-    if entry["strategy"] == SIMPLE_OVERLAY:
-        entry["strategy"] = VISUAL_OVERLAY
-    _save_catalog()
-    result = dict(entry)
+        if entry is None:
+            return None
+        entry["mapping"] = mapping
+        if entry["strategy"] == SIMPLE_OVERLAY:
+            entry["strategy"] = VISUAL_OVERLAY
+        _save_catalog()
+        result = dict(entry)
     result["has_mapping"] = result.get("mapping") is not None
     return result
 
@@ -265,8 +284,27 @@ def add_uploaded_format(
     filename_pattern: str | None = None,
 ) -> dict[str, Any]:
     fmt_id = f"upload-{uuid.uuid4().hex[:8]}"
-    safe_name = f"{fmt_id}_{filename}"
+    # Sanitize the user-supplied filename before concatenating it with our
+    # fmt_id: without this, a crafted `filename` like `../../foo.pdf` would
+    # let the IPC caller write outside `_UPLOADS_DIR` after Path.resolve()
+    # normalises the path. `sanitizar_nombre` strips path separators and
+    # traversal sequences, and the `is_safe_user_path` guard is a second
+    # belt-and-braces check before we touch the filesystem.
+    safe_filename = sanitizar_nombre(filename) or "archivo.pdf"
+    if not is_safe_user_path(safe_filename):
+        msg = "Nombre de archivo inválido"
+        raise ValueError(msg)
+    safe_name = f"{fmt_id}_{safe_filename}"
     dest = _UPLOADS_DIR / safe_name
+    # Resolve and verify the final destination stays inside _UPLOADS_DIR —
+    # this catches anything sanitizar_nombre missed (e.g. weird Unicode
+    # normalisation tricks).
+    uploads_resolved = _UPLOADS_DIR.resolve()
+    try:
+        dest.resolve().relative_to(uploads_resolved)
+    except ValueError as exc:
+        msg = "Ruta de destino fuera del directorio permitido"
+        raise ValueError(msg) from exc
 
     if len(content) > MAX_UPLOAD_PDF_BYTES:
         msg = "PDF excede tamaño máximo permitido (50 MB)"
@@ -326,6 +364,24 @@ def add_uploaded_format(
 
 
 # ─── Generación de PDFs (delegated to format_strategies) ─────────────────────
+
+
+def get_template_pdf(fmt_id: str) -> tuple[bytes, str]:
+    entry = get_format(fmt_id)
+    if entry is None:
+        msg = "Formato no encontrado"
+        raise ValueError(msg)
+    return _load_template_bytes(entry), entry["nombre"]
+
+
+def render_template_page(fmt_id: str, page_num: int, max_width: int = 1200) -> dict[str, Any]:
+    entry = get_format(fmt_id)
+    if entry is None:
+        msg = "Formato no encontrado"
+        raise ValueError(msg)
+    template_bytes = _load_template_bytes(entry)
+    from backend.core.sellador_preview import render_pdf_bytes_page_preview
+    return render_pdf_bytes_page_preview(template_bytes, page_num, max_width=max_width)
 
 
 def generate_pdf(fmt_id: str, desde: int, hasta: int) -> tuple[bytes, str]:

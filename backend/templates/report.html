@@ -79,7 +79,7 @@
             font-size: 13pt;
             font-weight: 700;
             text-transform: uppercase;
-            color: #333;
+            color: #0056b3;
         }
 
         /* === TOP INFO BAR === */
@@ -167,11 +167,12 @@
             overflow: hidden;
         }
 
-        /* === UNIFIED PHOTO GRID === */
+        /* === UNIFIED PHOTO GRID: fixed 3 columns x 2 rows === */
         .photo-grid {
             flex: 1;
             display: grid;
-            grid-template-columns: 1fr 1fr;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            grid-template-rows: repeat(2, minmax(0, 1fr));
             gap: 2mm;
             width: 100%;
             height: 100%;
@@ -184,136 +185,23 @@
             align-items: center;
             justify-content: center;
             overflow: hidden;
-            height: 7cm;
-            padding: 2mm;
+            width: 100%;
+            height: 100%;
+            min-height: 0;
+            padding: 0;
         }
 
         .photo-item img {
-            max-width: 100%;
-            max-height: 100%;
-            width: auto;
-            height: auto;
-            object-fit: contain;
+            width: 100%;
+            height: 100%;
+            object-fit: fill;
+            object-position: center;
             display: block;
         }
 
-        /* === LAYOUT: 1 IMAGE (single centered) === */
-        .layout-1 {
-            grid-template-columns: 1fr;
-            grid-template-rows: 1fr;
-            justify-items: center;
-            align-items: center;
-        }
-
-        .layout-1 .photo-item {
-            height: 100%;
-            max-width: 70%;
-        }
-
-        /* === LAYOUT: 2 IMAGES (side by side, centered) === */
-        .layout-2 {
-            grid-template-columns: 1fr 1fr;
-            grid-template-rows: 1fr;
-            align-items: stretch;
-        }
-
-        .layout-2 .photo-item {
-            height: 100%;
-        }
-
-        /* === LAYOUT: 3 IMAGES (2 top + 1 centered bottom) === */
-        .layout-3 {
-            display: flex;
-            flex-direction: column;
-            gap: 2mm;
+        .photo-placeholder {
             width: 100%;
             height: 100%;
-        }
-
-        .layout-3 .top-row {
-            display: flex;
-            flex-direction: row;
-            gap: 2mm;
-            height: calc(50% - 1mm);
-            /* Same height as 2x2 grid rows */
-        }
-
-        .layout-3 .top-row .photo-item {
-            flex: 1;
-            height: 100%;
-        }
-
-        .layout-3 .bottom-row {
-            display: flex;
-            justify-content: center;
-            height: calc(50% - 1mm);
-            /* Same height as 2x2 grid rows */
-        }
-
-        .layout-3 .bottom-row .photo-item {
-            /* Same width as each top image: (100% - 2mm gap) / 2 */
-            width: calc(50% - 1mm);
-            height: 100%;
-        }
-
-        /* === LAYOUT: 4 IMAGES (2x2 grid) === */
-        .layout-4 {
-            grid-template-columns: 1fr 1fr;
-            grid-template-rows: 1fr 1fr;
-            align-items: stretch;
-        }
-
-        .layout-4 .photo-item {
-            height: 100%;
-        }
-
-        /* === LAYOUT: 5 IMAGES (2+2+1 centered) === */
-        .layout-5 {
-            display: flex;
-            flex-direction: column;
-            gap: 2mm;
-            width: 100%;
-            height: 100%;
-        }
-
-        .layout-5 .photo-row {
-            display: flex;
-            flex-direction: row;
-            gap: 2mm;
-            height: calc(33.333% - 1.33mm);
-        }
-
-        .layout-5 .photo-row .photo-item {
-            flex: 1;
-            height: 100%;
-        }
-
-        .layout-5 .photo-row-center {
-            display: flex;
-            justify-content: center;
-            height: calc(33.333% - 1.33mm);
-        }
-
-        .layout-5 .photo-row-center .photo-item {
-            width: calc(50% - 1mm);
-            height: 100%;
-        }
-
-        /* === LAYOUT: 6 IMAGES (3 rows x 2 cols) === */
-        .layout-6 {
-            grid-template-columns: 1fr 1fr;
-            grid-template-rows: 1fr 1fr 1fr;
-            align-items: stretch;
-        }
-
-        .layout-6 .photo-item {
-            height: 100%;
-        }
-
-        /* === DEFAULT GRID (fallback) === */
-        .layout-grid {
-            grid-template-columns: 1fr 1fr;
-            grid-auto-rows: 7cm;
         }
 
         .no-photos {
@@ -405,74 +293,22 @@
         <!-- 3.0 PANEL FOTOGRAFICO -->
         <div class="section-title">3.0 PANEL FOTOGRÁFICO</div>
         <div class="photo-section">
-            {% if report.images %}
             {% set img_count = report.images|length %}
-
-            {% if img_count == 1 %}
-            <!-- Single image centered -->
-            <div class="photo-grid layout-1">
-                <div class="photo-item">
-                    <img src="{{ report.images[0].path }}" alt="{{ report.images[0].name }}">
-                </div>
-            </div>
-
-            {% elif img_count == 3 %}
-            <!-- 2 top + 1 centered bottom -->
-            <div class="photo-grid layout-3">
-                <div class="top-row">
-                    <div class="photo-item">
-                        <img src="{{ report.images[0].path }}" alt="{{ report.images[0].name }}">
-                    </div>
-                    <div class="photo-item">
-                        <img src="{{ report.images[1].path }}" alt="{{ report.images[1].name }}">
-                    </div>
-                </div>
-                <div class="bottom-row">
-                    <div class="photo-item">
-                        <img src="{{ report.images[2].path }}" alt="{{ report.images[2].name }}">
-                    </div>
-                </div>
-            </div>
-
-            {% elif img_count == 5 %}
-            <!-- 2+2+1 centered bottom -->
-            <div class="photo-grid layout-5">
-                <div class="photo-row">
-                    <div class="photo-item">
-                        <img src="{{ report.images[0].path }}" alt="{{ report.images[0].name }}">
-                    </div>
-                    <div class="photo-item">
-                        <img src="{{ report.images[1].path }}" alt="{{ report.images[1].name }}">
-                    </div>
-                </div>
-                <div class="photo-row">
-                    <div class="photo-item">
-                        <img src="{{ report.images[2].path }}" alt="{{ report.images[2].name }}">
-                    </div>
-                    <div class="photo-item">
-                        <img src="{{ report.images[3].path }}" alt="{{ report.images[3].name }}">
-                    </div>
-                </div>
-                <div class="photo-row-center">
-                    <div class="photo-item">
-                        <img src="{{ report.images[4].path }}" alt="{{ report.images[4].name }}">
-                    </div>
-                </div>
-            </div>
-
+            {% if img_count == 0 %}
+            <div class="no-photos">No se encontraron imágenes asociadas a esta orden.</div>
             {% else %}
-            <!-- Standard grid layout for 2, 4, 6, or more images -->
-            <div class="photo-grid layout-{{ img_count if img_count in [2, 4, 6] else 'grid' }}">
-                {% for img in report.images %}
+            <div class="photo-grid">
+                {% for img in report.images[:6] %}
                 <div class="photo-item">
                     <img src="{{ img.path }}" alt="{{ img.name }}">
                 </div>
                 {% endfor %}
+                {% for i in range(report.images|length, 6) %}
+                <div class="photo-item">
+                    <div class="photo-placeholder"></div>
+                </div>
+                {% endfor %}
             </div>
-            {% endif %}
-
-            {% else %}
-            <div class="no-photos">No se encontraron imágenes asociadas a esta orden.</div>
             {% endif %}
         </div>
 

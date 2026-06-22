@@ -25,10 +25,24 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _BLOCKED_IMPORTS = {"os", "sys", "subprocess", "ctypes", "socket", "urllib", "http", "ftplib", "shlex", "pathlib", "signal", "multiprocessing", "threading", "importlib", "builtins", "code", "codeop", "runpy", "pdb", "xmlrpc"}
-_BLOCKED_NAMES = {"eval", "exec", "compile", "__import__", "open", "globals", "locals", "vars", "getattr", "setattr", "delattr", "type", "super", "__build_class__"}
+_BLOCKED_NAMES = {"eval", "exec", "compile", "__import__", "open", "globals", "locals", "vars", "getattr", "setattr", "delattr", "type", "super", "__build_class__", "breakpoint", "memoryview", "input"}
 _BLOCKED_ATTRS = {"__class__", "__bases__", "__subclasses__", "__mro__", "__globals__", "__code__", "__func__", "__self__", "__dict__", "__weakref__", "__subclasshook__"}
 
+# Dunder attributes/names are a primary sandbox-escape vector (e.g.
+# ``__builtins__``, ``__getattribute__``, ``__reduce__``, ``__init_subclass__``).
+# Rather than enumerate every dangerous dunder, block ALL dunder access and only
+# permit a tiny allowlist that legitimate plugins may need at module scope.
+_ALLOWED_DUNDERS = {"__name__", "__doc__", "__module__", "__file__", "__qualname__", "__init__"}
+
 _PLUGIN_ALLOWED_ATTRS = {"register", "add_format", "__name__", "__doc__", "__module__", "__file__"}
+
+
+def _is_dangerous_dunder(identifier: str) -> bool:
+    return (
+        identifier.startswith("__")
+        and identifier.endswith("__")
+        and identifier not in _ALLOWED_DUNDERS
+    )
 
 
 class PluginRegistry:
@@ -62,9 +76,14 @@ def _is_safe_plugin(source: str) -> bool:
                 return False
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in _BLOCKED_NAMES:
             return False
-        if isinstance(node, ast.Attribute) and node.attr in _BLOCKED_ATTRS:
+        if isinstance(node, ast.Attribute) and (node.attr in _BLOCKED_ATTRS or _is_dangerous_dunder(node.attr)):
             return False
-        if isinstance(node, ast.Name) and node.id in _BLOCKED_NAMES:
+        if isinstance(node, ast.Name) and (node.id in _BLOCKED_NAMES or _is_dangerous_dunder(node.id)):
+            return False
+        # Block metaclass / class-keyword hooks (e.g. ``class X(metaclass=...)``)
+        # which can run arbitrary code at class-creation time, bypassing the
+        # name/attribute filters above.
+        if isinstance(node, ast.ClassDef) and node.keywords:
             return False
     return has_register
 

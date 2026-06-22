@@ -9,21 +9,9 @@ from typing import Any
 from backend.core.sellador import apply_sellador, distribute_stamp_pages
 from backend.core.sellador_io import resolve_pdf_bytes, resolve_stamp_bytes
 from backend.core.sellador_preview import inspect_pdf_path, render_pdf_page_preview
-from backend.handlers.common import with_locale
+from backend.handlers.common import parse_positive_int, with_locale
 
 _MAX_INLINE_PDF_BYTES = 8 * 1024 * 1024
-
-
-def _parse_positive_int(value: Any, label: str) -> int:
-    try:
-        parsed = int(value)
-    except (TypeError, ValueError) as exc:
-        msg = f"{label} inválido"
-        raise ValueError(msg) from exc
-    if parsed <= 0:
-        msg = f"{label} debe ser mayor a cero"
-        raise ValueError(msg)
-    return parsed
 
 
 def _parse_float(value: Any, label: str, *, allow_zero: bool = False) -> float:
@@ -94,8 +82,8 @@ def sellador_render_page(params: dict[str, Any]) -> dict[str, Any]:
     if not pdf_path:
         msg = "Ruta del PDF requerida"
         raise ValueError(msg)
-    page_num = _parse_positive_int(params.get("page_num", 1), "Página")
-    max_width = _parse_positive_int(params.get("max_width", 2800), "Ancho de vista previa")
+    page_num = parse_positive_int(params.get("page_num", 1), "Página")
+    max_width = parse_positive_int(params.get("max_width", 2800), "Ancho de vista previa")
     return render_pdf_page_preview(pdf_path, page_num, max_width=max_width)
 
 
@@ -103,7 +91,7 @@ def sellador_render_page(params: dict[str, Any]) -> dict[str, Any]:
 def sellador_apply(params: dict[str, Any]) -> dict[str, Any]:
     pdf_bytes = resolve_pdf_bytes(params)
     stamp_bytes = resolve_stamp_bytes(params)
-    stamp_count = _parse_positive_int(params.get("stamp_count"), "Cantidad de sellos")
+    stamp_count = parse_positive_int(params.get("stamp_count"), "Cantidad de sellos")
     x = _parse_float(params.get("x", 50), "Posición X", allow_zero=True)
     y = _parse_float(params.get("y", 50), "Posición Y", allow_zero=True)
     width = _parse_float(params.get("width", 120), "Ancho del sello")
@@ -156,8 +144,8 @@ def sellador_apply(params: dict[str, Any]) -> dict[str, Any]:
 
 @with_locale
 def sellador_preview_pages(params: dict[str, Any]) -> dict[str, Any]:
-    page_count = _parse_positive_int(params.get("page_count"), "Cantidad de páginas")
-    stamp_count = _parse_positive_int(params.get("stamp_count"), "Cantidad de sellos")
+    page_count = parse_positive_int(params.get("page_count"), "Cantidad de páginas")
+    stamp_count = parse_positive_int(params.get("stamp_count"), "Cantidad de sellos")
     seed = _parse_seed(params.get("seed"))
     effective_seed = seed if seed is not None else random.randint(0, 2_147_483_647)
     page_indices, _ = distribute_stamp_pages(page_count, stamp_count, effective_seed)
