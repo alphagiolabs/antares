@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { ChevronDown, FileDown, Loader2, Sparkles, Trash2, Upload } from 'lucide-react';
+import { ChevronDown, FileDown, FolderDown, Loader2, Sparkles, Trash2, Upload } from 'lucide-react';
 import CropEditor from './CropEditor';
 import PreviewWorkspace from './PreviewWorkspace';
 import QueuePanel from './QueuePanel';
@@ -10,6 +10,7 @@ import { createImageItem, processImageItem } from './pipeline';
 import { DEFAULT_BATCH_SETTINGS, IMAGE_OPTIMIZER_PRESETS, cloneBatchSettings } from './presets';
 import { BatchSettings, CropOffset, ImageItem, PresetId, Toast } from './types';
 import {
+  arrayBufferToBase64,
   buildDownloadNameMap,
   buildZipFilename,
   generateId,
@@ -29,6 +30,7 @@ import {
 } from './utils';
 import { createStoredZipBlob } from './zip';
 import { saveFeatureHistory } from '../../utils/history';
+import { api } from '../../api';
 
 export default function ImageOptimizer() {
   const [items, setItems] = useState<ImageItem[]>([]);
@@ -441,12 +443,93 @@ export default function ImageOptimizer() {
       return;
     }
     const nameMap = buildDownloadNameMap(entries.map((entry) => entry.item), settingsRef.current);
-    const DELAY = 180;
-    entries.forEach((entry, index) => {
-      const filename = nameMap.get(entry.item.id) || entry.item.originalName;
-      window.setTimeout(() => downloadBlob(entry.blob, filename), index * DELAY);
-    });
+
+    // Browsers block multiple simultaneous downloads spawned by script. We
+    // trigger them sequentially with a small delay, awaiting one frame after
+    // each click so the browser actually starts the download before the next.
     addToast(`Descargando ${entries.length} archivo(s) individualmente.`, 'success', 2400);
+    const DELAY_MS = 220;
+    const nextFrame = () => new Promise<void>((resolve) => {
+      // setTimeout is more reliable than requestAnimationFrame here because
+      // the optimizer may be in a background tab or window without RAF.
+      window.setTimeout(resolve, DELAY_MS);
+    });
+    for (let index = 0; index < entries.length; index += 1) {
+      const entry = entries[index];
+      const filename = nameMap.get(entry.item.id) || entry.item.originalName;
+      try {
+        downloadBlob(entry.blob, filename);
+      } catch (err) {
+        console.error('Individual download failed', err);
+        addToast(`No se pudo descargar "${filename}".`, 'error', 2800);
+        return;
+      }
+      if (index < entries.length - 1) {
+        await nextFrame();
+      }
+    }
+  }, [addToast, collectDownloadEntries]);
+
+  const saveItemsToFolder = useCallback(async (itemsToSave: ImageItem[]) => {
+    const entries = collectDownloadEntries(itemsToSave);
+    if (!entries) {
+      addToast(
+        itemsToSave.length === 0
+          ? 'No hay archivos listos para guardar en este alcance.'
+          : 'Todavia no hay resultados descargables.',
+        'info',
+        2200,
+      );
+      return;
+    }
+    const nameMap = buildDownloadNameMap(entries.map((entry) => entry.item), settingsRef.current);
+
+    // Native folder picker — returns the raw folder path, no recursive scan.
+    const folderResult = await api.dialogFolder({ title: 'Carpeta de salida', pickOnly: true });
+    const folder = folderResult?.folder;
+    if (!folder) {
+      addToast('Operacion cancelada.', 'info', 1800);
+      return;
+    }
+
+    setIsProcessing(true);
+    setProcessingProgress({ current: 0, total: entries.length });
+    setProcessingMessage('Guardando archivos en carpeta...');
+
+    try {
+      // base64-encode each blob. Done sequentially to avoid peak memory
+      // spikes when saving dozens of high-res images at once.
+      const files: Array<{ filename: string; content_b64: string }> = [];
+      for (let index = 0; index < entries.length; index += 1) {
+        const entry = entries[index];
+        const filename = nameMap.get(entry.item.id) || entry.item.originalName;
+        const buffer = await entry.blob.arrayBuffer();
+        files.push({
+          filename,
+          content_b64: arrayBufferToBase64(buffer),
+        });
+        setProcessingProgress({ current: index + 1, total: entries.length });
+      }
+
+      const result = await api.imageOptimizerSaveFiles({ files, output_folder: folder });
+      const saved = result?.saved_count ?? 0;
+      const skipped = result?.skipped_count ?? 0;
+      if (saved === 0) {
+        addToast('No se pudo guardar ningun archivo en la carpeta.', 'error', 4200);
+      } else if (skipped === 0) {
+        addToast(`Guardados ${saved} archivo(s) en: ${folder}`, 'success', 4200);
+      } else {
+        addToast(`Guardados ${saved} archivo(s). ${skipped} omitido(s). Carpeta: ${folder}`, 'info', 5200);
+      }
+    } catch (error) {
+      console.error('Save to folder failed', error);
+      const message = error instanceof Error ? error.message : 'Error desconocido';
+      addToast(`No se pudo guardar en la carpeta: ${message}.`, 'error', 4600);
+    } finally {
+      setIsProcessing(false);
+      setProcessingMessage('');
+      setProcessingProgress({ current: 0, total: 0 });
+    }
   }, [addToast, collectDownloadEntries]);
 
   const handleDownloadSingle = useCallback((item: ImageItem) => {
@@ -566,12 +649,12 @@ export default function ImageOptimizer() {
                   type="button"
                   onClick={() => { downloadItems(downloadableItems); closeDownloadMenu(); }}
                   disabled={isProcessing || downloadableItems.length === 0}
-                  className={`inline-flex items-center gap-2 border border-emerald-500/35 bg-emerald-500/10 px-4 py-2 text-[10px] font-mono uppercase tracking-[0.15em] text-emerald-600 transition-colors hover:border-emerald-500/55 hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:border-[var(--border-medium)] disabled:bg-[var(--bg-surface)] disabled:text-[var(--text-muted)] ${downloadableItems.length > 1 ? 'rounded-l-full border-r-0' : 'rounded-full'}`}
+                  className={`inline-flex items-center gap-2 border border-emerald-500/35 bg-emerald-500/10 px-4 py-2 text-[10px] font-mono uppercase tracking-[0.15em] text-emerald-600 transition-colors hover:border-emerald-500/55 hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:border-[var(--border-medium)] disabled:bg-[var(--bg-surface)] disabled:text-[var(--text-muted)] ${downloadableItems.length > 0 ? 'rounded-l-full border-r-0' : 'rounded-full'}`}
                 >
                   <FileDown size={13} />
                   {downloadableItems.length > 1 ? 'Descargar ZIP' : 'Descargar'}
                 </button>
-                {downloadableItems.length > 1 && (
+                {downloadableItems.length > 0 && (
                   <button
                     type="button"
                     onClick={toggleDownloadMenu}
@@ -591,17 +674,20 @@ export default function ImageOptimizer() {
                   <div
                     role="menu"
                     style={{ top: downloadMenuPosition.top, right: downloadMenuPosition.right }}
-                    className="fixed z-[130] w-52 overflow-hidden rounded-xl border border-[var(--border-medium)] bg-[var(--bg-surface)] py-1 shadow-xl"
+                    className="fixed z-[130] w-56 overflow-hidden rounded-xl border border-[var(--border-medium)] bg-[var(--bg-surface)] py-1 shadow-xl"
                   >
-                    <button
-                      type="button"
-                      role="menuitem"
-                      onClick={() => { downloadItemsAsZip(downloadableItems); closeDownloadMenu(); }}
-                      className="flex w-full items-center gap-2.5 px-4 py-2.5 text-left text-[11px] font-mono tracking-wide text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-elevated)]"
-                    >
-                      <FileDown size={13} className="text-emerald-500 shrink-0" />
-                      Descargar como ZIP
-                    </button>
+                    {downloadableItems.length > 1 && (
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => { downloadItemsAsZip(downloadableItems); closeDownloadMenu(); }}
+                        className="flex w-full items-center gap-2.5 px-4 py-2.5 text-left text-[11px] font-mono tracking-wide text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-elevated)]"
+                      >
+                        <FileDown size={13} className="text-emerald-500 shrink-0" />
+                        Descargar como ZIP
+                        <span className="ml-auto text-[9px] text-[var(--text-muted)]">{downloadableItems.length} archivos</span>
+                      </button>
+                    )}
                     <button
                       type="button"
                       role="menuitem"
@@ -610,7 +696,19 @@ export default function ImageOptimizer() {
                     >
                       <FileDown size={13} className="text-sky-500 shrink-0" />
                       Descargar individual
-                      <span className="ml-auto text-[9px] text-[var(--text-muted)]">{downloadableItems.length} archivos</span>
+                      <span className="ml-auto text-[9px] text-[var(--text-muted)]">{downloadableItems.length} archivo{downloadableItems.length === 1 ? '' : 's'}</span>
+                    </button>
+                    <div className="my-1 h-px bg-[var(--border-medium)]" />
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => { saveItemsToFolder(downloadableItems); closeDownloadMenu(); }}
+                      disabled={isProcessing}
+                      className="flex w-full items-center gap-2.5 px-4 py-2.5 text-left text-[11px] font-mono tracking-wide text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-elevated)] disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <FolderDown size={13} className="text-amber-500 shrink-0" />
+                      Guardar en carpeta...
+                      <span className="ml-auto text-[9px] text-[var(--text-muted)]">{downloadableItems.length} archivo{downloadableItems.length === 1 ? '' : 's'}</span>
                     </button>
                   </div>
                 </>,

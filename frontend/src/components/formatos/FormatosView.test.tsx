@@ -105,6 +105,92 @@ describe('FormatosView', () => {
     expect(mappingEditorTitle.closest('.overflow-y-auto')).not.toBeNull();
   });
 
+  it('loads template preview in mapping mode and syncs manual X with overlay', async () => {
+    const electronApi = window.electronAPI!;
+    vi.spyOn(electronApi, 'invoke').mockImplementation(async (method: string) => {
+      if (method === 'formatos_list') {
+        return {
+          formats: [
+            {
+              id: 'simple-overlay',
+              nombre: 'Formato prueba',
+              origen: 'builtin',
+              enabled: true,
+              persisted: true,
+              strategy: 'simple_overlay',
+              mapping: null,
+              filename_pattern: '{n}.pdf',
+              max_pages: 500,
+              number_min: 1,
+              number_max: 9999999,
+              has_mapping: true,
+            },
+          ],
+        };
+      }
+      if (method === 'formatos_render_template_page') {
+        return {
+          image_base64: 'aW1n',
+          page_width: 595,
+          page_height: 842,
+          mime_type: 'image/png',
+        };
+      }
+      if (method === 'formatos_generate') {
+        return { pdf_base64: 'JVBERi0=', filename: 'preview.pdf' };
+      }
+      return {};
+    });
+
+    renderFormatosView();
+
+    fireEvent.click(await screen.findByText('Personalizar posición'));
+
+    expect(await screen.findByText('Vista template · arrastra el recuadro')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('500')).toBeInTheDocument();
+    expect(screen.getByText('Color del número')).toBeInTheDocument();
+    expect(screen.queryByText(/R, G, B: 0-1/i)).not.toBeInTheDocument();
+  });
+
+  it('shows restart guidance when template IPC is blocked in mapping mode', async () => {
+    const electronApi = window.electronAPI!;
+    vi.spyOn(electronApi, 'invoke').mockImplementation(async (method: string) => {
+      if (method === 'formatos_list') {
+        return {
+          formats: [
+            {
+              id: 'upload-visual',
+              nombre: 'VIA PUBLICA - VES',
+              origen: 'uploaded',
+              enabled: true,
+              persisted: true,
+              strategy: 'visual_overlay',
+              mapping: null,
+              filename_pattern: '{n}.pdf',
+              max_pages: 500,
+              number_min: 1,
+              number_max: 9999999,
+              has_mapping: false,
+            },
+          ],
+        };
+      }
+      if (method === 'formatos_render_template_page') {
+        throw new Error("Error invoking remote method 'ipc-call': Error: IPC method not allowed: formatos_render_template_page");
+      }
+      if (method === 'formatos_get_template') {
+        throw new Error("Error invoking remote method 'ipc-call': Error: IPC method not allowed: formatos_get_template");
+      }
+      return {};
+    });
+
+    renderFormatosView();
+
+    fireEvent.click(await screen.findByText('Configurar mapping'));
+
+    expect(await screen.findByText(/reinicia la aplicación.*npm run dev/i)).toBeInTheDocument();
+  });
+
   it('rejects malformed base64 payloads before decoding', () => {
     expect(() => safeBase64ToBytes('%%%')).toThrow('Datos base64 corruptos');
     expect(() => safeBase64ToBytes('A')).toThrow('Datos base64 corruptos');

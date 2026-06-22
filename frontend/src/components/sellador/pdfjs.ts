@@ -1,5 +1,5 @@
 import type { PDFDocumentProxy } from 'pdfjs-dist';
-import { safeBase64ToBytes } from '../formatos/FormatosView';
+import { safeBase64ToBytes } from '../formatos/base64';
 import type { PdfPageSize } from './utils';
 
 let pdfjsLib: typeof import('pdfjs-dist') | null = null;

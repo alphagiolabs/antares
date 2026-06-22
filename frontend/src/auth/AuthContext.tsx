@@ -44,6 +44,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const mountedRef = useRef(true);
+  const loadingRef = useRef(loading);
+  // authGenRef serialises refreshUser and onAuthStateChange: each in-flight
+  // auth check increments the generation and only the latest one is allowed
+  // to flip `loading=false`. Without this, when Supabase is slow the safety
+  // timeout can flip loading to false and then a late onAuthStateChange
+  // resolves and calls setUser without re-entering the loading state,
+  // producing flicker login→app and non-deterministic session visibility.
+  const authGenRef = useRef(0);
+
+  useEffect(() => { loadingRef.current = loading; }, [loading]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -52,20 +62,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const refreshUser = useCallback(async () => {
     if (!supabase) { setLoading(false); return; }
+    const gen = ++authGenRef.current;
     try {
       const { data: { session } } = await supabase.auth.getSession();
+      if (gen !== authGenRef.current) return; // a newer check wins
       if (!session) {
         if (mountedRef.current) { setUser(null); setLoading(false); }
         return;
       }
       const profile = await _fetchProfile(session.user.id);
+      if (gen !== authGenRef.current) return;
       if (mountedRef.current) {
         setUser(_mapUser(session.user, profile));
         setLoading(false);
       }
     } catch (err) {
       console.warn('[auth] refreshUser error:', err);
-      if (mountedRef.current) { setUser(null); setLoading(false); }
+      if (gen === authGenRef.current && mountedRef.current) {
+        setUser(null);
+        setLoading(false);
+      }
     }
   }, []);
 
@@ -73,23 +89,42 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     refreshUser();
     // Safety timeout: if Supabase is unreachable, show login after 5s
     const timeout = setTimeout(() => {
-      if (mountedRef.current && loading) {
+      if (mountedRef.current && loadingRef.current) {
         console.warn('[auth] Session check timed out, showing login screen');
+        authGenRef.current++; // invalidate any in-flight check
         setLoading(false);
       }
     }, 5000);
     if (!supabase) { clearTimeout(timeout); return; }
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!mountedRef.current) return;
       if (!session) {
-        if (mountedRef.current) setUser(null);
+        const gen = ++authGenRef.current;
+        setUser(null);
+        if (gen === authGenRef.current) setLoading(false);
         return;
       }
+      // Treat onAuthStateChange as the latest authority: bump the generation
+      // so any in-flight refreshUser gives up before touching state, then
+      // flip loading back to true while we fetch the profile (otherwise the
+      // user appears without a loading gate and the app flickers).
+      const gen = ++authGenRef.current;
+      setLoading(true);
       _fetchProfile(session.user.id).then((profile) => {
-        if (mountedRef.current) setUser(_mapUser(session.user, profile));
+        if (!mountedRef.current) return;
+        if (gen !== authGenRef.current) return; // a newer event wins
+        setUser(_mapUser(session.user, profile));
+        setLoading(false);
+      }).catch((err) => {
+        console.warn('[auth] onAuthStateChange profile fetch failed:', err);
+        if (mountedRef.current && gen === authGenRef.current) {
+          setUser(null);
+          setLoading(false);
+        }
       });
     });
     return () => { clearTimeout(timeout); subscription.unsubscribe(); };
-  }, [refreshUser, loading]);
+  }, [refreshUser]);
 
   const signIn = useCallback(async (email: string, password: string) => {
     if (!supabase) return { error: 'Supabase no configurado' };

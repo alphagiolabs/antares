@@ -36,13 +36,25 @@ export function useFileSelection(files: string[]) {
       e.preventDefault();
       setSelectedFile((prevSel) => {
         const anchorPath = prevSel || filesRef.current[0];
-        const idx1 = filesRef.current.indexOf(anchorPath);
         const idx2 = filesRef.current.indexOf(path);
-        const start = Math.min(idx1, idx2);
-        const end = Math.max(idx1, idx2);
+        // The clicked path must exist; bail out to a single selection otherwise.
+        if (idx2 < 0) {
+          setSelectedFiles(new Set([path]));
+          return path;
+        }
+        // If the anchor was removed from the list between clicks, indexOf
+        // returns -1; fall back to the clicked item so we never iterate from
+        // -1 and push `undefined` into the selection set.
+        const idx1 = filesRef.current.indexOf(anchorPath);
+        const anchorIdx = idx1 < 0 ? idx2 : idx1;
+        const start = Math.min(anchorIdx, idx2);
+        const end = Math.max(anchorIdx, idx2);
         setSelectedFiles((prev) => {
           const next = new Set(prev);
-          for (let i = start; i <= end; i++) next.add(filesRef.current[i]);
+          for (let i = start; i <= end; i++) {
+            const f = filesRef.current[i];
+            if (f !== undefined) next.add(f);
+          }
           return next;
         });
         return path;

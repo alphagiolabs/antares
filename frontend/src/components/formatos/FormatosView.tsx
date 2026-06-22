@@ -9,6 +9,14 @@ import { useToast } from '../../hooks/useToast';
 import { useDialog } from '../../hooks/useDialog';
 import type { FormatInfo, VisualMapping } from '../../types';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
+import MappingPreviewPanel from './MappingPreviewPanel';
+import MappingColorField from './MappingColorField';
+import { mappingColorCss, mappingFontNameToCss, mappingFontWeight } from './mappingCoords';
+import { safeBase64ToBytes } from './base64';
+// Re-export so existing imports (FormatosView.test.tsx) keep working.
+// The canonical home for this helper is now ./base64 — see the docstring
+// there for why it was extracted out of this component module.
+export { safeBase64ToBytes };
 
 let pdfjsLib: typeof import('pdfjs-dist') | null = null;
 let pdfWorkerUrl: string | null = null;
@@ -56,24 +64,6 @@ const SIMPLE_OVERLAY_DEFAULT_MAPPING: VisualMapping = {
 
 function pad(n: number, len = 7) {
     return String(n).padStart(len, '0');
-}
-
-export function safeBase64ToBytes(b64: string): Uint8Array<ArrayBuffer> {
-    if (!b64 || typeof b64 !== 'string') throw new Error('Datos base64 inválidos');
-    const cleaned = b64.replace(/\s/g, '');
-    if (!/^[A-Za-z0-9+/]*={0,2}$/.test(cleaned) || cleaned.length % 4 === 1) {
-        throw new Error('Datos base64 corruptos');
-    }
-    let binary: string;
-    try {
-        binary = atob(cleaned);
-    } catch {
-        throw new Error('Datos base64 corruptos');
-    }
-    const buffer = new ArrayBuffer(binary.length);
-    const bytes = new Uint8Array(buffer);
-    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-    return bytes;
 }
 
 interface PageImg { url: string; pageNum: number; }
@@ -248,8 +238,10 @@ function EmptyPreview({ loading }: { loading: boolean }) {
     );
 }
 
-function MappingEditor({ mapping, onChange, onSave, onCancel }: {
+function MappingEditor({ mapping, originalMapping, showColorReset, onChange, onSave, onCancel }: {
     mapping: VisualMapping;
+    originalMapping: VisualMapping;
+    showColorReset: boolean;
     onChange: (m: VisualMapping) => void;
     onSave: () => void;
     onCancel: () => void;
@@ -304,32 +296,23 @@ function MappingEditor({ mapping, onChange, onSave, onCancel }: {
                 </div>
             </div>
 
-            {/* Color */}
-            <div>
-                <div className="text-[8px] text-[var(--text-muted)] tracking-widest mb-1" style={{ fontFamily: "'Roboto Mono', monospace" }}>Color (R, G, B: 0-1)</div>
-                <div className="grid grid-cols-3 gap-2">
-                    {(['color_r', 'color_g', 'color_b'] as const).map(k => (
-                        <input
-                            key={k}
-                            type="number" min={0} max={1} step={0.1}
-                            value={mapping[k]}
-                            onChange={e => set(k, parseFloat(e.target.value) || 0)}
-                            className="w-full bg-[var(--bg-base)] border border-[var(--border-subtle)] hover:border-[var(--border-medium)] focus:border-[var(--accent-primary)]/40 rounded px-2 py-1.5 text-[var(--text-primary)] text-[11px] focus:outline-none transition-colors"
-                            style={{ fontFamily: "'Roboto Mono', monospace" }}
-                        />
-                    ))}
-                </div>
-            </div>
+            <MappingColorField
+                mapping={mapping}
+                originalMapping={originalMapping}
+                showReset={showColorReset}
+                onChange={colors => onChange({ ...mapping, ...colors })}
+            />
 
             {/* Preview of number */}
             <div className="border border-[var(--border-subtle)] bg-[var(--bg-elevated)] rounded-md p-3 text-center">
                 <span className="text-[9px] text-[var(--text-muted)] block mb-1" style={{ fontFamily: "'Roboto Mono', monospace" }}>Ejemplo</span>
                 <span
-                    className="tracking-widest font-bold"
+                    className="font-bold"
                     style={{
-                        fontFamily: "'Roboto Mono', monospace",
+                        fontFamily: mappingFontNameToCss(mapping.font_name),
+                        fontWeight: mappingFontWeight(mapping.font_name),
                         fontSize: `${Math.min(mapping.font_size * 1.2, 24)}px`,
-                        color: `rgb(${mapping.color_r * 255}, ${mapping.color_g * 255}, ${mapping.color_b * 255})`,
+                        color: mappingColorCss(mapping.color_r, mapping.color_g, mapping.color_b),
                     }}
                 >
                     {pad(1234, mapping.padding)}
@@ -356,12 +339,28 @@ function MappingEditor({ mapping, onChange, onSave, onCancel }: {
     );
 }
 
+function isPdfFile(file: File): boolean {
+    const name = file.name.toLowerCase();
+    return name.endsWith('.pdf') || file.type === 'application/pdf';
+}
+
 function UploadModal({ onClose, onUploaded }: { onClose: () => void; onUploaded: (f: FormatInfo) => void }) {
     const [file, setFile] = useState<File | null>(null);
     const [nombre, setNombre] = useState('');
     const [persisted, setPersisted] = useState(true);
     const [uploading, setUploading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [dragOver, setDragOver] = useState(false);
+
+    const acceptPdfFile = useCallback((candidate: File | null | undefined) => {
+        if (!candidate) return;
+        if (!isPdfFile(candidate)) {
+            setError('Solo se permiten archivos PDF');
+            return;
+        }
+        setError(null);
+        setFile(candidate);
+    }, []);
 
     const handleUpload = async () => {
         if (!file || !nombre.trim()) return;
@@ -412,12 +411,34 @@ function UploadModal({ onClose, onUploaded }: { onClose: () => void; onUploaded:
 
                 <div>
                     <label className="text-[9px] text-[var(--text-muted)] tracking-widest uppercase block mb-1.5" style={{ fontFamily: "'Roboto Mono', monospace" }}>Archivo PDF</label>
-                    <label className="flex items-center gap-2.5 cursor-pointer bg-[var(--bg-elevated)] border border-dashed border-[var(--border-medium)] hover:border-[var(--accent-primary)]/30 rounded-md px-3 py-3 transition-colors">
-                        <Upload size={14} className="text-[var(--text-muted)]" />
-                        <span className="text-[11px] text-[var(--text-secondary)] truncate" style={{ fontFamily: "'Roboto Mono', monospace" }}>
-                            {file ? file.name : 'Seleccionar archivo…'}
+                    <label
+                        className={`flex items-center gap-2.5 cursor-pointer border border-dashed rounded-md px-3 py-3 transition-colors ${
+                            dragOver
+                                ? 'bg-[var(--accent-primary)]/10 border-[var(--accent-primary)]/50'
+                                : 'bg-[var(--bg-elevated)] border-[var(--border-medium)] hover:border-[var(--accent-primary)]/30'
+                        }`}
+                        onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+                        onDragEnter={e => { e.preventDefault(); setDragOver(true); }}
+                        onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOver(false); }}
+                        onDrop={e => {
+                            e.preventDefault();
+                            setDragOver(false);
+                            acceptPdfFile(e.dataTransfer.files?.[0]);
+                        }}
+                    >
+                        <Upload size={14} className={dragOver ? 'text-[var(--accent-primary)]' : 'text-[var(--text-muted)]'} />
+                        <span
+                            className={`text-[11px] truncate ${dragOver ? 'text-[var(--accent-primary)]' : 'text-[var(--text-secondary)]'}`}
+                            style={{ fontFamily: "'Roboto Mono', monospace" }}
+                        >
+                            {dragOver ? 'Suelta el PDF aquí' : file ? file.name : 'Arrastra un PDF o selecciona archivo…'}
                         </span>
-                        <input type="file" accept=".pdf" className="hidden" onChange={e => setFile(e.target.files?.[0] ?? null)} />
+                        <input
+                            type="file"
+                            accept=".pdf,application/pdf"
+                            className="hidden"
+                            onChange={e => acceptPdfFile(e.target.files?.[0])}
+                        />
                     </label>
                 </div>
 
@@ -492,6 +513,7 @@ export default function FormatosView() {
     const [showUpload, setShowUpload] = useState(false);
     const [mappingMode, setMappingMode] = useState(false);
     const [editMapping, setEditMapping] = useState<VisualMapping | null>(null);
+    const [mappingBaseline, setMappingBaseline] = useState<VisualMapping | null>(null);
     const [zoom, setZoom] = useState(100);
     const zoomStep = 25;
 
@@ -524,6 +546,7 @@ export default function FormatosView() {
 
     /* ── Auto-preview on desde/hasta/format change ── */
     useEffect(() => {
+        if (mappingMode) return;
         if (!selected || !canGenerate) { setPreviewBlob(null); setPreviewLoading(false); return; }
         const capturedDesde = desde;
         const capturedHasta = hasta;
@@ -563,7 +586,7 @@ export default function FormatosView() {
             clearTimeout(t);
             previewAbort.current = true;
         };
-    }, [desde, hasta, selectedId, selected?.has_mapping, selected?.strategy, selected?.id]);
+    }, [desde, hasta, selectedId, selected?.has_mapping, selected?.strategy, selected?.id, mappingMode]);
 
     /* ── Download handler ── */
     const handleGenerate = async () => {
@@ -637,6 +660,7 @@ export default function FormatosView() {
             setFormats(prev => prev.map(f => f.id === selected.id ? res.format : f));
             setMappingMode(false);
             setEditMapping(null);
+            setMappingBaseline(null);
             addToast({ message: 'Mapping guardado', type: 'success' });
         } catch (e: any) {
             addToast({ message: 'Error guardando mapping: ' + (e?.message || String(e)), type: 'error' });
@@ -662,7 +686,9 @@ export default function FormatosView() {
                 <div className="relative z-10 flex items-center justify-between px-6 py-3 border-b border-[var(--border-subtle)]">
                     <div className="flex items-center gap-2.5">
                         <ScanLine size={13} className="text-[var(--accent-primary)]" />
-                        <span className="text-[10px] tracking-[0.22em] uppercase text-[var(--text-muted)]" style={{ fontFamily: "'Roboto Mono', monospace" }}>Vista Previa</span>
+                        <span className="text-[10px] tracking-[0.22em] uppercase text-[var(--text-muted)]" style={{ fontFamily: "'Roboto Mono', monospace" }}>
+                            {mappingMode ? 'Vista template · arrastra el recuadro' : 'Vista Previa'}
+                        </span>
                     </div>
                     <div className="flex items-center gap-3">
                         <div
@@ -672,7 +698,7 @@ export default function FormatosView() {
                         >
                             <FileText size={9} className="text-[var(--accent-primary)]/60" />
                             <span className="text-[9px] font-medium tracking-[0.22em] uppercase text-[var(--text-secondary)]">FORMATOS PDF</span>
-                            {previewBlob && (
+                            {(mappingMode || previewBlob) && (
                                 <>
                                     <div className="w-px h-3 bg-[var(--border-subtle)] mx-0.5" />
                                     <button onClick={() => setZoom(z => Math.max(50, z - zoomStep))} className="w-4 h-4 rounded bg-[var(--bg-base)] hover:bg-[var(--bg-input)] text-[var(--accent-primary)] text-[10px] font-bold flex items-center justify-center transition-colors leading-none">−</button>
@@ -710,7 +736,16 @@ export default function FormatosView() {
 
                 {/* viewer area */}
                 <div className="relative flex-1 overflow-hidden">
-                    {previewBlob ? (
+                    {mappingMode && editMapping && selected ? (
+                        <MappingPreviewPanel
+                            formatId={selected.id}
+                            mapping={editMapping}
+                            onChange={setEditMapping}
+                            zoom={zoom}
+                            previewBlob={previewBlob}
+                            sampleNumber={desde}
+                        />
+                    ) : previewBlob ? (
                         <PdfMultiViewer blob={previewBlob} desde={previewDesde} total={previewTotal} padLen={padLen} zoom={zoom} />
                     ) : (
                         <EmptyPreview loading={previewLoading || loadingFormats} />
@@ -739,7 +774,7 @@ export default function FormatosView() {
                             {formats.map(f => (
                                 <button
                                     key={f.id}
-                                    onClick={() => { setSelectedId(f.id); setMappingMode(false); setEditMapping(null); }}
+                                    onClick={() => { setSelectedId(f.id); setMappingMode(false); setEditMapping(null); setMappingBaseline(null); }}
                                     className={`w-full flex items-center gap-2.5 rounded-md px-3 py-2.5 transition-colors group text-left ${f.id === selectedId
                                             ? 'bg-[var(--accent-primary)]/[0.08] border border-[var(--accent-primary)]/25'
                                             : 'bg-[var(--bg-elevated)] border border-[var(--border-subtle)] hover:border-[var(--border-medium)]'
@@ -779,9 +814,12 @@ export default function FormatosView() {
                                         if (mappingMode) {
                                             setMappingMode(false);
                                             setEditMapping(null);
+                                            setMappingBaseline(null);
                                         } else {
+                                            const baseline = selected.mapping ? { ...selected.mapping } : { ...SIMPLE_OVERLAY_DEFAULT_MAPPING };
                                             setMappingMode(true);
-                                            setEditMapping(selected.mapping ? { ...selected.mapping } : { ...SIMPLE_OVERLAY_DEFAULT_MAPPING });
+                                            setEditMapping({ ...baseline });
+                                            setMappingBaseline(baseline);
                                         }
                                     }}
                                     className="w-full flex items-center justify-between gap-2 bg-[var(--bg-elevated)] hover:bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-md px-3 py-2.5 transition-colors"
@@ -804,9 +842,11 @@ export default function FormatosView() {
                             {mappingMode && editMapping && (
                                 <MappingEditor
                                     mapping={editMapping}
+                                    originalMapping={mappingBaseline ?? editMapping}
+                                    showColorReset={selected.origen === 'builtin'}
                                     onChange={setEditMapping}
                                     onSave={handleSaveMapping}
-                                    onCancel={() => { setMappingMode(false); setEditMapping(null); }}
+                                    onCancel={() => { setMappingMode(false); setEditMapping(null); setMappingBaseline(null); }}
                                 />
                             )}
 

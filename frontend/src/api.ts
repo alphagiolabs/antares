@@ -40,9 +40,11 @@ const LONG_RUNNING_METHODS = new Set([
   'db_clear',
   'preview_image',
   'formatos_generate',
+  'formatos_render_template_page',
   'sellador_apply',
   'sellador_render_page',
   'image_optimizer_zip',
+  'image_optimizer_save_files',
   'technical_reports_import_file',
   'technical_reports_render_consolidated_html',
   'panel_aviso_corte_parse_excel',
@@ -215,13 +217,32 @@ export type FormatosGenerateResponse =
   | { pdf_base64: string; filename: string; saved_path?: never }
   | { pdf_base64?: never; filename: string; saved_path: string };
 
+export interface ImageOptimizerSaveFileEntry {
+  filename: string;
+  path: string;
+}
+
+export interface ImageOptimizerSaveSkippedEntry {
+  filename: string;
+  reason: string;
+}
+
+export interface ImageOptimizerSaveFilesResponse {
+  saved_path: string;
+  saved_count: number;
+  skipped_count: number;
+  saved: ImageOptimizerSaveFileEntry[];
+  skipped: ImageOptimizerSaveSkippedEntry[];
+}
+
 export const api = {
   version: () => _invoke<{ version: string }>('version'),
   formats: () => _invoke<{ formats: string[] }>('formats'),
 
   dialogFiles: () => _invoke<{ paths: string[] }>('dialog_files'),
   dialogDest: () => _invoke<{ paths: string[] }>('dialog_dest'),
-  dialogFolder: () => _invoke<{ paths: string[] }>('dialog_folder'),
+  dialogFolder: (params?: { title?: string; pickOnly?: boolean }) =>
+    _invoke<{ paths: string[]; folder?: string }>('dialog_folder', params),
   dialogSave: (params?: { title?: string; defaultPath?: string; filters?: Array<{ name: string; extensions: string[] }> }) => _invoke<{ paths: string[] }>('dialog_save', params),
 
   startProcess: (body: ProcessBody) => _invoke<{ started: boolean }>('process_start', body),
@@ -311,6 +332,13 @@ export const api = {
   formatosDelete: (format_id: string) => _invoke<{ deleted: boolean }>('formatos_delete', { format_id }),
   formatosGetTemplate: (format_id: string) =>
     _invoke<{ pdf_base64: string; filename: string }>('formatos_get_template', { format_id }),
+  formatosRenderTemplatePage: (body: { format_id: string; page_num?: number; max_width?: number }) =>
+    _invoke<{
+      image_base64: string;
+      page_width: number;
+      page_height: number;
+      mime_type: string;
+    }>('formatos_render_template_page', body),
   formatosUpdateMapping: (format_id: string, mapping: VisualMapping) =>
     _invoke<{ format: FormatInfo }>('formatos_update_mapping', { format_id, mapping }),
 
@@ -364,6 +392,8 @@ export const api = {
   // ─── Image Optimizer ────────────────────────────────────────────────────
   imageOptimizerZip: (body: { files: Array<{ filename: string; content_b64: string }>; zip_name: string; output_path?: string }) =>
     _invoke<{ zip_base64?: string; saved_path?: string; filename: string }>('image_optimizer_zip', body),
+  imageOptimizerSaveFiles: (body: { files: Array<{ filename: string; content_b64: string }>; output_folder: string }) =>
+    _invoke<ImageOptimizerSaveFilesResponse>('image_optimizer_save_files', body),
 
   // ─── Plantillas PreviewPanel ─────────────────────────────────────────────
   templatesList: () => _invoke<{ templates: Array<{ id: string; name: string; filename: string }> }>('templates_list'),

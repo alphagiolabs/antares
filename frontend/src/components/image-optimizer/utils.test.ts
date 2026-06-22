@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_BATCH_SETTINGS } from './presets';
 import { BatchSettings, ImageItem } from './types';
-import { buildDownloadNameMap, buildZipFilename, reorderImageItems } from './utils';
+import { arrayBufferToBase64, buildDownloadNameMap, buildZipFilename, reorderImageItems } from './utils';
 
 function makeItem(id: string, originalName: string): ImageItem {
   return {
@@ -101,5 +101,32 @@ describe('image optimizer zip export', () => {
     };
 
     expect(buildZipFilename(settings)).toBe('imagenes_optimizadas_cliente.zip');
+  });
+});
+
+describe('arrayBufferToBase64', () => {
+  it('encodes an empty buffer to an empty string', () => {
+    expect(arrayBufferToBase64(new ArrayBuffer(0))).toBe('');
+  });
+
+  it('encodes a small buffer identically to btoa', () => {
+    const text = 'Antares optimizador';
+    const buffer = new TextEncoder().encode(text).buffer;
+    expect(arrayBufferToBase64(buffer)).toBe(btoa(text));
+  });
+
+  it('encodes a buffer larger than the chunk size without stack overflow', () => {
+    // 0x8000 (32 KB) is the chunk boundary inside arrayBufferToBase64 —
+    // a buffer bigger than that exercises the loop path that previously
+    // crashed when spreading the whole Uint8Array into String.fromCharCode.
+    const bytes = new Uint8Array(0x10000);
+    for (let i = 0; i < bytes.length; i += 1) {
+      bytes[i] = i & 0xff;
+    }
+    const encoded = arrayBufferToBase64(bytes.buffer);
+    // Decode back and compare — confirms no data was dropped between chunks.
+    const decoded = Uint8Array.from(atob(encoded), (c) => c.charCodeAt(0));
+    expect(decoded.length).toBe(bytes.length);
+    expect(decoded.every((value, index) => value === bytes[index])).toBe(true);
   });
 });
