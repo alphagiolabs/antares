@@ -5,6 +5,25 @@ Todas las versiones notables de ANTARES se documentan aquí.
 Formato basado en [Keep a Changelog](https://keepachangelog.com/),
 y este proyecto sigue [Semantic Versioning](https://semver.org/).
 
+## [0.10.5] — 2026-06-22
+
+### Added
+- Nuevos componentes de mapeo visual para formatos (MappingColorField, MappingOverlay, MappingPreviewPanel).
+- Soporte para exportación de reportes técnicos con grid 3x2 dinámico y stretch de imágenes.
+- Nuevos tests para mapeo de formatos, optimizador de imágenes y manejo de diálogos de Electron.
+- Assets de registro: imagen y video de sign-up.
+
+### Changed
+- Mejoras en el backend de reportes, formatos, sellador y optimizador de imágenes.
+- Refactor del IPC de Electron y manejo de ventanas.
+- Actualización de dependencias en frontend y .gitignore para archivos temporales/caché.
+- Limpieza de credenciales de Supabase en `.env.example` mediante reescritura de historial.
+- Actualización de versiones a `0.10.5` en todos los manifiestos del proyecto.
+
+### Fixed
+- Correcciones en la UI de formatos, sidebar y optimizador.
+- Ajustes en locales y sanitización de HTML compartido.
+
 ## [1.10.5] — 2025-06-01
 
 ### Fixed
