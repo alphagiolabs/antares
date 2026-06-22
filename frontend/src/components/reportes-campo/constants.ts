@@ -83,6 +83,9 @@ export const REPORT_TYPES: ReportTypeConfig[] = [
             [{ label: 'Distrito:', valueKey: 'DISTRITO', colSpan: 3 }],
         ],
         pageLabelFormat: 'hoja',
+        photosPerPage: 6,
+        gridColumns: 3,
+        gridRows: 2,
     },
     {
         id: 'maquina-balde',

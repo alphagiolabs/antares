@@ -46,7 +46,8 @@ export default function ReportesCampoApp() {
     const startXRef = useRef(0);
     const startWidthRef = useRef(0);
 
-    const chunks = chunkArray(photos, CHUNK_SIZE);
+    const itemsPerPage = config.photosPerPage || CHUNK_SIZE;
+    const chunks = chunkArray(photos, itemsPerPage);
     const previewChunks = chunks.length > 0 ? chunks : [[]];
     const totalPages = previewChunks.length;
     const currentChunk = previewChunks[currentPage] ?? [];

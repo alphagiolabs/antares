@@ -37,6 +37,9 @@ export interface ReportTypeConfig {
         rows: Array<Array<{ label: string; valueKey: string; colSpan?: number }>>;
     };
     pageLabelFormat: 'hoja' | 'pagina';
+    photosPerPage?: number;
+    gridColumns?: number;
+    gridRows?: number;
 }
 
 export type HeaderMap = Record<string, string>;

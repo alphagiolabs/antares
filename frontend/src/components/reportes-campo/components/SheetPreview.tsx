@@ -40,10 +40,14 @@ export default function SheetPreview({
     totalPages,
 }: SheetPreviewProps) {
     const validCount = images.length;
+    const itemsPerPage = config.photosPerPage || CHUNK_SIZE;
     const slots =
-        validCount === 3
+        validCount === 3 && itemsPerPage === 4
             ? images
-            : Array.from({ length: CHUNK_SIZE }, (_, i) => images[i] ?? null);
+            : Array.from({ length: itemsPerPage }, (_, i) => images[i] ?? null);
+
+    const cols = config.gridColumns || 2;
+    const rows = config.gridRows || 2;
 
     const pageLabelWord = config.pageLabelFormat === 'pagina' ? 'Página' : 'Hoja';
 
@@ -220,8 +224,8 @@ export default function SheetPreview({
                     style={{
                         flex: 1,
                         display: 'grid',
-                        gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-                        gridTemplateRows: 'repeat(2, minmax(0, 1fr))',
+                        gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
+                        gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))`,
                         gap: '2mm',
                         width: '100%',
                         height: '100%',
@@ -246,7 +250,7 @@ export default function SheetPreview({
                                 minWidth: 0,
                                 minHeight: 0,
                                 boxSizing: 'border-box',
-                                ...(validCount === 3 && idx === 2
+                                ...(validCount === 3 && idx === 2 && itemsPerPage === 4
                                     ? { gridColumn: 'span 2', width: 'calc(50% - 1mm)', justifySelf: 'center' }
                                     : { width: '100%' }),
                             }}
@@ -256,9 +260,9 @@ export default function SheetPreview({
                                     src={photo.previewUrl}
                                     alt={`Foto ${idx + 1}`}
                                     style={{
-                                        maxWidth: '100%',
-                                        maxHeight: '100%',
-                                        objectFit: 'contain',
+                                        width: '100%',
+                                        height: '100%',
+                                        objectFit: 'fill',
                                         objectPosition: 'center',
                                         display: 'block',
                                     }}

@@ -39,14 +39,14 @@ export function buildReportPdfHtml({
     photos,
     logoLeft,
     logoRight,
-}: {
+} : {
     config: ReportTypeConfig;
     header: Record<string, string>;
     photos: PhotoFile[];
     logoLeft: string | null;
     logoRight: string | null;
 }): string {
-    const pages = chunkArray(photos, CHUNK_SIZE);
+    const pages = chunkArray(photos, config.photosPerPage || CHUNK_SIZE);
     const body = pages
         .map((images, index) =>
             renderToStaticMarkup(
