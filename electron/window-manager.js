@@ -3,6 +3,7 @@
  */
 const { BrowserWindow, screen, session, Menu } = require('electron');
 const path = require('path');
+const { ALLOWED_RENDERER_METHODS } = require('./ipc-methods');
 
 let mainWindow = null;
 let _isDev = false;
@@ -23,12 +24,21 @@ function createWindow(isDev) {
   const { width, height } = screen.getPrimaryDisplay().workAreaSize;
   const iconPath = path.join(__dirname, '..', 'assets', 'icon.ico');
 
+  // The preload runs with sandbox: true, so it cannot `require('./ipc-methods')`
+  // (sandboxed preloads can only require a small set of built-ins). Inject the
+  // IPC allowlist via additionalArguments — the canonical way to pass small,
+  // trusted data into a sandboxed preload. ipc-methods.js stays the single
+  // source of truth (still required by the main-process ipc-router, which is
+  // the real security boundary).
+  const allowedMethodsArg = `--allowed-ipc-methods=${JSON.stringify([...ALLOWED_RENDERER_METHODS])}`;
+
   mainWindow = new BrowserWindow({
     width, height, show: false, frame: false,
     titleBarStyle: 'hidden', autoHideMenuBar: true, icon: iconPath,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
-      contextIsolation: true, nodeIntegration: false, sandbox: false,
+      contextIsolation: true, nodeIntegration: false, sandbox: true,
+      additionalArguments: [allowedMethodsArg],
     },
   });
 

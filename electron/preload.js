@@ -1,7 +1,31 @@
 const { contextBridge, ipcRenderer, webUtils } = require('electron');
-const { ALLOWED_RENDERER_METHODS } = require('./ipc-methods');
 
-const isDev = process.env.NODE_ENV !== 'production';
+// Resolve the IPC allowlist. Under sandbox: true the preload cannot
+// `require('./ipc-methods')`, so the main process injects the list via
+// webPreferences.additionalArguments. We fall back to requiring the shared
+// module for non-sandboxed contexts and Node-based integration tests.
+function resolveAllowedMethods() {
+  const prefix = '--allowed-ipc-methods=';
+  const argv = Array.isArray(process.argv) ? process.argv : [];
+  const arg = argv.find((a) => typeof a === 'string' && a.startsWith(prefix));
+  if (arg) {
+    try {
+      return new Set(JSON.parse(arg.slice(prefix.length)));
+    } catch {
+      /* fall through to the shared-module fallback */
+    }
+  }
+  try {
+    const { ALLOWED_RENDERER_METHODS } = require('./ipc-methods');
+    return new Set(ALLOWED_RENDERER_METHODS);
+  } catch {
+    return new Set();
+  }
+}
+
+const ALLOWED_RENDERER_METHODS = resolveAllowedMethods();
+
+const isDev = process.env?.NODE_ENV !== 'production';
 
 if (isDev) {
   console.debug('[preload] Preload script executing...');

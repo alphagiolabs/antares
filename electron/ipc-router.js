@@ -216,8 +216,8 @@ function registerIpcHandlers() {
 
     // Dialog / native methods are handled in Electron main without touching Python.
     const win = getMainWindow();
-    const { BrowserWindow } = require('electron');
-    const dialogResult = await handleDialogCall(method, params, dialog, win, { BrowserWindow });
+    const { BrowserWindow, session } = require('electron');
+    const dialogResult = await handleDialogCall(method, params, dialog, win, { BrowserWindow, session });
     if (dialogResult.handled) return dialogResult.result;
 
     return _callBackend(method, params);

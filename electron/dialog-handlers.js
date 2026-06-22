@@ -98,10 +98,20 @@ async function renderHtmlToPdf(params = {}, electronModules = {}) {
     throw new Error('HTML excede el tamaño máximo permitido (150 MB)');
   }
 
-  const { BrowserWindow } = electronModules;
+  const { BrowserWindow, session } = electronModules;
   if (!BrowserWindow) {
     throw new Error('BrowserWindow no disponible para generar PDF');
   }
+
+  // Use a dedicated session partition so the webRequest interceptor we
+  // register below cannot leak into the main renderer's session (which
+  // shares the default session and would lose network connectivity after
+  // the first PDF render). A unique partition per call also means a stale
+  // interceptor from a previous call cannot block this one.
+  const partitionName = `pdf-render-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  const pdfSession = (session && typeof session.fromPartition === 'function')
+    ? session.fromPartition(partitionName)
+    : null;
 
   const pdfWindow = new BrowserWindow({
     show: false,
@@ -109,19 +119,48 @@ async function renderHtmlToPdf(params = {}, electronModules = {}) {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      ...(pdfSession ? { session: pdfSession } : {}),
     },
   });
 
-  // Block external resource loads to prevent SSRF
+  // Block external resource loads to prevent SSRF and local file disclosure.
+  // Cover http(s) AND file:// schemes — `*://*/*` does not match `file://`,
+  // so we register a second filter for file URLs and only allow the
+  // specific file:// URLs we whitelisted (the temp HTML + local images).
+  const clearInterceptors = () => {
+    try {
+      const targetSession = pdfSession || pdfWindow.webContents.session;
+      if (targetSession && targetSession.webRequest) {
+        targetSession.webRequest.onBeforeRequest({ urls: ['*://*/*'] }, null);
+        targetSession.webRequest.onBeforeRequest({ urls: ['file://*/*'] }, null);
+      }
+    } catch {
+      /* window/session already destroyed */
+    }
+  };
+
   if (pdfWindow.webContents.session && pdfWindow.webContents.session.webRequest) {
-    pdfWindow.webContents.session.webRequest.onBeforeRequest({ urls: ['*://*/*'] }, (details, callback) => {
+    const filter = (details, callback) => {
       if (details.url.startsWith('data:') || allowedFileUrls.has(details.url)) {
         callback({ cancel: false });
       } else {
         callback({ cancel: true });
       }
-    });
+    };
+    pdfWindow.webContents.session.webRequest.onBeforeRequest({ urls: ['*://*/*'] }, filter);
+    pdfWindow.webContents.session.webRequest.onBeforeRequest({ urls: ['file://*/*'] }, filter);
   }
+
+  // Hard timeout: printToPDF can hang indefinitely on a malformed HTML or
+  // a script that never settles. html_to_pdf is in LONG_RUNNING_METHODS but
+  // the renderer still needs a bounded wait so the IPC doesn't sit forever.
+  const PDF_TIMEOUT_MS = 60_000;
+  let timeoutHandle = null;
+  const timeoutPromise = new Promise((_resolve, reject) => {
+    timeoutHandle = setTimeout(() => {
+      reject(new Error('Tiempo agotado generando el PDF'));
+    }, PDF_TIMEOUT_MS);
+  });
 
   let tempDir = null;
   try {
@@ -141,12 +180,15 @@ async function renderHtmlToPdf(params = {}, electronModules = {}) {
     await pdfWindow.loadFile(htmlPath);
     await didFinishLoad;
 
-    const pdfBuffer = await pdfWindow.webContents.printToPDF({
-      printBackground: true,
-      preferCSSPageSize: true,
-      pageSize: 'A4',
-      margins: { marginType: 'none' },
-    });
+    const pdfBuffer = await Promise.race([
+      pdfWindow.webContents.printToPDF({
+        printBackground: true,
+        preferCSSPageSize: true,
+        pageSize: 'A4',
+        margins: { marginType: 'none' },
+      }),
+      timeoutPromise,
+    ]);
     const filename = _sanitizeFilename(params.filename) || 'reporte.pdf';
     const outputPath = _sanitizePdfOutputPath(params.outputPath, filename);
 
@@ -169,8 +211,16 @@ async function renderHtmlToPdf(params = {}, electronModules = {}) {
       filename,
     };
   } finally {
+    if (timeoutHandle) clearTimeout(timeoutHandle);
+    clearInterceptors();
     if (!pdfWindow.isDestroyed()) {
       pdfWindow.close();
+    }
+    // Best-effort cleanup of the partition's storage so partitions don't
+    // accumulate across calls. Errors here are harmless — the partition is
+    // unique per call and will be reaped by Electron when the process exits.
+    if (pdfSession) {
+      try { await pdfSession.clearStorageData(); } catch { /* noop */ }
     }
     if (tempDir) {
       // Retry removal on Windows where EBUSY is common right after window close
@@ -224,6 +274,12 @@ async function handleDialogCall(method, params = {}, dialog, window, electronMod
       return { handled: true, result: { paths: [] } };
     }
     const folderPath = response.filePaths[0];
+    // `pickOnly` returns just the folder path without scanning its contents.
+    // Used by features that only need a destination (e.g. image optimizer
+    // "save to folder"), so we avoid an expensive recursive scan.
+    if (params && params.pickOnly) {
+      return { handled: true, result: { paths: [], folder: folderPath } };
+    }
     const files = await _scanFolderRecursive(folderPath, FOLDER_SCAN_EXTENSIONS);
     return { handled: true, result: { paths: files } };
   }
