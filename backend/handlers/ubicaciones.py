@@ -85,7 +85,8 @@ def capture_google_maps_fast(page, lat: float, lon: float, width: int, height: i
     except PlaywrightTimeoutError:
         logger.warning(f"Timeout al cargar el mapa para {lat},{lon}, procediendo con lo que cargo.")
     # Espera minima para que el mapa renderice
-    page.wait_for_timeout(1200)
+    # El browser pre-warmed ya tiene Google Maps cacheado y renderiza mas rapido.
+    page.wait_for_timeout(800)
     try:
         page.evaluate("""
             () => {
