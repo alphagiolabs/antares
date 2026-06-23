@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import TYPE_CHECKING, Any
 
 from backend.core.config_fields import get_field_names
@@ -21,6 +22,8 @@ DEFAULT_PATTERNS: list[dict[str, Any]] = [
     {"id": "keep", "label": "Mantener nombres", "pattern": ""},
 ]
 
+_cached_patterns: list[dict[str, Any]] | None = None
+
 _CONFIG_PATH: Path | None = None
 
 
@@ -35,7 +38,6 @@ def _validate_pattern(pattern: str, available_vars: set[str]) -> bool:
     """Valida que el patrón use variables disponibles."""
     if not pattern:
         return True  # Patrón vacío = mantener nombre
-    import re
     placeholders = set(re.findall(r"\{(\w+)\}", pattern))
     # {seq} y {ext} siempre están disponibles
     allowed = available_vars | {"seq", "ext", "sep"}
@@ -44,6 +46,9 @@ def _validate_pattern(pattern: str, available_vars: set[str]) -> bool:
 
 def load_patterns() -> list[dict[str, Any]]:
     """Carga los patrones guardados o retorna los defaults."""
+    global _cached_patterns
+    if _cached_patterns is not None:
+        return [dict(p) for p in _cached_patterns]
     path = _config_file()
     if path.exists():
         try:
@@ -60,14 +65,17 @@ def load_patterns() -> list[dict[str, Any]]:
                             "pattern": str(p["pattern"]),
                         })
                 if validated:
-                    return validated
+                    _cached_patterns = validated
+                    return [dict(p) for p in validated]
         except (json.JSONDecodeError, OSError, TypeError) as exc:
             logger.warning("Error leyendo patrones, usando defaults: %s", exc)
+    _cached_patterns = [dict(p) for p in DEFAULT_PATTERNS]
     return [dict(p) for p in DEFAULT_PATTERNS]
 
 
 def save_patterns(patterns: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Guarda la configuración de patrones en disco."""
+    global _cached_patterns
     path = _config_file()
     available_vars = set(get_field_names())
     validated = []
@@ -88,10 +96,13 @@ def save_patterns(patterns: list[dict[str, Any]]) -> list[dict[str, Any]]:
             })
     with open(path, "w", encoding="utf-8") as f:
         json.dump({"patterns": validated}, f, indent=2, ensure_ascii=False)
+    _cached_patterns = validated
     return validated
 
 
 def reset_to_defaults() -> list[dict[str, Any]]:
     """Restaura los patrones por defecto."""
+    global _cached_patterns
     save_patterns(DEFAULT_PATTERNS)
+    _cached_patterns = [dict(p) for p in DEFAULT_PATTERNS]
     return [dict(p) for p in DEFAULT_PATTERNS]

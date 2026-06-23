@@ -2,9 +2,26 @@
 from __future__ import annotations
 
 import base64
+import re
 from typing import Any, cast
 
 from backend.handlers.common import with_locale
+
+# ── Pre-compiled sanitization patterns ───────────────────────────────────────
+# Hoisted from _sanitize_html_for_pdf to avoid re-compilation on every html_to_pdf call.
+_RE_SCRIPT = re.compile(r"<script[^>]*>[\s\S]*?</script>", re.IGNORECASE)
+_RE_IFRAME = re.compile(r"<iframe[^>]*>[\s\S]*?</iframe>", re.IGNORECASE)
+_RE_OBJECT = re.compile(r"<object[^>]*>[\s\S]*?</object>", re.IGNORECASE)
+_RE_EMBED = re.compile(r"<embed[^>]*>", re.IGNORECASE)
+_RE_LINK = re.compile(r"<link[^>]*/?>", re.IGNORECASE)
+_RE_EVENT_DQ = re.compile(r'\son[a-z]+\s*=\s*"[^"]*"', re.IGNORECASE)
+_RE_EVENT_SQ = re.compile(r"\son[a-z]+\s*=\s*'[^']*'", re.IGNORECASE)
+_RE_EVENT_BARE = re.compile(r"\son[a-z]+\s*=\s*[^\s>]+", re.IGNORECASE)
+_RE_JS_URI = re.compile(
+    r"(href|src|xlink:href)\s*=\s*(['\"]?)\s*(?:javascript|vbscript):[^\"'>\s]*\2",
+    re.IGNORECASE,
+)
+_RE_CSS_URL = re.compile(r"url\(\s*(['\"]?)(.+?)\1\s*\)", re.IGNORECASE)
 
 
 def _db():
@@ -159,33 +176,23 @@ def _sanitize_html_for_pdf(html: str) -> str:
     <object>, <embed>, <link>, and neutralises CSS url() references while
     preserving safe inline styles.
     """
-    import re
     safe: str = html
-    # Remove dangerous tags entirely
-    safe = re.sub(r"<script[^>]*>[\s\S]*?</script>", "", safe, flags=re.IGNORECASE)
-    safe = re.sub(r"<iframe[^>]*>[\s\S]*?</iframe>", "", safe, flags=re.IGNORECASE)
-    safe = re.sub(r"<object[^>]*>[\s\S]*?</object>", "", safe, flags=re.IGNORECASE)
-    safe = re.sub(r"<embed[^>]*>", "", safe, flags=re.IGNORECASE)
-    safe = re.sub(r"<link[^>]*/?>", "", safe, flags=re.IGNORECASE)
-    # Strip inline event handlers (onload=, onerror=, ...) and javascript:/vbscript: URIs
-    safe = re.sub(r"\son[a-z]+\s*=\s*\"[^\"]*\"", "", safe, flags=re.IGNORECASE)
-    safe = re.sub(r"\son[a-z]+\s*=\s*'[^']*'", "", safe, flags=re.IGNORECASE)
-    safe = re.sub(r"\son[a-z]+\s*=\s*[^\s>]+", "", safe, flags=re.IGNORECASE)
-    safe = re.sub(
-        r"(href|src|xlink:href)\s*=\s*(['\"]?)\s*(?:javascript|vbscript):[^\"'>\s]*\2",
-        r"\1=\2\2",
-        safe,
-        flags=re.IGNORECASE,
-    )
-    # Neutralise CSS url() that references external / local resources
-    # Allow data: URLs (inline images) but block file://, http://, https://, etc.
+    safe = _RE_SCRIPT.sub("", safe)
+    safe = _RE_IFRAME.sub("", safe)
+    safe = _RE_OBJECT.sub("", safe)
+    safe = _RE_EMBED.sub("", safe)
+    safe = _RE_LINK.sub("", safe)
+    safe = _RE_EVENT_DQ.sub("", safe)
+    safe = _RE_EVENT_SQ.sub("", safe)
+    safe = _RE_EVENT_BARE.sub("", safe)
+    safe = _RE_JS_URI.sub(r"\1=\2\2", safe)
+
     def _neutralise_url(m: re.Match) -> str:
         url_content = m.group(2).strip().strip("'\"")
         if url_content.lower().startswith("data:"):
             return str(m.group(0))
         return "url('')"
-    safe = re.sub(r"url\(\s*(['\"]?)(.+?)\1\s*\)", _neutralise_url, safe, flags=re.IGNORECASE)
-    # Inject a restrictive CSP meta tag if not already present
+    safe = _RE_CSS_URL.sub(_neutralise_url, safe)
     csp_meta = '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; style-src \'unsafe-inline\'; img-src data:; font-src data:;">'
     if "Content-Security-Policy" not in safe:
         safe = safe.replace("<head>", f"<head>{csp_meta}", 1) if "<head" in safe else csp_meta + safe

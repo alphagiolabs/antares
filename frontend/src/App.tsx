@@ -118,6 +118,8 @@ function AppContent() {
     setSettingsOpen(true);
   }, []);
   const closeSettings = useCallback(() => setSettingsOpen(false), []);
+  const openAppearanceSettings = useCallback(() => openSettings('appearance'), [openSettings]);
+  const closeCommandPalette = useCallback(() => setCommandOpen(false), []);
 
   useKeyboardShortcut('k', openCommandPalette, { ctrl: true, preventDefault: true });
   useKeyboardShortcut('1', () => handleTabChange('convert'), { ctrl: true, preventDefault: true });
@@ -157,11 +159,11 @@ function AppContent() {
 
   return (
     <div className="flex h-screen w-screen flex-col overflow-hidden bg-[var(--bg-base)] text-[var(--text-primary)]">
-      <TitleBar onOpenSettings={() => openSettings('appearance')} />
+      <TitleBar onOpenSettings={openAppearanceSettings} />
       <div className="flex min-h-0 flex-1">
         <Sidebar
           activeTab={activeTab}
-          onTabChange={(t) => setActiveTab(t as TabId)}
+          onTabChange={handleTabChange}
         />
         <div className="flex-1 flex flex-col min-w-0 min-h-0">
           <main className="flex-1 overflow-hidden relative">
@@ -179,7 +181,7 @@ function AppContent() {
         onSectionChange={setSettingsSection}
         onClose={closeSettings}
       />
-      <CommandPalette isOpen={commandOpen} onClose={() => setCommandOpen(false)} items={commandItems} />
+      <CommandPalette isOpen={commandOpen} onClose={closeCommandPalette} items={commandItems} />
       <Dialog />
       <ToastContainer />
       <BackendStatusBar />

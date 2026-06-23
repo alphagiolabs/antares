@@ -26,6 +26,11 @@ from backend.ipc_protocol import send_notification
 from backend.utils.i18n import set_locale, t
 from backend.utils.validators import parse_filename_parts
 
+try:
+    import psutil
+except ImportError:
+    psutil = None  # type: ignore[assignment]
+
 _CANCEL_GRACE_SECONDS = 0.25
 
 _SEQUENCE_MODES = {"record", "global", "filename"}
@@ -811,15 +816,15 @@ HANDLERS = {
 
 def _calculate_chunk_size() -> int:
     """Choose an adaptive chunk size without materializing the full batch."""
-    try:
-        import psutil
-
-        available_gb = psutil.virtual_memory().available / (1024 ** 3)
-        target_ram_per_chunk = available_gb * 0.25
-        chunk_size = int((target_ram_per_chunk * 1024) / 5)
-        return max(50, min(chunk_size, 1000))
-    except ImportError:
-        return 500
+    if psutil is not None:
+        try:
+            available_gb = psutil.virtual_memory().available / (1024 ** 3)
+            target_ram_per_chunk = available_gb * 0.25
+            chunk_size = int((target_ram_per_chunk * 1024) / 5)
+            return max(50, min(chunk_size, 1000))
+        except Exception:
+            return 500
+    return 500
 
 
 def _prepare_chunk_tasks(

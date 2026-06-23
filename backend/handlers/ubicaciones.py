@@ -250,20 +250,38 @@ def render_imagen_ubicacion(datos: dict, formato: str, page) -> Image.Image:
     # Pegar el mapa en la parte superior (dejando espacio para footer)
     final_img.paste(mapa_con_overlay.convert('RGB'), (0, 0))
 
-    # Dibujar footer negro
+    # Pegar footer imagen en vez de rectángulo negro
+    assets_dir = resource_path("assets/ubicaciones")
+    footer_img_name = "footer_vertical.png" if formato == "vertical" else "footer_horizontal.png"
+    footer_path = os.path.join(assets_dir, footer_img_name)
+    
     draw = ImageDraw.Draw(final_img)
-    draw.rectangle([0, out_h - footer_height, out_w, out_h], fill=(0, 0, 0))
+    if os.path.exists(footer_path):
+        footer_img = Image.open(footer_path).convert("RGB")
+        footer_img = footer_img.resize((out_w, footer_height), Image.Resampling.LANCZOS)
+        final_img.paste(footer_img, (0, out_h - footer_height))
+    else:
+        draw.rectangle([0, out_h - footer_height, out_w, out_h], fill=(0, 0, 0))
 
     # Dibujar borde negro fino
     draw.rectangle([0, 0, out_w-1, out_h-1], outline=(0, 0, 0), width=4)
 
     # Cargar fuentes (escaladas para A4)
     try:
-        font_large = ImageFont.truetype("arial.ttf", 120)
-        font_medium = ImageFont.truetype("arial.ttf", 60)
+        font_large = ImageFont.truetype("arialbd.ttf", 120)
     except Exception:
-        font_large = ImageFont.load_default()
-        font_medium = ImageFont.load_default()
+        try:
+            font_large = ImageFont.truetype("arial.ttf", 120)
+        except Exception:
+            font_large = ImageFont.load_default()
+
+    try:
+        font_medium = ImageFont.truetype("arialbd.ttf", 60)
+    except Exception:
+        try:
+            font_medium = ImageFont.truetype("arial.ttf", 60)
+        except Exception:
+            font_medium = ImageFont.load_default()
 
     # Textos
     cod = str(datos.get('cod_componente', ''))
@@ -274,12 +292,15 @@ def render_imagen_ubicacion(datos: dict, formato: str, page) -> Image.Image:
     # Posiciones relativas al tamaño de imagen
     y_start = 120 if formato == "vertical" else 180
     line_spacing = 180 if formato == "vertical" else 260
+    
+    stroke_w_large = 12
+    stroke_w_medium = 8
 
     # COD COMPONENTE (grande, centrado)
     y_text = y_start
     bbox_cod = draw.textbbox((0, 0), cod, font=font_large)
     w_cod = bbox_cod[2] - bbox_cod[0]
-    draw.text(((out_w - w_cod) // 2, y_text), cod, fill=(0, 0, 0), font=font_large)
+    draw.text(((out_w - w_cod) // 2, y_text), cod, fill=(0, 0, 0), font=font_large, stroke_width=stroke_w_large, stroke_fill=(255, 255, 255))
 
     # Dirección
     y_text += line_spacing
@@ -287,32 +308,34 @@ def render_imagen_ubicacion(datos: dict, formato: str, page) -> Image.Image:
     w_dir = bbox_dir[2] - bbox_dir[0]
     # Si es muy ancha, ajustar posición
     if w_dir > out_w * 0.8:
-        draw.text((out_w * 0.1, y_text), dir_str, fill=(0, 0, 0), font=font_medium)
+        draw.text((out_w * 0.1, y_text), dir_str, fill=(0, 0, 0), font=font_medium, stroke_width=stroke_w_medium, stroke_fill=(255, 255, 255))
     else:
-        draw.text(((out_w - w_dir) // 2, y_text), dir_str, fill=(0, 0, 0), font=font_medium)
+        draw.text(((out_w - w_dir) // 2, y_text), dir_str, fill=(0, 0, 0), font=font_medium, stroke_width=stroke_w_medium, stroke_fill=(255, 255, 255))
 
     # Localidad
     y_text += line_spacing * 0.7
     bbox_loc = draw.textbbox((0, 0), loc, font=font_medium)
     w_loc = bbox_loc[2] - bbox_loc[0]
-    draw.text(((out_w - w_loc) // 2, y_text), loc, fill=(0, 0, 0), font=font_medium)
+    draw.text(((out_w - w_loc) // 2, y_text), loc, fill=(0, 0, 0), font=font_medium, stroke_width=stroke_w_medium, stroke_fill=(255, 255, 255))
 
     # Distrito
     y_text += line_spacing * 0.7
     bbox_dist = draw.textbbox((0, 0), dist, font=font_medium)
     w_dist = bbox_dist[2] - bbox_dist[0]
-    draw.text(((out_w - w_dist) // 2, y_text), dist, fill=(0, 0, 0), font=font_medium)
+    draw.text(((out_w - w_dist) // 2, y_text), dist, fill=(0, 0, 0), font=font_medium, stroke_width=stroke_w_medium, stroke_fill=(255, 255, 255))
 
     # Pin celeste
-    pin = _get_pin_rgba()
-    if pin is not None:
+    pin_path = os.path.join(assets_dir, "pin.png")
+    if os.path.exists(pin_path):
+        pin = Image.open(pin_path).convert("RGBA")
         # Escalar el pin proporcionalmente
         pin_scale = 0.15 if formato == "vertical" else 0.12
         new_pin_w = int(out_w * pin_scale)
         new_pin_h = int(pin.height * (new_pin_w / pin.width))
         pin = pin.resize((new_pin_w, new_pin_h), Image.Resampling.LANCZOS)
         pin_x = (out_w - new_pin_w) // 2
-        pin_y = map_height // 2 - new_pin_h // 2
+        # Alinear la punta del pin al centro
+        pin_y = (map_height // 2) - int(new_pin_h * 0.90)
         final_img.paste(pin, (pin_x, pin_y), mask=pin)
 
     return final_img
@@ -444,16 +467,37 @@ def handle_preview_ubicacion(payload: dict) -> dict:
         mapa_con_overlay = Image.alpha_composite(mapa, overlay)
         preview_img.paste(mapa_con_overlay.convert('RGB'), (0, 0))
 
+        # Footer imagen
+        assets_dir = resource_path("assets/ubicaciones")
+        footer_img_name = "footer_vertical.png" if formato == "vertical" else "footer_horizontal.png"
+        footer_path = os.path.join(assets_dir, footer_img_name)
+        
         draw = ImageDraw.Draw(preview_img)
-        draw.rectangle([0, preview_h - footer_height, preview_w, preview_h], fill=(0, 0, 0))
+        if os.path.exists(footer_path):
+            footer_img = Image.open(footer_path).convert("RGB")
+            footer_img = footer_img.resize((preview_w, footer_height), Image.Resampling.LANCZOS)
+            preview_img.paste(footer_img, (0, preview_h - footer_height))
+        else:
+            draw.rectangle([0, preview_h - footer_height, preview_w, preview_h], fill=(0, 0, 0))
+        
         draw.rectangle([0, 0, preview_w-1, preview_h-1], outline=(0, 0, 0), width=3)
 
+        # Textos (escalados para vista previa)
         try:
-            font_large = ImageFont.truetype("arial.ttf", 48)
-            font_medium = ImageFont.truetype("arial.ttf", 24)
+            font_large = ImageFont.truetype("arialbd.ttf", 48)
         except Exception:
-            font_large = ImageFont.load_default()
-            font_medium = ImageFont.load_default()
+            try:
+                font_large = ImageFont.truetype("arial.ttf", 48)
+            except Exception:
+                font_large = ImageFont.load_default()
+                
+        try:
+            font_medium = ImageFont.truetype("arialbd.ttf", 24)
+        except Exception:
+            try:
+                font_medium = ImageFont.truetype("arial.ttf", 24)
+            except Exception:
+                font_medium = ImageFont.load_default()
 
         cod = str(datos.get('cod_componente', ''))
         dir_str = str(datos.get('direccion', ''))
@@ -462,38 +506,42 @@ def handle_preview_ubicacion(payload: dict) -> dict:
 
         y_start = 40 if formato == "vertical" else 60
         line_spacing = 60 if formato == "vertical" else 80
+        stroke_w_large = 4
+        stroke_w_medium = 3
 
         y_text = y_start
         bbox_cod = draw.textbbox((0, 0), cod, font=font_large)
         w_cod = bbox_cod[2] - bbox_cod[0]
-        draw.text(((preview_w - w_cod) // 2, y_text), cod, fill=(0, 0, 0), font=font_large)
+        draw.text(((preview_w - w_cod) // 2, y_text), cod, fill=(0, 0, 0), font=font_large, stroke_width=stroke_w_large, stroke_fill=(255, 255, 255))
 
         y_text += line_spacing
         bbox_dir = draw.textbbox((0, 0), dir_str, font=font_medium)
         w_dir = bbox_dir[2] - bbox_dir[0]
         if w_dir > preview_w * 0.8:
-            draw.text((int(preview_w * 0.1), y_text), dir_str, fill=(0, 0, 0), font=font_medium)
+            draw.text((preview_w * 0.1, y_text), dir_str, fill=(0, 0, 0), font=font_medium, stroke_width=stroke_w_medium, stroke_fill=(255, 255, 255))
         else:
-            draw.text(((preview_w - w_dir) // 2, y_text), dir_str, fill=(0, 0, 0), font=font_medium)
+            draw.text(((preview_w - w_dir) // 2, y_text), dir_str, fill=(0, 0, 0), font=font_medium, stroke_width=stroke_w_medium, stroke_fill=(255, 255, 255))
 
-        y_text += int(line_spacing * 0.7)
+        y_text += line_spacing * 0.7
         bbox_loc = draw.textbbox((0, 0), loc, font=font_medium)
         w_loc = bbox_loc[2] - bbox_loc[0]
-        draw.text(((preview_w - w_loc) // 2, y_text), loc, fill=(0, 0, 0), font=font_medium)
+        draw.text(((preview_w - w_loc) // 2, y_text), loc, fill=(0, 0, 0), font=font_medium, stroke_width=stroke_w_medium, stroke_fill=(255, 255, 255))
 
-        y_text += int(line_spacing * 0.7)
+        y_text += line_spacing * 0.7
         bbox_dist = draw.textbbox((0, 0), dist, font=font_medium)
         w_dist = bbox_dist[2] - bbox_dist[0]
-        draw.text(((preview_w - w_dist) // 2, y_text), dist, fill=(0, 0, 0), font=font_medium)
+        draw.text(((preview_w - w_dist) // 2, y_text), dist, fill=(0, 0, 0), font=font_medium, stroke_width=stroke_w_medium, stroke_fill=(255, 255, 255))
 
-        pin = _get_pin_rgba()
-        if pin is not None:
+        # Pin
+        pin_path = os.path.join(assets_dir, "pin.png")
+        if os.path.exists(pin_path):
+            pin = Image.open(pin_path).convert("RGBA")
             pin_scale = 0.10
             new_pin_w = int(preview_w * pin_scale)
             new_pin_h = int(pin.height * (new_pin_w / pin.width))
             pin = pin.resize((new_pin_w, new_pin_h), Image.Resampling.LANCZOS)
             pin_x = (preview_w - new_pin_w) // 2
-            pin_y = map_height // 2 - new_pin_h // 2
+            pin_y = (map_height // 2) - int(new_pin_h * 0.90)
             preview_img.paste(pin, (pin_x, pin_y), mask=pin)
 
         # JPEG encoding does not touch the Playwright page.
