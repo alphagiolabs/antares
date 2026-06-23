@@ -196,6 +196,17 @@ def main() -> None:
     except Exception as exc:
         logger.exception("load_plugins_from_dir failed during startup: %s", exc)
 
+    # Pre-warm the persistent Playwright browser so the first ubicaciones preview
+    # call does not pay the ~3s browser launch cost. Non-fatal: the lazy-init
+    # path in _get_preview_page() remains as fallback if this fails.
+    try:
+        from backend.handlers.ubicaciones import warmup_preview_browser
+
+        warmup_preview_browser()
+        logger.info("Ubicaciones preview browser pre-warmed")
+    except Exception as exc:
+        logger.warning("Could not pre-warm ubicaciones browser: %s", exc)
+
     scheduler = get_scheduler()
 
     # Track consecutive errors to avoid spamming logs on persistent issues
