@@ -2,6 +2,7 @@ import base64
 import contextlib
 import logging
 import os
+import threading
 from typing import Any
 
 import pandas as pd
@@ -13,54 +14,97 @@ from backend.utils.paths import resource_path
 
 logger = logging.getLogger(__name__)
 
+# ── Pin image cache ──────────────────────────────────────────────────────────
+# pin.png is a static asset; cache the decoded RGBA image to avoid re-reading
+# and re-decoding on every Excel row during batch export.
+_pin_cache: Image.Image | None = None
+
+
+def _get_pin_rgba() -> Image.Image | None:
+    """Return the cached pin.png as RGBA, loading it once on first access."""
+    global _pin_cache
+    if _pin_cache is None:
+        pin_path = os.path.join(resource_path("assets/ubicaciones"), "pin.png")
+        if os.path.exists(pin_path):
+            _pin_cache = Image.open(pin_path).convert("RGBA")
+    return _pin_cache
+
+
 # ── Persistent preview browser ──────────────────────────────────────────────
 # Keeps a single Playwright browser+page alive across preview calls so we
 # don't pay the ~3s browser launch cost on every row navigation.
+#
+# IMPORTANT: The persistent Playwright sync_api Page is NOT safe to use from
+# multiple threads concurrently.  The light scheduler lane
+# (ThreadPoolExecutor with light_workers=4) can dispatch several
+# preview_ubicacion calls at the same time when the user rapidly toggles
+# format or navigates rows.  Without serialization this crashes with:
+#   "It looks like you are using Playwright Sync API inside the asyncio loop"
+# and leaves the backend in an unrecoverable state.
+#
+# ``_preview_lock`` serializes ALL access to the shared page.  It is an
+# ``RLock`` (reentrant) because the call chain nests acquisitions:
+# ``handle_preview_ubicacion`` holds the lock while it calls
+# ``_get_preview_page`` and ``capture_google_maps_fast``, which themselves
+# acquire the same lock.
 _preview_browser = None
 _preview_page = None
 _preview_pw = None
+_preview_lock = threading.RLock()
+
 
 def _get_preview_page():
-    """Returns a persistent page for fast previews. Initializes on first call."""
+    """Returns a persistent page for fast previews. Initializes on first call.
+
+    Thread-safe: the lock serializes the (check + init) pair so two threads
+    never launch two browsers simultaneously.
+    """
     global _preview_browser, _preview_page, _preview_pw
-    if _preview_page and _preview_browser and _preview_browser.is_connected():
+    with _preview_lock:
+        if _preview_page and _preview_browser and _preview_browser.is_connected():
+            return _preview_page
+        # Cleanup stale references
+        if _preview_browser:
+            with contextlib.suppress(Exception):
+                _preview_browser.close()
+        if _preview_pw:
+            with contextlib.suppress(Exception):
+                _preview_pw.stop()
+        _preview_pw = sync_playwright().start()
+        _preview_browser = _preview_pw.chromium.launch(headless=True)
+        context = _preview_browser.new_context(
+            viewport={"width": 800, "height": 800},
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        )
+        _preview_page = context.new_page()
+        # Accept cookies once
+        with contextlib.suppress(Exception):
+            _preview_page.goto("https://www.google.com/maps", wait_until="domcontentloaded", timeout=8000)
+            _preview_page.wait_for_timeout(1500)
+            accept = _preview_page.locator('button:has-text("Accept all"), button:has-text("Aceptar todo")')
+            if accept.count() > 0:
+                accept.first.click()
+                _preview_page.wait_for_timeout(500)
         return _preview_page
-    # Cleanup stale references
-    if _preview_browser:
-        with contextlib.suppress(Exception):
-            _preview_browser.close()
-    if _preview_pw:
-        with contextlib.suppress(Exception):
-            _preview_pw.stop()
-    _preview_pw = sync_playwright().start()
-    _preview_browser = _preview_pw.chromium.launch(headless=True)
-    context = _preview_browser.new_context(
-        viewport={"width": 800, "height": 800},
-        user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-    )
-    _preview_page = context.new_page()
-    # Accept cookies once
-    with contextlib.suppress(Exception):
-        _preview_page.goto("https://www.google.com/maps", wait_until="domcontentloaded", timeout=8000)
-        _preview_page.wait_for_timeout(1500)
-        accept = _preview_page.locator('button:has-text("Accept all"), button:has-text("Aceptar todo")')
-        if accept.count() > 0:
-            accept.first.click()
-            _preview_page.wait_for_timeout(500)
-    return _preview_page
+
 
 def _cleanup_preview_browser():
-    """Closes the persistent preview browser. Call on app shutdown."""
+    """Closes the persistent preview browser. Call on app shutdown.
+
+    Thread-safe: acquires the lock so we never close a page that another
+    thread is actively using.
+    """
     global _preview_browser, _preview_page, _preview_pw
-    if _preview_browser:
-        with contextlib.suppress(Exception):
-            _preview_browser.close()
-    if _preview_pw:
-        with contextlib.suppress(Exception):
-            _preview_pw.stop()
-    _preview_browser = None
-    _preview_page = None
-    _preview_pw = None
+    with _preview_lock:
+        if _preview_browser:
+            with contextlib.suppress(Exception):
+                _preview_browser.close()
+        if _preview_pw:
+            with contextlib.suppress(Exception):
+                _preview_pw.stop()
+        _preview_browser = None
+        _preview_page = None
+        _preview_pw = None
 
 
 def warmup_preview_browser() -> None:
@@ -77,27 +121,34 @@ def warmup_preview_browser() -> None:
 
 
 def capture_google_maps_fast(page, lat: float, lon: float, width: int, height: int, zoom: int = 18):
-    """Captura un mapa de Google Maps con waits optimizados para preview rapido."""
+    """Captura un mapa de Google Maps con waits optimizados para preview rapido.
+
+    Thread-safe: the lock serializes all page operations (goto,
+    set_viewport_size, wait_for_timeout, evaluate, screenshot) so concurrent
+    light-scheduler threads never touch the same Playwright sync_api Page at
+    the same time.
+    """
     url = f"https://www.google.com/maps/@{lat},{lon},{zoom}z"
-    page.set_viewport_size({"width": width, "height": height})
-    try:
-        page.goto(url, wait_until="domcontentloaded", timeout=10000)
-    except PlaywrightTimeoutError:
-        logger.warning(f"Timeout al cargar el mapa para {lat},{lon}, procediendo con lo que cargo.")
-    # Espera minima para que el mapa renderice
-    # El browser pre-warmed ya tiene Google Maps cacheado y renderiza mas rapido.
-    page.wait_for_timeout(800)
-    try:
-        page.evaluate("""
-            () => {
-                const sels = ['#omnibox-container','#vasbox','#titlecard','.app-viewcard-strip','.scene-footer-container','#watermark','.watermark','.gmnoprint','div[role="menubar"]','div[role="button"]'];
-                sels.forEach(s => document.querySelectorAll(s).forEach(el => { if(el) el.style.display='none'; }));
-            }
-        """)
-        page.wait_for_timeout(200)
-    except Exception:
-        pass
-    return page.screenshot(type="png")
+    with _preview_lock:
+        page.set_viewport_size({"width": width, "height": height})
+        try:
+            page.goto(url, wait_until="domcontentloaded", timeout=10000)
+        except PlaywrightTimeoutError:
+            logger.warning(f"Timeout al cargar el mapa para {lat},{lon}, procediendo con lo que cargo.")
+        # Espera minima para que el mapa renderice
+        # El browser pre-warmed ya tiene Google Maps cacheado y renderiza mas rapido.
+        page.wait_for_timeout(800)
+        try:
+            page.evaluate("""
+                () => {
+                    const sels = ['#omnibox-container','#vasbox','#titlecard','.app-viewcard-strip','.scene-footer-container','#watermark','.watermark','.gmnoprint','div[role="menubar"]','div[role="button"]'];
+                    sels.forEach(s => document.querySelectorAll(s).forEach(el => { if(el) el.style.display='none'; }));
+                }
+            """)
+            page.wait_for_timeout(200)
+        except Exception:
+            pass
+        return page.screenshot(type="png")
 
 def capture_google_maps(page, lat: float, lon: float, width: int, height: int, zoom: int = 18):
     """
@@ -224,10 +275,8 @@ def render_imagen_ubicacion(datos: dict, formato: str, page) -> Image.Image:
     draw.text(((out_w - w_dist) // 2, y_text), dist, fill=(0, 0, 0), font=font_medium)
 
     # Pin celeste
-    assets_dir = resource_path("assets/ubicaciones")
-    pin_path = os.path.join(assets_dir, "pin.png")
-    if os.path.exists(pin_path):
-        pin = Image.open(pin_path).convert("RGBA")
+    pin = _get_pin_rgba()
+    if pin is not None:
         # Escalar el pin proporcionalmente
         pin_scale = 0.15 if formato == "vertical" else 0.12
         new_pin_w = int(out_w * pin_scale)
@@ -336,81 +385,88 @@ def handle_preview_ubicacion(payload: dict) -> dict:
         if pd.isna(datos['lat']) or pd.isna(datos['lon']):
             return {"success": False, "error": "La fila no tiene coordenadas validas."}
 
-        page = _get_preview_page()
         from io import BytesIO
 
-        if formato == "vertical":
-            preview_w, preview_h = 600, 850
-        else:
-            preview_w, preview_h = 850, 600
+        # Serialize all access to the persistent Playwright page.  The RLock
+        # is reentrant so the nested calls to _get_preview_page() and
+        # capture_google_maps_fast() (which also acquire the lock) do not
+        # deadlock.  This prevents the "Sync API inside asyncio loop" crash
+        # when multiple light-scheduler threads call preview_ubicacion
+        # concurrently.
+        with _preview_lock:
+            page = _get_preview_page()
 
-        footer_height = int(preview_h * 0.14) if formato == "vertical" else int(preview_h * 0.105)
-        map_height = preview_h - footer_height
+            if formato == "vertical":
+                preview_w, preview_h = 600, 850
+            else:
+                preview_w, preview_h = 850, 600
 
-        screenshot_bytes = capture_google_maps_fast(page, datos['lat'], datos['lon'],
-                                                    preview_w, map_height, zoom=18)
-        mapa = Image.open(BytesIO(screenshot_bytes)).convert("RGBA")
-        preview_img = Image.new('RGB', (preview_w, preview_h), (246, 246, 246))
-        mapa = mapa.resize((preview_w, map_height), Image.Resampling.LANCZOS)
-        overlay = Image.new('RGBA', (preview_w, map_height), (246, 246, 246, 120))
-        mapa_con_overlay = Image.alpha_composite(mapa, overlay)
-        preview_img.paste(mapa_con_overlay.convert('RGB'), (0, 0))
+            footer_height = int(preview_h * 0.14) if formato == "vertical" else int(preview_h * 0.105)
+            map_height = preview_h - footer_height
 
-        draw = ImageDraw.Draw(preview_img)
-        draw.rectangle([0, preview_h - footer_height, preview_w, preview_h], fill=(0, 0, 0))
-        draw.rectangle([0, 0, preview_w-1, preview_h-1], outline=(0, 0, 0), width=3)
+            screenshot_bytes = capture_google_maps_fast(page, datos['lat'], datos['lon'],
+                                                        preview_w, map_height, zoom=18)
+            mapa = Image.open(BytesIO(screenshot_bytes)).convert("RGBA")
+            preview_img = Image.new('RGB', (preview_w, preview_h), (246, 246, 246))
+            mapa = mapa.resize((preview_w, map_height), Image.Resampling.LANCZOS)
+            overlay = Image.new('RGBA', (preview_w, map_height), (246, 246, 246, 120))
+            mapa_con_overlay = Image.alpha_composite(mapa, overlay)
+            preview_img.paste(mapa_con_overlay.convert('RGB'), (0, 0))
 
-        try:
-            font_large = ImageFont.truetype("arial.ttf", 48)
-            font_medium = ImageFont.truetype("arial.ttf", 24)
-        except Exception:
-            font_large = ImageFont.load_default()
-            font_medium = ImageFont.load_default()
+            draw = ImageDraw.Draw(preview_img)
+            draw.rectangle([0, preview_h - footer_height, preview_w, preview_h], fill=(0, 0, 0))
+            draw.rectangle([0, 0, preview_w-1, preview_h-1], outline=(0, 0, 0), width=3)
 
-        cod = str(datos.get('cod_componente', ''))
-        dir_str = str(datos.get('direccion', ''))
-        loc = str(datos.get('localidad', ''))
-        dist = str(datos.get('distrito', ''))
+            try:
+                font_large = ImageFont.truetype("arial.ttf", 48)
+                font_medium = ImageFont.truetype("arial.ttf", 24)
+            except Exception:
+                font_large = ImageFont.load_default()
+                font_medium = ImageFont.load_default()
 
-        y_start = 40 if formato == "vertical" else 60
-        line_spacing = 60 if formato == "vertical" else 80
+            cod = str(datos.get('cod_componente', ''))
+            dir_str = str(datos.get('direccion', ''))
+            loc = str(datos.get('localidad', ''))
+            dist = str(datos.get('distrito', ''))
 
-        y_text = y_start
-        bbox_cod = draw.textbbox((0, 0), cod, font=font_large)
-        w_cod = bbox_cod[2] - bbox_cod[0]
-        draw.text(((preview_w - w_cod) // 2, y_text), cod, fill=(0, 0, 0), font=font_large)
+            y_start = 40 if formato == "vertical" else 60
+            line_spacing = 60 if formato == "vertical" else 80
 
-        y_text += line_spacing
-        bbox_dir = draw.textbbox((0, 0), dir_str, font=font_medium)
-        w_dir = bbox_dir[2] - bbox_dir[0]
-        if w_dir > preview_w * 0.8:
-            draw.text((int(preview_w * 0.1), y_text), dir_str, fill=(0, 0, 0), font=font_medium)
-        else:
-            draw.text(((preview_w - w_dir) // 2, y_text), dir_str, fill=(0, 0, 0), font=font_medium)
+            y_text = y_start
+            bbox_cod = draw.textbbox((0, 0), cod, font=font_large)
+            w_cod = bbox_cod[2] - bbox_cod[0]
+            draw.text(((preview_w - w_cod) // 2, y_text), cod, fill=(0, 0, 0), font=font_large)
 
-        y_text += int(line_spacing * 0.7)
-        bbox_loc = draw.textbbox((0, 0), loc, font=font_medium)
-        w_loc = bbox_loc[2] - bbox_loc[0]
-        draw.text(((preview_w - w_loc) // 2, y_text), loc, fill=(0, 0, 0), font=font_medium)
+            y_text += line_spacing
+            bbox_dir = draw.textbbox((0, 0), dir_str, font=font_medium)
+            w_dir = bbox_dir[2] - bbox_dir[0]
+            if w_dir > preview_w * 0.8:
+                draw.text((int(preview_w * 0.1), y_text), dir_str, fill=(0, 0, 0), font=font_medium)
+            else:
+                draw.text(((preview_w - w_dir) // 2, y_text), dir_str, fill=(0, 0, 0), font=font_medium)
 
-        y_text += int(line_spacing * 0.7)
-        bbox_dist = draw.textbbox((0, 0), dist, font=font_medium)
-        w_dist = bbox_dist[2] - bbox_dist[0]
-        draw.text(((preview_w - w_dist) // 2, y_text), dist, fill=(0, 0, 0), font=font_medium)
+            y_text += int(line_spacing * 0.7)
+            bbox_loc = draw.textbbox((0, 0), loc, font=font_medium)
+            w_loc = bbox_loc[2] - bbox_loc[0]
+            draw.text(((preview_w - w_loc) // 2, y_text), loc, fill=(0, 0, 0), font=font_medium)
 
-        assets_dir = resource_path("assets/ubicaciones")
-        pin_path = os.path.join(assets_dir, "pin.png")
-        if os.path.exists(pin_path):
-            pin = Image.open(pin_path).convert("RGBA")
-            pin_scale = 0.10
-            new_pin_w = int(preview_w * pin_scale)
-            new_pin_h = int(pin.height * (new_pin_w / pin.width))
-            pin = pin.resize((new_pin_w, new_pin_h), Image.Resampling.LANCZOS)
-            pin_x = (preview_w - new_pin_w) // 2
-            pin_y = map_height // 2 - new_pin_h // 2
-            preview_img.paste(pin, (pin_x, pin_y), mask=pin)
+            y_text += int(line_spacing * 0.7)
+            bbox_dist = draw.textbbox((0, 0), dist, font=font_medium)
+            w_dist = bbox_dist[2] - bbox_dist[0]
+            draw.text(((preview_w - w_dist) // 2, y_text), dist, fill=(0, 0, 0), font=font_medium)
 
-        # JPEG para transfer mas rapido por IPC (mucho menor que PNG)
+            pin = _get_pin_rgba()
+            if pin is not None:
+                pin_scale = 0.10
+                new_pin_w = int(preview_w * pin_scale)
+                new_pin_h = int(pin.height * (new_pin_w / pin.width))
+                pin = pin.resize((new_pin_w, new_pin_h), Image.Resampling.LANCZOS)
+                pin_x = (preview_w - new_pin_w) // 2
+                pin_y = map_height // 2 - new_pin_h // 2
+                preview_img.paste(pin, (pin_x, pin_y), mask=pin)
+
+        # JPEG encoding does not touch the Playwright page — release the lock
+        # first so other threads can start their capture sooner.
         buf = BytesIO()
         preview_img.save(buf, format="JPEG", quality=85)
         img_b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
