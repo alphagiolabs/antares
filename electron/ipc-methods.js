@@ -24,6 +24,8 @@ const BACKEND_METHODS = [
   'jobs_list', 'jobs_get', 'jobs_cancel', 'jobs_cleanup',
   'theme_get', 'theme_save', 'theme_presets', 'theme_preset', 'theme_reset',
   'templates_list', 'template_get',
+  'generar_ubicaciones',
+  'preview_ubicacion',
 ];
 
 const NATIVE_METHODS = [
@@ -56,6 +58,8 @@ const LONG_RUNNING_METHODS = new Set([
   'panel_aviso_corte_render_pdf',
   'panel_aviso_corte_compute_match',
   'html_to_pdf',
+  'generar_ubicaciones',
+  'preview_ubicacion',
 ]);
 
 const ALLOWED_RENDERER_METHODS = new Set([...BACKEND_METHODS, ...NATIVE_METHODS]);
