@@ -250,6 +250,15 @@ def main() -> None:
     finally:
         scheduler.shutdown(wait=True)
         close_connection()
+        # Clean up the single-thread Playwright executor so the worker thread
+        # does not block process exit.
+        try:
+            from backend.handlers.ubicaciones import _cleanup_preview_browser, _pw_executor
+
+            _cleanup_preview_browser()
+            _pw_executor.shutdown(wait=False)
+        except Exception:
+            pass
         logger.info(t("info.backend_shutdown"))
 
 

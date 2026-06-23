@@ -25,6 +25,7 @@ type PreviewData = {
   distrito: string;
   total_filas: number;
   row_index: number;
+  formato?: string;
 } | null;
 
 export const UbicacionesView: React.FC = () => {
@@ -49,18 +50,23 @@ export const UbicacionesView: React.FC = () => {
     async (rowIndex: number) => {
       if (!excelPath) return;
       const myId = ++fetchIdRef.current;
+      const currentFormato = formato;
       setPreviewLoading(true);
       setPreviewError(null);
       try {
         const resp = await window.electronAPI?.invoke('preview_ubicacion', {
           excelPath,
-          formato,
+          formato: currentFormato,
           rowIndex,
         });
         // Ignore stale responses
         if (myId !== fetchIdRef.current) return;
         const r = resp as { success: boolean; data?: any; error?: string };
         if (r?.success) {
+          // Defensive: if the response carries a formato field and it does
+          // not match the current selection, skip it (stale format toggle).
+          const respFormato = r.data?.formato;
+          if (respFormato && respFormato !== formato) return;
           setPreview(r.data ?? null);
         } else {
           setPreviewError(r?.error || 'Error al generar vista previa');
@@ -84,6 +90,9 @@ export const UbicacionesView: React.FC = () => {
       setPreviewError(null);
       return;
     }
+    // Clear stale preview image on format change so the user does not see
+    // an old-orientation image while the new one loads.
+    setPreview(null);
     fetchPreview(previewRowIndex);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [excelPath, formato]);
