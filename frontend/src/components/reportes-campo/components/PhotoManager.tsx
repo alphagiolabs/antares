@@ -1,17 +1,16 @@
 import React, { useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { Variants } from 'framer-motion';
-import { ChevronDown, Download, ImagePlus, Loader2, Trash2 } from 'lucide-react';
+import { ChevronDown, ImagePlus, Trash2 } from 'lucide-react';
 import type { PhotoFile } from '../types';
 
 interface PhotoManagerProps {
     photos: PhotoFile[];
+    maxPhotos: number;
     onAdd: (files: FileList | null) => void;
     onClear: () => void;
     totalPages: number;
     isDragging: boolean;
-    isExporting: boolean;
-    onExport: () => void;
     onDragOver: (e: React.DragEvent) => void;
     onDragEnter: (e: React.DragEvent) => void;
     onDragLeave: (e: React.DragEvent) => void;
@@ -25,12 +24,11 @@ const collapseVariants: Variants = {
 
 export default function PhotoManager({
     photos,
+    maxPhotos,
     onAdd,
     onClear,
     totalPages,
     isDragging,
-    isExporting,
-    onExport,
     onDragOver,
     onDragEnter,
     onDragLeave,
@@ -38,6 +36,7 @@ export default function PhotoManager({
 }: PhotoManagerProps) {
     const inputRef = useRef<HTMLInputElement>(null);
     const [isOpen, setIsOpen] = useState(true);
+    const isFull = photos.length >= maxPhotos;
 
     return (
         <div className="rcampo-section">
@@ -46,7 +45,7 @@ export default function PhotoManager({
                     Imágenes
                     {photos.length > 0 && (
                         <span style={{ color: '#525252', fontWeight: 500, marginLeft: 4 }}>
-                            ({photos.length})
+                            ({photos.length}/{maxPhotos})
                         </span>
                     )}
                 </span>
@@ -60,16 +59,20 @@ export default function PhotoManager({
                     <motion.div initial="collapsed" animate="open" exit="collapsed" variants={collapseVariants}>
                         <div className="rcampo-section-body">
                             <div
-                                className={`rcampo-dropzone ${isDragging ? 'dragging' : ''}`}
-                                onDragOver={onDragOver}
-                                onDragEnter={onDragEnter}
-                                onDragLeave={onDragLeave}
-                                onDrop={onDrop}
-                                onClick={() => inputRef.current?.click()}
+                                className={`rcampo-dropzone ${isDragging ? 'dragging' : ''} ${isFull ? 'full' : ''}`}
+                                onDragOver={isFull ? undefined : onDragOver}
+                                onDragEnter={isFull ? undefined : onDragEnter}
+                                onDragLeave={isFull ? undefined : onDragLeave}
+                                onDrop={isFull ? undefined : onDrop}
+                                onClick={() => !isFull && inputRef.current?.click()}
                             >
                                 <div className="rcampo-dropzone-icon"><ImagePlus size={16} /></div>
                                 <div className="rcampo-dropzone-text">
-                                    {isDragging ? 'Soltar aquí' : 'Agregar imágenes'}
+                                    {isFull
+                                        ? `Límite alcanzado (${maxPhotos} imágenes)`
+                                        : isDragging
+                                          ? 'Soltar aquí'
+                                          : `Agregar imágenes (máx. ${maxPhotos}, grid dinámico)`}
                                 </div>
                                 <input
                                     ref={inputRef}
@@ -77,6 +80,7 @@ export default function PhotoManager({
                                     accept="image/*"
                                     multiple
                                     className="hidden"
+                                    disabled={isFull}
                                     onChange={(e) => { onAdd(e.target.files); e.target.value = ''; }}
                                 />
                             </div>
@@ -90,26 +94,6 @@ export default function PhotoManager({
                                         <Trash2 size={9} /> Limpiar
                                     </button>
                                 </div>
-                            )}
-
-                            {/* Export Button - integrated inside section */}
-                            <button
-                                className="rcampo-export-btn"
-                                onClick={onExport}
-                                disabled={isExporting || photos.length === 0}
-                                style={{ marginTop: 10 }}
-                            >
-                                {isExporting ? (
-                                    <><Loader2 size={14} className="animate-spin" /> Generando…</>
-                                ) : (
-                                    <><Download size={14} /> Exportar PDF</>
-                                )}
-                            </button>
-
-                            {photos.length > 0 && (
-                                <p className="rcampo-export-meta" style={{ marginTop: 4 }}>
-                                    {totalPages} {totalPages === 1 ? 'hoja' : 'hojas'} &middot; {photos.length} {photos.length === 1 ? 'foto' : 'fotos'}
-                                </p>
                             )}
                         </div>
                     </motion.div>

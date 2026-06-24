@@ -1,9 +1,13 @@
 import React from 'react';
 import type { PhotoFile, ReportTypeConfig } from '../types';
-import { CHUNK_SIZE } from '../constants';
+import {
+    getPhotoGridLayout,
+    photoGridCellWidth,
+    type PhotoGridCell,
+    type PhotoImageSizing,
+} from '../utils/photoGridLayout';
 
-interface SheetPreviewProps {
-    config: ReportTypeConfig;
+interface SheetPreviewProps {    config: ReportTypeConfig;
     header: Record<string, string>;
     logoLeft: string | null;
     logoRight: string | null;
@@ -30,8 +34,74 @@ const cellLabelStyle: React.CSSProperties = {
     whiteSpace: 'nowrap',
 };
 
-export default function SheetPreview({
-    config,
+const GRID_GAP = '2mm';
+
+const photoCellStyle: React.CSSProperties = {
+    background: '#ffffff',
+    border: '1px solid #ddd',
+    height: '100%',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+    minWidth: 0,
+    minHeight: 0,
+    boxSizing: 'border-box',
+};
+
+function PhotoGridCell({
+    photo,
+    labelIndex,
+    width,
+    imageSizing,
+}: {
+    photo: PhotoFile | null;
+    labelIndex: number;
+    width?: string;
+    imageSizing: PhotoImageSizing;
+}) {
+    const preserveAspect = imageSizing === 'aspectPreserve';
+    const cellStyle: React.CSSProperties = {
+        ...photoCellStyle,
+        width: width ?? '100%',
+        flexShrink: width ? 0 : undefined,
+    };
+
+    return (
+        <div style={cellStyle}>
+            {photo ? (
+                <img
+                    src={photo.previewUrl}
+                    alt={`Foto ${labelIndex + 1}`}
+                    style={{
+                        width: '100%',
+                        height: '100%',
+                        objectFit: preserveAspect ? 'contain' : 'fill',
+                        objectPosition: 'center',
+                        display: 'block',
+                    }}
+                />
+            ) : (
+                <span
+                    style={{
+                        width: '100%',
+                        height: '100%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: '#bbb',
+                        fontSize: '10px',
+                        fontStyle: 'italic',
+                    }}
+                >
+                    Sin imagen
+                </span>
+            )}
+        </div>
+    );
+}
+
+export default function SheetPreview({    config,
     header,
     logoLeft,
     logoRight,
@@ -39,18 +109,15 @@ export default function SheetPreview({
     pageNum,
     totalPages,
 }: SheetPreviewProps) {
-    const validCount = images.length;
-    const itemsPerPage = config.photosPerPage || CHUNK_SIZE;
-    const slots =
-        validCount === 3 && itemsPerPage === 4
-            ? images
-            : Array.from({ length: itemsPerPage }, (_, i) => images[i] ?? null);
-
-    const cols = config.gridColumns || 2;
-    const rows = config.gridRows || 2;
+    const gridLayout = getPhotoGridLayout(images.length);
+    const cellWidth = photoGridCellWidth(gridLayout.columns);
 
     const pageLabelWord = config.pageLabelFormat === 'pagina' ? 'Página' : 'Hoja';
 
+    const resolveCell = (cell: PhotoGridCell): PhotoFile | null => {
+        if (cell === null) return null;
+        return images[cell] ?? null;
+    };
     return (
         <div
             className="preview-paper-scope bg-white text-black"
@@ -223,10 +290,9 @@ export default function SheetPreview({
                 <div
                     style={{
                         flex: 1,
-                        display: 'grid',
-                        gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
-                        gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))`,
-                        gap: '2mm',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: GRID_GAP,
                         width: '100%',
                         height: '100%',
                         border: '1px solid #0066cc',
@@ -236,55 +302,39 @@ export default function SheetPreview({
                         boxSizing: 'border-box',
                     }}
                 >
-                    {slots.map((photo, idx) => (
-                        <div
-                            key={idx}
-                            style={{
-                                background: '#ffffff',
-                                border: '1px solid #ddd',
-                                height: '100%',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                overflow: 'hidden',
-                                minWidth: 0,
+                    {gridLayout.rows.map((row, rowIdx) => {
+                        const isFullRow = row.length >= gridLayout.columns;
+                        const rowStyle: React.CSSProperties = isFullRow
+                            ? {
+                                flex: 1,
+                                display: 'grid',
+                                gridTemplateColumns: `repeat(${gridLayout.columns}, minmax(0, 1fr))`,
+                                gap: GRID_GAP,
                                 minHeight: 0,
-                                boxSizing: 'border-box',
-                                ...(validCount === 3 && idx === 2 && itemsPerPage === 4
-                                    ? { gridColumn: 'span 2', width: 'calc(50% - 1mm)', justifySelf: 'center' }
-                                    : { width: '100%' }),
-                            }}
-                        >
-                            {photo ? (
-                                <img
-                                    src={photo.previewUrl}
-                                    alt={`Foto ${idx + 1}`}
-                                    style={{
-                                        width: '100%',
-                                        height: '100%',
-                                        objectFit: 'fill',
-                                        objectPosition: 'center',
-                                        display: 'block',
-                                    }}
-                                />
-                            ) : (
-                                <span
-                                    style={{
-                                        width: '100%',
-                                        height: '100%',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        color: '#bbb',
-                                        fontSize: '10px',
-                                        fontStyle: 'italic',
-                                    }}
-                                >
-                                    Sin imagen
-                                </span>
-                            )}
-                        </div>
-                    ))}
+                            }
+                            : {
+                                flex: 1,
+                                display: 'flex',
+                                justifyContent: 'center',
+                                alignItems: 'stretch',
+                                gap: GRID_GAP,
+                                minHeight: 0,
+                            };
+
+                        return (
+                            <div key={rowIdx} style={rowStyle}>
+                                {row.map((cell, cellIdx) => (
+                                    <PhotoGridCell
+                                        key={`${rowIdx}-${cellIdx}`}
+                                        photo={resolveCell(cell)}
+                                        labelIndex={cell ?? cellIdx}
+                                        width={isFullRow ? undefined : cellWidth}
+                                        imageSizing={gridLayout.imageSizing}
+                                    />
+                                ))}
+                            </div>
+                        );
+                    })}
                 </div>
             </div>
         </div>

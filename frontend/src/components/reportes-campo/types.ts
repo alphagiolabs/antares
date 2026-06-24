@@ -43,3 +43,18 @@ export interface ReportTypeConfig {
 }
 
 export type HeaderMap = Record<string, string>;
+
+export interface CampoPanel {
+    id: string;
+    label: string;
+    header: HeaderMap;
+    photos: PhotoFile[];
+    createdAt: number;
+}
+
+export interface CampoPanelListItem {
+    id: string;
+    label: string;
+    photoCount: number;
+    pageCount: number;
+}

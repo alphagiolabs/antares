@@ -10,7 +10,15 @@ function formatDateDisplay(isoDate: string): string {
     return isoDate;
 }
 
-export const CHUNK_SIZE = 4;
+export const CHUNK_SIZE = 6;
+export const GRID_COLUMNS = 3;
+export const GRID_ROWS = 2;
+
+export const PHOTO_GRID_DEFAULTS = {
+    photosPerPage: CHUNK_SIZE,
+    gridColumns: GRID_COLUMNS,
+    gridRows: GRID_ROWS,
+} as const;
 
 export function chunkArray<T>(arr: T[], size: number): T[][] {
     const result: T[][] = [];
@@ -57,6 +65,7 @@ export const REPORT_TYPES: ReportTypeConfig[] = [
             ],
         },
         pageLabelFormat: 'hoja',
+        ...PHOTO_GRID_DEFAULTS,
     },
     {
         id: 'desinfeccion-reservorios',
@@ -83,9 +92,7 @@ export const REPORT_TYPES: ReportTypeConfig[] = [
             [{ label: 'Distrito:', valueKey: 'DISTRITO', colSpan: 3 }],
         ],
         pageLabelFormat: 'hoja',
-        photosPerPage: 6,
-        gridColumns: 3,
-        gridRows: 2,
+        ...PHOTO_GRID_DEFAULTS,
     },
     {
         id: 'maquina-balde',
@@ -123,6 +130,7 @@ export const REPORT_TYPES: ReportTypeConfig[] = [
             ],
         },
         pageLabelFormat: 'pagina',
+        ...PHOTO_GRID_DEFAULTS,
     },
 ];
 
