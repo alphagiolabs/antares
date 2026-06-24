@@ -493,6 +493,32 @@ function buildGeneratedPdfName(selected: FormatInfo, desde: number, hasta: numbe
         : `${selected.id}_${desdeS}-${hastaS}.pdf`;
 }
 
+function formatCanPreview(format: FormatInfo, desde: number, hasta: number): boolean {
+    const total = Math.max(0, hasta - desde + 1);
+    const maxPages = format.max_pages ?? 500;
+    const numMin = format.number_min ?? 1;
+    const numMax = format.number_max ?? 9999999;
+    const isValid = desde >= numMin && hasta >= desde && total <= maxPages && hasta <= numMax;
+    return isValid && (format.strategy === 'legacy_xobject' || format.strategy === 'simple_overlay' || format.has_mapping);
+}
+
+async function fetchPreviewPdf(formatId: string, desde: number, hasta: number) {
+    const previewTotal = hasta - desde + 1;
+    const previewHasta = Math.min(hasta, desde + MAX_PREVIEW_PAGES - 1);
+    const res = await api.formatosGenerate({
+        format_id: formatId,
+        desde,
+        hasta: previewHasta,
+    });
+    if (!res.pdf_base64) throw new Error('No se recibio el contenido de vista previa.');
+    const binary = safeBase64ToBytes(res.pdf_base64);
+    return {
+        blob: new Blob([binary], { type: 'application/pdf' }),
+        previewDesde: desde,
+        previewTotal,
+    };
+}
+
 export default function FormatosView() {
     const { addToast } = useToast();
     const { confirm } = useDialog();
@@ -509,6 +535,7 @@ export default function FormatosView() {
     const [previewDesde, setPreviewDesde] = useState<number>(1);
     const [previewTotal, setPreviewTotal] = useState<number>(0);
     const previewAbort = useRef(false);
+    const previewSkipEffectRef = useRef(false);
 
     const [showUpload, setShowUpload] = useState(false);
     const [mappingMode, setMappingMode] = useState(false);
@@ -550,11 +577,13 @@ export default function FormatosView() {
     /* ── Auto-preview on desde/hasta/format change ── */
     useEffect(() => {
         if (mappingMode) return;
+        if (previewSkipEffectRef.current) {
+            previewSkipEffectRef.current = false;
+            return;
+        }
         if (!selected || !canGenerate) { setPreviewBlob(null); setPreviewLoading(false); return; }
         const capturedDesde = desde;
         const capturedHasta = hasta;
-        const capturedTotal = capturedHasta - capturedDesde + 1;
-        const previewHasta = Math.min(capturedHasta, capturedDesde + MAX_PREVIEW_PAGES - 1);
         previewAbort.current = false;
 
         const t = setTimeout(async () => {
@@ -563,18 +592,11 @@ export default function FormatosView() {
             setPreviewLoading(true);
             setError(null);
             try {
-                const res = await api.formatosGenerate({
-                    format_id: selected.id,
-                    desde: capturedDesde,
-                    hasta: previewHasta,
-                });
+                const preview = await fetchPreviewPdf(selected.id, capturedDesde, capturedHasta);
                 if (previewAbort.current) return;
-                if (!res.pdf_base64) throw new Error('No se recibio el contenido de vista previa.');
-                const binary = safeBase64ToBytes(res.pdf_base64);
-                const blob = new Blob([binary], { type: 'application/pdf' });
-                setPreviewBlob(blob);
-                setPreviewDesde(capturedDesde);
-                setPreviewTotal(capturedTotal);
+                setPreviewBlob(preview.blob);
+                setPreviewDesde(preview.previewDesde);
+                setPreviewTotal(preview.previewTotal);
             } catch (err: any) {
                 const msg = err?.message || String(err);
                 console.warn('Preview error:', msg);
@@ -589,7 +611,7 @@ export default function FormatosView() {
             clearTimeout(t);
             previewAbort.current = true;
         };
-    }, [desde, hasta, selectedId, selected?.has_mapping, selected?.strategy, selected?.id, mappingMode]);
+    }, [desde, hasta, selectedId, selected?.has_mapping, selected?.strategy, selected?.id, mappingMode, canGenerate, numMin]);
 
     /* ── Download handler ── */
     const handleGenerate = async () => {
@@ -660,7 +682,29 @@ export default function FormatosView() {
         if (!selected || !editMapping) return;
         try {
             const res = await api.formatosUpdateMapping(selected.id, editMapping);
-            setFormats(prev => prev.map(f => f.id === selected.id ? res.format : f));
+            const updatedFormat = res.format;
+            setFormats(prev => prev.map(f => f.id === selected.id ? updatedFormat : f));
+
+            if (formatCanPreview(updatedFormat, desde, hasta)) {
+                setPreviewLoading(true);
+                setError(null);
+                try {
+                    const preview = await fetchPreviewPdf(updatedFormat.id, desde, hasta);
+                    previewSkipEffectRef.current = true;
+                    setPreviewBlob(preview.blob);
+                    setPreviewDesde(preview.previewDesde);
+                    setPreviewTotal(preview.previewTotal);
+                } catch (err: any) {
+                    const msg = err?.message || String(err);
+                    console.warn('Preview error after mapping save:', msg);
+                    setError('Error en vista previa: ' + msg);
+                } finally {
+                    setPreviewLoading(false);
+                }
+            } else {
+                previewSkipEffectRef.current = true;
+            }
+
             setMappingMode(false);
             setEditMapping(null);
             setMappingBaseline(null);
@@ -737,8 +781,16 @@ export default function FormatosView() {
                     </div>
                 </div>
 
-                {/* viewer area */}
+                {/* viewer area — keep PdfMultiViewer mounted (hidden) during mapping to avoid remount blink */}
                 <div className="relative flex-1 overflow-hidden">
+                    {previewBlob ? (
+                        <div
+                            className={mappingMode ? 'absolute inset-0 invisible pointer-events-none' : 'h-full w-full'}
+                            aria-hidden={mappingMode}
+                        >
+                            <PdfMultiViewer blob={previewBlob} desde={previewDesde} total={previewTotal} padLen={padLen} zoom={zoom} />
+                        </div>
+                    ) : null}
                     {mappingMode && editMapping && selected ? (
                         <MappingPreviewPanel
                             formatId={selected.id}
@@ -748,11 +800,9 @@ export default function FormatosView() {
                             previewBlob={previewBlob}
                             sampleNumber={desde}
                         />
-                    ) : previewBlob ? (
-                        <PdfMultiViewer blob={previewBlob} desde={previewDesde} total={previewTotal} padLen={padLen} zoom={zoom} />
-                    ) : (
+                    ) : !previewBlob ? (
                         <EmptyPreview loading={previewLoading || loadingFormats} />
-                    )}
+                    ) : null}
                 </div>
             </div>
 

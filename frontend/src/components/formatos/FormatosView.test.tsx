@@ -191,6 +191,104 @@ describe('FormatosView', () => {
     expect(await screen.findByText(/reinicia la aplicación.*npm run dev/i)).toBeInTheDocument();
   });
 
+  it('calls formatos_generate only once when saving mapping (no duplicate auto-preview refetch)', async () => {
+    const electronApi = window.electronAPI!;
+    let generateCallCount = 0;
+    const defaultMapping = {
+      page: 0,
+      x: 500,
+      y: 30,
+      width: 140,
+      height: 20,
+      font_size: 12,
+      font_name: 'Helvetica-Bold',
+      color_r: 0,
+      color_g: 0,
+      color_b: 0,
+      padding: 7,
+      blank_x: null,
+      blank_y: null,
+      blank_width: null,
+      blank_height: null,
+      redraw_top_border: false,
+      redraw_ot_badge: false,
+      blank_mcids: null,
+    };
+
+    vi.spyOn(electronApi, 'invoke').mockImplementation(async (method: string, params?: Record<string, unknown>) => {
+      if (method === 'formatos_list') {
+        return {
+          formats: [
+            {
+              id: 'simple-overlay',
+              nombre: 'Formato prueba',
+              origen: 'builtin',
+              enabled: true,
+              persisted: true,
+              strategy: 'simple_overlay',
+              mapping: null,
+              filename_pattern: '{n}.pdf',
+              max_pages: 500,
+              number_min: 1,
+              number_max: 9999999,
+              has_mapping: true,
+            },
+          ],
+        };
+      }
+      if (method === 'formatos_generate') {
+        generateCallCount += 1;
+        return { pdf_base64: 'JVBERi0=', filename: 'preview.pdf' };
+      }
+      if (method === 'formatos_render_template_page') {
+        return {
+          image_base64: 'aW1n',
+          page_width: 595,
+          page_height: 842,
+          mime_type: 'image/png',
+        };
+      }
+      if (method === 'formatos_update_mapping') {
+        return {
+          format: {
+            id: 'simple-overlay',
+            nombre: 'Formato prueba',
+            origen: 'builtin',
+            enabled: true,
+            persisted: true,
+            strategy: 'visual_overlay',
+            mapping: { ...defaultMapping, ...(params?.mapping as object) },
+            filename_pattern: '{n}.pdf',
+            max_pages: 500,
+            number_min: 1,
+            number_max: 9999999,
+            has_mapping: true,
+          },
+        };
+      }
+      return {};
+    });
+
+    renderFormatosView();
+
+    await waitFor(() => expect(generateCallCount).toBeGreaterThanOrEqual(1), { timeout: 3000 });
+    const countBeforeSave = generateCallCount;
+
+    fireEvent.click(await screen.findByText('Personalizar posición'));
+    await screen.findByText('Mapping Visual');
+
+    fireEvent.click(screen.getByText('Guardar'));
+
+    await waitFor(() => {
+      expect(screen.queryByText('Editando mapping')).not.toBeInTheDocument();
+    });
+
+    await waitFor(() => expect(generateCallCount).toBe(countBeforeSave + 1), { timeout: 3000 });
+
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    expect(generateCallCount).toBe(countBeforeSave + 1);
+  });
+
   it('rejects malformed base64 payloads before decoding', () => {
     expect(() => safeBase64ToBytes('%%%')).toThrow('Datos base64 corruptos');
     expect(() => safeBase64ToBytes('A')).toThrow('Datos base64 corruptos');
