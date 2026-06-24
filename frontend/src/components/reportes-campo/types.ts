@@ -58,3 +58,24 @@ export interface CampoPanelListItem {
     photoCount: number;
     pageCount: number;
 }
+
+// ─── Persistencia (IndexedDB) ──────────────────────────────────────────────
+// Las fotos se guardan como Blob nativo (File extiende Blob); al cargar se
+// reconstruye el File y se regenera el previewUrl con URL.createObjectURL.
+
+export interface StoredPhoto {
+    id: string;
+    name: string;
+    type: string;
+    blob: Blob;
+}
+
+export interface StoredPanel {
+    id: string;
+    reportType: ReportType;
+    label: string;
+    header: HeaderMap;
+    createdAt: number;
+    updatedAt: number;
+    photos: StoredPhoto[];
+}
