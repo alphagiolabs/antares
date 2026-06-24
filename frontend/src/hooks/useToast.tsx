@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 
 export type ToastType = 'success' | 'error' | 'warning' | 'info';
 
@@ -18,18 +18,21 @@ interface ToastContextValue {
 
 const ToastContext = createContext<ToastContextValue | null>(null);
 
-let toastTimeouts: Map<string, ReturnType<typeof setTimeout>> = new Map();
-
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
+  // Per-instance timeout map. A module-level Map would be shared across
+  // providers and across HMR boundaries, so one provider's cleanup could clear
+  // another's timers. useRef keeps the map scoped to this provider instance.
+  const toastTimeouts = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   useEffect(() => {
+    const timeouts = toastTimeouts.current;
     return () => {
       // Clear all pending timeouts on unmount
-      for (const tid of toastTimeouts.values()) {
+      for (const tid of timeouts.values()) {
         clearTimeout(tid);
       }
-      toastTimeouts.clear();
+      timeouts.clear();
     };
   }, []);
 
@@ -40,18 +43,18 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     const duration = toast.duration ?? 5000;
     if (duration > 0) {
       const tid = setTimeout(() => {
-        toastTimeouts.delete(id);
+        toastTimeouts.current.delete(id);
         setToasts((prev) => prev.filter((t) => t.id !== id));
       }, duration);
-      toastTimeouts.set(id, tid);
+      toastTimeouts.current.set(id, tid);
     }
   }, []);
 
   const removeToast = useCallback((id: string) => {
-    const tid = toastTimeouts.get(id);
+    const tid = toastTimeouts.current.get(id);
     if (tid) {
       clearTimeout(tid);
-      toastTimeouts.delete(id);
+      toastTimeouts.current.delete(id);
     }
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);

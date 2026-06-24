@@ -114,6 +114,20 @@ function _notifyRenderer(method, params) {
   }
 }
 
+function _resolveAppVersion() {
+  // In a packaged build npm is not involved, so npm_package_version is absent
+  // and the renderer would otherwise receive version: null. Prefer Electron's
+  // app.getVersion() (available in production) and fall back to the npm env var
+  // for dev runs / tests where Electron is not importable.
+  try {
+    const { app } = require('electron');
+    if (app && typeof app.getVersion === 'function') return app.getVersion();
+  } catch {
+    /* Electron not available (e.g. unit tests run in plain Node) */
+  }
+  return process.env.npm_package_version || null;
+}
+
 function _recordStderr(chunk) {
   const text = chunk.toString();
   // Forward to main-process stderr for CLI visibility
@@ -143,6 +157,14 @@ function _isFileBackedCommand(cmd) {
 
 async function startPythonBackend(isDev, attempt = 1) {
   _isDev = isDev;
+  // If the app is quitting, never (re)spawn — killPython() sets this and it
+  // must stay set. Without this guard, a concurrent manual/auto restart can
+  // reset the flag and spawn a backend that outlives the app (zombie process).
+  if (_isShuttingDown) {
+    console.log('[backend-spawner] Shutdown requested, aborting start.');
+    _startInProgress = false;
+    return;
+  }
   _isShuttingDown = false;
 
   if (attempt === 1) {
@@ -161,7 +183,11 @@ async function startPythonBackend(isDev, attempt = 1) {
   try {
     await _spawn(isDev);
     if (_isShuttingDown) {
+      // A shutdown was requested while the spawn was in flight. The process
+      // already exists — kill it now so it cannot outlive the app.
       console.log('[backend-spawner] Shutdown requested after spawn, aborting.');
+      _forceKillProcess(pythonProcess);
+      pythonProcess = null;
       _startInProgress = false;
       return;
     }
@@ -172,7 +198,7 @@ async function startPythonBackend(isDev, attempt = 1) {
     if (_restartResetTimer) clearTimeout(_restartResetTimer);
     _restartResetTimer = setTimeout(() => { _restartCount = 0; }, RESTART_RESET_MS);
     _startHealthCheck();
-    _notifyRenderer('backend.ready', { version: process.env.npm_package_version || null });
+    _notifyRenderer('backend.ready', { version: _resolveAppVersion() });
   } catch (err) {
     const kind = _classifyStartupError(err.message);
     const stderrTail = getStderrTail();
@@ -497,6 +523,13 @@ async function manualRestart(isDev, { force = false } = {}) {
     return false;
   }
   _manualRestartInProgress = true;
+
+  // If the app is quitting, do not restart — killPython() must win this race.
+  if (_isShuttingDown) {
+    console.warn('[backend-spawner] Manual restart aborted: shutdown in progress.');
+    _manualRestartInProgress = false;
+    return false;
+  }
 
   try {
     // Kill any lingering process (handles Windows zombie processes)

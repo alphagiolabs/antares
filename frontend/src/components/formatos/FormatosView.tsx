@@ -532,15 +532,18 @@ export default function FormatosView() {
         try {
             const res = await api.formatosList();
             setFormats(res.formats ?? []);
-            if (res.formats.length > 0 && !selectedId) {
-                setSelectedId(res.formats[0].id);
+            if (res.formats.length > 0) {
+                // Auto-select the first format only when nothing is selected yet.
+                // Uses a functional update so this callback doesn't depend on
+                // selectedId — otherwise every selection change would re-fetch.
+                setSelectedId(prev => prev || res.formats[0].id);
             }
         } catch (err: any) {
             addToast({ message: 'Error cargando formatos: ' + (err?.message || String(err)), type: 'error' });
         } finally {
             setLoadingFormats(false);
         }
-    }, [addToast, selectedId]);
+    }, [addToast]);
 
     useEffect(() => { fetchFormats(); }, [fetchFormats]);
 

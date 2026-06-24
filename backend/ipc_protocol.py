@@ -56,6 +56,10 @@ def validate_params(params: dict) -> bool:
             for item in value:
                 if not is_safe_user_path(item):
                     return False
+        elif isinstance(value, dict):
+            for item in value.values():
+                if not is_safe_user_path(item):
+                    return False
         elif not is_safe_user_path(value):
             return False
 

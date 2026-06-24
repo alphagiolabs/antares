@@ -24,6 +24,24 @@ def test_path_traversal() -> None:
     assert not validate_params(bad_params), "Should reject path traversal"
 
 
+def test_path_traversal_camelcase_key() -> None:
+    """Regression (B3): camelCase path keys like excelPath must be screened."""
+    from backend.ipc_protocol import validate_params
+    assert not validate_params({"excelPath": "../../etc/passwd"}), "excelPath traversal must be rejected"
+    assert not validate_params({"outputDir": "..\\..\\windows"}), "outputDir traversal must be rejected"
+    assert validate_params({"excelPath": "C:/safe/data.xlsx"}), "safe excelPath must pass"
+    assert validate_params({"outputDir": "C:/safe/out"}), "safe outputDir must pass"
+
+
+def test_path_traversal_dict_value() -> None:
+    """Regression (B4): dict-of-paths (image_paths) must be screened per value."""
+    from backend.ipc_protocol import validate_params
+    assert not validate_params({"image_paths": {"logo": "../../etc/passwd"}}), "dict path traversal must be rejected"
+    assert validate_params({"image_paths": {"logo": "C:/safe/img.png"}}), "safe dict paths must pass"
+    # None entries in a path dict are tolerated (handlers filter them later).
+    assert validate_params({"image_paths": {"logo": None}}), "None dict entries must pass"
+
+
 def test_parse_errors_skip_without_orphan_response(monkeypatch) -> None:
     """A JSON parse error must NOT send an id=null response.
 
