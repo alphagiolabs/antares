@@ -16,6 +16,7 @@ import {
   Check,
 } from 'lucide-react';
 import Button from './ui/Button';
+import { api } from '../api';
 
 type Result = { success: boolean; data?: any; error?: string } | null;
 
@@ -132,7 +133,7 @@ export const UbicacionesView: React.FC = () => {
       }
       setPreviewError(null);
       try {
-        const resp = await window.electronAPI?.invoke('preview_ubicacion', {
+        const resp = await api.previewUbicacion({
           excelPath: path,
           formato: currentFormato,
           rowIndex,
@@ -253,12 +254,12 @@ export const UbicacionesView: React.FC = () => {
         setResult({ success: false, error: 'No se pudo resolver la ruta del archivo Excel.' });
         return;
       }
-      const response = await window.electronAPI.invoke('generar_ubicaciones', {
+      const response = await api.generarUbicaciones({
         excelPath: path,
         outputDir,
         formato,
         consolidado: outputMode === 'consolidado',
-      }) as { success: boolean; data?: any; error?: string };
+      });
       setResult(response);
     } catch (err: any) {
       setResult({ success: false, error: err.message || 'Error desconocido' });

@@ -42,6 +42,7 @@ const LONG_RUNNING_METHODS = new Set([
   'formatos_generate',
   'formatos_render_template_page',
   'sellador_apply',
+  'sellador_inspect_pdf',
   'sellador_render_page',
   'image_optimizer_zip',
   'image_optimizer_save_files',
@@ -51,6 +52,8 @@ const LONG_RUNNING_METHODS = new Set([
   'technical_reports_render_html',
   'panel_aviso_corte_render_pdf',
   'panel_aviso_corte_compute_match',
+  'generar_ubicaciones',
+  'preview_ubicacion',
   'html_to_pdf',
 ]);
 
@@ -451,4 +454,22 @@ export const api = {
     format?: string;
   }) => _invoke<{ pdf_base64: string; filename: string }>('panel_aviso_corte_render_pdf', body),
   panelAvisoCorteTemplate: (body: { path: string }) => _invoke<{ path: string }>('panel_aviso_corte_template', body),
+
+  // ─── Ubicaciones ──────────────────────────────────────────────────────
+  previewUbicacion: (body: {
+    excelPath: string;
+    formato: string;
+    rowIndex: number;
+    recomposeOnly?: boolean;
+    provider?: string;
+    google_maps_key?: string;
+  }) => _invoke<{ success: boolean; data?: unknown; error?: string }>('preview_ubicacion', body),
+  generarUbicaciones: (body: {
+    excelPath: string;
+    outputDir: string;
+    formato: string;
+    consolidado: boolean;
+    provider?: string;
+    google_maps_key?: string;
+  }) => _invoke<{ success: boolean; data?: unknown; error?: string }>('generar_ubicaciones', body),
 };
