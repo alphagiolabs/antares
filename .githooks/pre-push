@@ -1,0 +1,20 @@
+#!/bin/sh
+# Bloquea push directo a main. Usa: npm run push:ship
+
+protected_branch="main"
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+  case "$remote_ref" in
+    refs/heads/"$protected_branch")
+      echo ""
+      echo "✗ Push directo a '$protected_branch' bloqueado."
+      echo "  Usa el pipeline PR-first:"
+      echo "    npm run push:dry-run"
+      echo "    npm run push:ship -- --message \"tipo: descripción\""
+      echo ""
+      exit 1
+      ;;
+  esac
+done
+
+exit 0
