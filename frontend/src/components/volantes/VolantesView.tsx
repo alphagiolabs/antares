@@ -304,9 +304,10 @@ export default function VolantesView() {
 
         <div className="vgen-header-actions">
           <button
-            className="vgen-tutorial-btn"
+            className="tutorial-trigger-btn"
             onClick={() => setIsTutorialOpen(true)}
             title="Ver tutorial de como usar Generar Volantes"
+            type="button"
           >
             <svg
               width="16"
