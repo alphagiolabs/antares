@@ -53,7 +53,6 @@ export default function ReportesCampoApp() {
         addPhotos,
         clearPhotos,
         deletePanel,
-        resetSession,
     } = useCampoPanels(config);
 
     const [logoLeft, setLogoLeft] = useState<LogoData | null>(null);
@@ -80,10 +79,11 @@ export default function ReportesCampoApp() {
 
     const exportablePanelCount = panels.filter((panel) => panel.photos.length > 0).length;
 
+    // Al cambiar de plantilla solo reiniciamos la página; la carga de las hojas
+    // persistentes de cada tipo la hace useCampoPanels internamente.
     useEffect(() => {
-        resetSession();
         setCurrentPage(0);
-    }, [reportType, resetSession]);
+    }, [reportType]);
 
     useEffect(() => {
         if (currentPage >= totalPages) {
