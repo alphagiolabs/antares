@@ -2,6 +2,7 @@
 
 from backend.utils.validators import (
     es_imagen,
+    is_path_like_key,
     is_safe_user_path,
     obtener_codigo_desde_nombre,
     parse_filename_parts,
@@ -88,3 +89,24 @@ class TestSafeUserPath:
     def test_acepta_rutas_normales(self) -> None:
         assert is_safe_user_path("C:/Users/demo/file.pdf")
         assert is_safe_user_path("folder/subfolder/file.pdf")
+
+
+class TestIsPathLikeKey:
+    def test_keys_snake_case(self) -> None:
+        assert is_path_like_key("path")
+        assert is_path_like_key("output_path")
+        assert is_path_like_key("input_dir")
+        assert is_path_like_key("image_paths")
+
+    def test_keys_camel_case(self) -> None:
+        # Regression: camelCase path keys must be screened too (B3).
+        assert is_path_like_key("excelPath")
+        assert is_path_like_key("outputDir")
+        assert is_path_like_key("filePath")
+        assert is_path_like_key("inputDir")
+
+    def test_keys_no_path(self) -> None:
+        assert not is_path_like_key("rowIndex")
+        assert not is_path_like_key("formato")
+        assert not is_path_like_key("locale")
+        assert not is_path_like_key("max_remaining")

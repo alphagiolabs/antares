@@ -1,6 +1,6 @@
 /**
- * Bump version across all project files and optionally commit/tag/push.
- * Usage: node scripts/bump-version.js [patch|minor|major] [--push]
+ * Bump version across all project files and optionally open a release PR.
+ * Usage: node scripts/bump-version.js [patch|minor|major] [--pr]
  */
 
 const fs = require('fs');
@@ -32,7 +32,14 @@ function updateFile(filePath, replacements) {
 
 const args = process.argv.slice(2);
 const type = args.find(a => ['patch', 'minor', 'major'].includes(a)) || 'patch';
-const shouldPush = args.includes('--push');
+const shouldPr = args.includes('--pr');
+
+if (args.includes('--push')) {
+  console.error('\n✗ --push está deprecado. Los cambios van vía PR:');
+  console.error('  npm run push:ship -- --message "release: vX.Y.Z"');
+  console.error('  o: node scripts/bump-version.js patch --pr\n');
+  process.exit(1);
+}
 
 const rootPkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
 const newVersion = bumpVersion(rootPkg.version, type);
@@ -61,21 +68,27 @@ updateFile('pyproject.toml', [
 
 console.log(`\nVersion bumped to ${newVersion}`);
 
-if (shouldPush) {
+if (shouldPr) {
   try {
-    console.log('\nCommitting and tagging...');
-    execSync(`git add -A`, { stdio: 'inherit' });
-    execSync(`git commit -m "release: v${newVersion}"`, { stdio: 'inherit' });
-    execSync(`git tag v${newVersion}`, { stdio: 'inherit' });
-    console.log('Pushing changes and tags...');
-    execSync(`git push && git push --tags`, { stdio: 'inherit' });
-    console.log('\n✓ Successfully pushed changes and tags.');
-    console.log('The GitHub Action will now build and create the release.');
+    const releaseBranch = `release/v${newVersion}`;
+    const currentBranch = execSync('git rev-parse --abbrev-ref HEAD', { encoding: 'utf8' }).trim();
+    let pushArgs = `--ship --message "release: v${newVersion}" --title "release: v${newVersion}"`;
+
+    if (currentBranch === 'main') {
+      execSync(`git checkout -b "${releaseBranch}"`, { stdio: 'inherit' });
+      pushArgs += ` --branch "${releaseBranch}"`;
+    }
+
+    console.log('\nEnviando bump vía PR...');
+    execSync(`node scripts/push-loop.js ${pushArgs}`, { stdio: 'inherit' });
+    console.log('\n✓ Versión bump enviada vía PR.');
+    console.log('  Tras merge a main, ejecuta: npm run release:ship');
   } catch (err) {
-    console.error('\n✗ Failed to execute git commands:', err.message);
+    console.error('\n✗ Failed to open release PR:', err.message);
     process.exit(1);
   }
 } else {
-  console.log('Remember to commit and tag:');
-  console.log(`  git add -A && git commit -m "release: v${newVersion}" && git tag v${newVersion} && git push && git push --tags`);
+  console.log('Recuerda enviar vía PR:');
+  console.log(`  node scripts/bump-version.js ${type} --pr`);
+  console.log('  Tras merge: npm run release:ship');
 }

@@ -71,6 +71,13 @@ def validate_params(*required_params):
                 if isinstance(value, list):
                     for f in value:
                         _validate_path(f)
+                elif isinstance(value, dict):
+                    # Dict-of-paths (e.g. image_paths: {name: path}). Skip None
+                    # entries — handlers filter them before use.
+                    for f in value.values():
+                        if f is None:
+                            continue
+                        _validate_path(f)
                 elif isinstance(value, str):
                     _validate_path(value)
             return fn(params)

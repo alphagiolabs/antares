@@ -305,7 +305,7 @@ export const UbicacionesView: React.FC = () => {
   return (
     <div className="flex h-full overflow-hidden">
       {/* ── Sidebar: Config ── */}
-      <div className="w-[400px] min-w-[360px] flex flex-col border-r border-[var(--border-subtle)] bg-[var(--bg-base)] overflow-hidden">
+      <div className="w-[380px] flex flex-col border-r border-[var(--border-subtle)] bg-[var(--bg-base)] overflow-hidden">
         {/* Title (fixed top) */}
         <div className="shrink-0 flex items-center gap-2.5 px-5 h-12 border-b border-[var(--border-subtle)]">
           <MapPin size={18} className="text-[var(--accent-primary)] shrink-0" />

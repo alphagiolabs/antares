@@ -60,27 +60,14 @@ def copiar_video(
 ) -> Path:
     """Copia un archivo de video sin conversión (solo renombrado).
 
-    Args:
-        ruta_origen: Ruta del video origen.
-        ruta_destino: Ruta de salida.
-
-    Returns:
-        Path del archivo generado.
+    Equivalente a :func:`copiar_archivo`: los videos se copian sin reencoding,
+    preservando metadatos. Mantenido como alias semántico para el handler de
+    conversión, que distingue videos de imágenes en el dispatch.
 
     Raises:
         FileNotFoundError: Si el video origen no existe.
     """
-    ruta_origen = Path(ruta_origen)
-    ruta_destino = Path(ruta_destino)
-
-    if not ruta_origen.exists():
-        msg = f"No se encontró el video: {ruta_origen}"
-        raise FileNotFoundError(msg)
-
-    ruta_destino.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(ruta_origen, ruta_destino)
-
-    return ruta_destino
+    return copiar_archivo(ruta_origen, ruta_destino)
 
 
 def copiar_archivo(

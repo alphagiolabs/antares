@@ -167,7 +167,7 @@ export default function Sidebar({ activeTab, onTabChange }: SidebarProps) {
       className="shrink-0 flex flex-col bg-[var(--bg-base)] border-r border-[var(--border-subtle)] transition-[width] duration-200 ease-out overflow-hidden"
       style={{ width: expanded ? SIDEBAR_WIDTH_EXPANDED : SIDEBAR_WIDTH_COLLAPSED }}
     >
-      <div className="flex items-center gap-1.5 px-2 py-2 shrink-0 min-h-[44px]">
+      <div className="flex h-11 items-center gap-1.5 px-2 shrink-0">
         <button
           type="button"
           data-testid="sidebar-toggle"

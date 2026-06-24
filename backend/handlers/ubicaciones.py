@@ -1,18 +1,17 @@
 import base64
-import contextlib
 import logging
+import math
 import os
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor
-from concurrent.futures import TimeoutError as FutureTimeoutError
+import urllib.error
+import urllib.parse
+import urllib.request
 from io import BytesIO
-from typing import Any
+from typing import Any, cast
 
 import pandas as pd
 from PIL import Image, ImageDraw, ImageFont
-from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
-from playwright.sync_api import sync_playwright
 
 from backend.utils.paths import resource_path
 
@@ -58,126 +57,38 @@ _BG_RGB = (246, 246, 246)
 
 # ── Asset caches (fonts, footers, excel) ─────────────────────────────────────
 _font_cache: dict[tuple[str, int], ImageFont.FreeTypeFont | ImageFont.ImageFont] = {}
-_footer_cache: dict[tuple[str, int, int], Image.Image | None] = {}
+_footer_cache: dict[tuple[int, int, int], Image.Image | None] = {}
 _excel_cache: dict[str, tuple[float, pd.DataFrame, tuple[Any, ...]]] = {}
 _map_screenshot_cache: dict[tuple[Any, ...], bytes] = {}
-_preview_composed_cache: dict[tuple[tuple[str, float], int, str], dict[str, Any]] = {}
+_preview_composed_cache: dict[tuple[int, int, tuple[str, float], int, str], dict[str, Any]] = {}
 _preview_excel_ctx: tuple[str, float] | None = None
+# Guarda las caches mutadas desde el thread daemon de prefetch (B1): sin lock,
+# _trim_cache + __setitem__ concurrentes pueden lanzar RuntimeError o corromper
+# el orden LRU.
+_cache_lock = threading.Lock()
 _MAX_MAP_CACHE = 40
 _MAX_COMPOSED_CACHE = 80
 _COORD_PRECISION = 5
-_MAP_CAPTURE_VERSION = 4  # incrementar al cambiar heurística de captura/caché
+_MAP_CAPTURE_VERSION = 5  # incrementar al cambiar heurística de captura/caché
 _FOOTER_LAYOUT_VERSION = 2  # incrementar al cambiar footer_h o escalado de logo
-_MAPS_USER_AGENT = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-)
-_PREVIEW_BROWSER_ARGS = [
-    "--disable-dev-shm-usage",
-    "--disable-background-networking",
-    "--disable-extensions",
-    "--disable-sync",
-    "--disable-translate",
-    "--no-first-run",
-    "--mute-audio",
-]
-_BLOCKED_PREVIEW_URL_PARTS = (
-    "google-analytics.com",
-    "googletagmanager.com",
-    "doubleclick.net",
-    "play.google.com/log",
-)
-_last_capture_viewport: tuple[int, int] | None = None
-_preview_routes_installed = False
 
-_MAP_TILES_READY_SCRIPT = """
-() => {
-    const c = document.querySelector('canvas');
-    if (!c || c.width < 100) return false;
-    const ctx = c.getContext('2d');
-    if (!ctx) return false;
-    const w = c.width;
-    const h = c.height;
-    let dark = 0;
-    let chroma = 0;
-    let lightGray = 0;
-    const pts = 12;
-    for (let i = 0; i < pts; i++) {
-        const x = Math.floor(w * (0.12 + 0.76 * ((i % 4) / 3)));
-        const y = Math.floor(h * (0.12 + 0.76 * (Math.floor(i / 4) / 2)));
-        const p = ctx.getImageData(x, y, 1, 1).data;
-        const r = p[0], g = p[1], b = p[2];
-        const lum = r + g + b;
-        const spread = Math.max(r, g, b) - Math.min(r, g, b);
-        if (lum < 250) dark++;
-        if (spread > 18 && lum > 180 && lum < 650) chroma++;
-        if (spread < 12 && lum > 620 && lum < 760) lightGray++;
-    }
-    if (lightGray >= pts * 0.55) return false;
-    return dark >= 1 && chroma >= 2;
-}
-"""
-
-_MAPS_UI_HIDE_SCRIPT = """
-    () => {
-        const style = document.createElement('style');
-        style.textContent = `
-            #omnibox-container, #vasbox, #titlecard, .app-viewcard-strip,
-            .scene-footer-container, #watermark, .watermark, .gmnoprint, .gm-style-cc,
-            .gmnoscreen, .gm-style-moc, .maps-sprite-background, .maps-sprite-pane,
-            div[role="menubar"], div[role="button"], div[role="search"],
-            button, #gb, .app-vertical-widget-holder, .app-horizontal-widget-holder,
-            .widget-settings-button-container, .widget-pane,
-            div[data-tooltip], div[aria-label="Capas"], div[aria-label="Acceder"],
-            a[aria-label="Acceder"],
-            .Owrmqf, .F63Kk, .TorxFf, .PlF8V, .yHc72, .obhoOb, .bqcX3e, .EtdG7d
-            { display: none !important; visibility: hidden !important; opacity: 0 !important; pointer-events: none !important; }
-        `;
-        document.head.appendChild(style);
-
-        const elementsToHide = [
-            '#omnibox-container','#vasbox','#titlecard','.app-viewcard-strip',
-            '.scene-footer-container','#watermark','.watermark','.gmnoprint','.gm-style-cc',
-            'div[role="menubar"]','div[role="button"]','#gb','button'
-        ];
-        elementsToHide.forEach(selector => {
-            document.querySelectorAll(selector).forEach(el => { if (el) el.style.display = 'none'; });
-        });
-
-        document.querySelectorAll('div').forEach(el => {
-            const s = window.getComputedStyle(el);
-            if (s.position === 'absolute' || s.position === 'fixed') {
-                const z = parseInt(s.zIndex);
-                if (z > 10) {
-                    const rect = el.getBoundingClientRect();
-                    if (rect.width > 0 && rect.width < window.innerWidth - 50) {
-                        el.style.setProperty('display', 'none', 'important');
-                        el.style.setProperty('visibility', 'hidden', 'important');
-                        el.style.setProperty('opacity', '0', 'important');
-                    }
-                }
-            }
-            if (el.innerText && (el.innerText.includes('Buscar en Google') || el.innerText.includes('Capas') || el.innerText.includes('tráfico') || el.innerText.includes('Acceder') || el.innerText.trim() === 'Google Maps' || el.innerText.includes('Google Maps'))) {
-                el.style.setProperty('display', 'none', 'important');
-            }
-        });
-    }
-"""
-
-_MAPS_EXPAND_SCRIPT = """
-    () => {
-        const style = document.createElement('style');
-        style.textContent = [
-            '.scene-container, .widget-scene, .widget-scene-canvas,',
-            '.app-view-root, .maps-responsive, .widget-scene-canvas-wrap {',
-            '  left: 0 !important; width: 100% !important;',
-            '  margin: 0 !important; padding: 0 !important;',
-            '}',
-            'canvas { position: absolute !important; left: 0 !important; top: 0 !important; }',
-        ].join(' ');
-        document.head.appendChild(style);
-    }
-"""
+# ── Static map provider (replaces Playwright) ────────────────────────────────
+# Two selectable backends, chosen at processing time:
+#   - "osm":    OpenStreetMap tiles (free, no API key). Default.
+#   - "google": Google Static Maps API (requires ANTARES_GOOGLE_MAPS_KEY).
+# Selection order: per-call payload ("provider") > env ANTARES_MAP_PROVIDER > "osm".
+# The Google key is read from payload ("google_maps_key") > env ANTARES_GOOGLE_MAPS_KEY.
+_MAP_ZOOM = 18
+_MAP_PROVIDER_DEFAULT = "osm"
+# Cap the static-map fetch on its long side so OSM tile counts stay bounded and
+# Google's size limit is respected. The composition upsamples to full A4 with
+# LANCZOS, so the map stays sharp enough under the dimming overlay + pin.
+_MAP_FETCH_MAX_DIM = 1024
+_OSM_TILE_SIZE = 256
+_OSM_TILE_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+_GOOGLE_STATIC_URL = "https://maps.googleapis.com/maps/api/staticmap"
+_HTTP_USER_AGENT = "ANTARES/0.10 (ubicaciones static map; +https://github.com/sechgio/antares)"
+_HTTP_TIMEOUT = 12
 
 
 def _get_font(bold: bool, size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
@@ -203,7 +114,7 @@ def _crop_footer_bar(img: Image.Image) -> Image.Image:
         total = 0.0
         count = 0
         for x in range(0, w, step):
-            total += sum(rgb.getpixel((x, y)))
+            total += sum(cast(tuple[int, ...], rgb.getpixel((x, y))))
             count += 1
         if count and (total / count) < 120:
             last_black = y
@@ -218,7 +129,7 @@ def _measure_footer_band_height(jpg_path: str) -> int:
     black_rows: list[int] = []
     step = max(1, w // 30)
     for y in range(h):
-        total = sum(sum(img.getpixel((x, y))) for x in range(0, w, step))
+        total = sum(sum(cast(tuple[int, ...], img.getpixel((x, y)))) for x in range(0, w, step))
         if (total / (w // step + 1)) < 100:
             black_rows.append(y)
     if not black_rows:
@@ -282,7 +193,7 @@ def _screenshot_has_map_tiles(screenshot_bytes: bytes) -> bool:
     for i in range(samples):
         x = max(0, min(w - 1, (w * (i + 1)) // (samples + 1)))
         y = max(0, min(h - 1, (h * (i + 1)) // (samples + 1)))
-        r, g, b = img.getpixel((x, y))
+        r, g, b = cast(tuple[int, int, int], img.getpixel((x, y)))
         spread = max(r, g, b) - min(r, g, b)
         lum = r + g + b
         if spread < 14 and lum > 620:
@@ -301,13 +212,13 @@ def _is_gutter_pixel(r: int, g: int, b: int) -> bool:
 def _column_is_gutter(img: Image.Image, x: int) -> bool:
     _w, h = img.size
     step = max(1, h // 80)
-    return all(_is_gutter_pixel(*img.getpixel((x, y))) for y in range(0, h, step))
+    return all(_is_gutter_pixel(*cast(tuple[int, int, int], img.getpixel((x, y)))) for y in range(0, h, step))
 
 
 def _row_is_gutter(img: Image.Image, y: int) -> bool:
     w, _h = img.size
     step = max(1, w // 80)
-    return all(_is_gutter_pixel(*img.getpixel((x, y))) for x in range(0, w, step))
+    return all(_is_gutter_pixel(*cast(tuple[int, int, int], img.getpixel((x, y)))) for x in range(0, w, step))
 
 
 def _trim_map_gutters(img: Image.Image) -> Image.Image:
@@ -357,16 +268,139 @@ def _normalize_map_screenshot(screenshot_bytes: bytes, width: int, height: int) 
     return buf.getvalue()
 
 
-def _capture_map_canvas_bytes(page) -> bytes | None:
-    """Captura el canvas de tiles (sin márgenes del viewport)."""
+def _resolve_provider(map_opts: dict[str, Any] | None) -> str:
+    """Per-call payload > env > default. Lets the user choose the backend at processing time."""
+    if map_opts and map_opts.get("provider"):
+        return str(map_opts["provider"]).lower()
+    return os.environ.get("ANTARES_MAP_PROVIDER", _MAP_PROVIDER_DEFAULT).lower()
+
+
+def _resolve_google_key(map_opts: dict[str, Any] | None) -> str | None:
+    if map_opts and map_opts.get("google_maps_key"):
+        return str(map_opts["google_maps_key"])
+    return os.environ.get("ANTARES_GOOGLE_MAPS_KEY") or None
+
+
+def _cap_fetch_size(width: int, height: int) -> tuple[int, int]:
+    """Scale (width, height) down so the long side <= _MAP_FETCH_MAX_DIM, preserving aspect."""
+    longest = max(width, height)
+    if longest <= _MAP_FETCH_MAX_DIM:
+        return max(1, width), max(1, height)
+    scale = _MAP_FETCH_MAX_DIM / longest
+    return max(1, round(width * scale)), max(1, round(height * scale))
+
+
+def _http_get(url: str, headers: dict[str, str], timeout: int = _HTTP_TIMEOUT) -> bytes | None:
+    """HTTP GET returning body bytes, or None on any network/HTTP error."""
     try:
-        locator = page.locator("canvas")
-        if locator.count() == 0:
-            return None
-        return locator.first.screenshot(type="png")
-    except Exception:
-        logger.debug("Fallo captura de canvas de mapa", exc_info=True)
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req, timeout=timeout) as resp:  # trusted map endpoints
+            return cast(bytes, resp.read())
+    except (urllib.error.URLError, OSError, TimeoutError) as exc:
+        logger.debug("HTTP GET failed for %s: %s", url, exc)
         return None
+
+
+def _fallback_map_bytes(width: int, height: int) -> bytes:
+    """Gray placeholder so composition still renders text + pin when the map fetch fails."""
+    img = Image.new("RGB", (max(1, width), max(1, height)), (215, 215, 215))
+    buf = BytesIO()
+    img.save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def _lonlat_to_webmercator_pixel(lon: float, lat: float, zoom: int) -> tuple[float, float]:
+    """Web Mercator pixel (x, y) in the global tile pixel space at ``zoom``."""
+    n = 2 ** zoom
+    x = (lon + 180.0) / 360.0 * n * _OSM_TILE_SIZE
+    lat_rad = math.radians(lat)
+    y = (1.0 - math.asinh(math.tan(lat_rad)) / math.pi) / 2.0 * n * _OSM_TILE_SIZE
+    return x, y
+
+
+def _fetch_osm_tiles_map(lat: float, lon: float, width: int, height: int, zoom: int) -> Image.Image:
+    """Compose OSM raster tiles centered on (lat, lon) into an RGB image of (width, height)."""
+    cx, cy = _lonlat_to_webmercator_pixel(lon, lat, zoom)
+    left = cx - width / 2
+    top = cy - height / 2
+    n = 2 ** zoom
+    tile_x0 = int(left // _OSM_TILE_SIZE)
+    tile_y0 = int(top // _OSM_TILE_SIZE)
+    tile_x1 = int((left + width) // _OSM_TILE_SIZE)
+    tile_y1 = int((top + height) // _OSM_TILE_SIZE)
+    cols = tile_x1 - tile_x0 + 1
+    rows = tile_y1 - tile_y0 + 1
+    canvas = Image.new("RGB", (cols * _OSM_TILE_SIZE, rows * _OSM_TILE_SIZE), (218, 218, 218))
+    headers = {"User-Agent": _HTTP_USER_AGENT}
+    for ty in range(tile_y0, tile_y1 + 1):
+        if ty < 0 or ty >= n:  # out of range near the poles
+            continue
+        for tx in range(tile_x0, tile_x1 + 1):
+            tx_mod = tx % n  # wrap longitude
+            url = _OSM_TILE_URL.format(z=zoom, x=tx_mod, y=ty)
+            tile_bytes = _http_get(url, headers)
+            if not tile_bytes:
+                continue
+            try:
+                tile = Image.open(BytesIO(tile_bytes)).convert("RGB")
+                canvas.paste(tile, ((tx - tile_x0) * _OSM_TILE_SIZE, (ty - tile_y0) * _OSM_TILE_SIZE))
+            except Exception:
+                logger.debug("Tile decode failed for %s", url, exc_info=True)
+    offset_x = round(left - tile_x0 * _OSM_TILE_SIZE)
+    offset_y = round(top - tile_y0 * _OSM_TILE_SIZE)
+    return canvas.crop((offset_x, offset_y, offset_x + width, offset_y + height))
+
+
+def _fetch_google_static_map(lat: float, lon: float, width: int, height: int, zoom: int, key: str) -> Image.Image:
+    """Fetch a Google Static Maps image centered on (lat, lon). Uses scale=2 for detail."""
+    # Google caps a single tile at 640x640; scale=2 yields up to 1280x1280 pixels.
+    req_w = min(width, 640)
+    req_h = min(height, 640)
+    params = (
+        f"?center={lat},{lon}&zoom={zoom}&size={req_w}x{req_h}&scale=2"
+        f"&maptype=roadmap&format=png&key={urllib.parse.quote(key)}"
+    )
+    url = _GOOGLE_STATIC_URL + params
+    data = _http_get(url, {"User-Agent": _HTTP_USER_AGENT})
+    if not data:
+        return Image.new("RGB", (width, height), (215, 215, 215))
+    try:
+        return Image.open(BytesIO(data)).convert("RGB")
+    except Exception:
+        logger.debug("Google Static Maps decode failed", exc_info=True)
+        return Image.new("RGB", (width, height), (215, 215, 215))
+
+
+def fetch_static_map(
+    lat: float,
+    lon: float,
+    width: int,
+    height: int,
+    zoom: int = _MAP_ZOOM,
+    *,
+    provider: str = _MAP_PROVIDER_DEFAULT,
+    google_key: str | None = None,
+) -> bytes:
+    """Return a PNG map image (capped fetch size) for (lat, lon) using the chosen provider.
+
+    On any failure, returns a gray placeholder so downstream composition still renders.
+    """
+    fetch_w, fetch_h = _cap_fetch_size(width, height)
+    try:
+        if provider == "google":
+            if not google_key:
+                logger.warning("Google Static Maps seleccionado pero falta ANTARES_GOOGLE_MAPS_KEY; usando fallback.")
+                return _fallback_map_bytes(fetch_w, fetch_h)
+            img = _fetch_google_static_map(lat, lon, fetch_w, fetch_h, zoom, google_key)
+        else:
+            img = _fetch_osm_tiles_map(lat, lon, fetch_w, fetch_h, zoom)
+        img = img.resize((fetch_w, fetch_h), Image.Resampling.LANCZOS) if img.size != (fetch_w, fetch_h) else img
+        buf = BytesIO()
+        img.save(buf, format="PNG")
+        return buf.getvalue()
+    except Exception:
+        logger.exception("fetch_static_map falló para %s,%s; usando placeholder", lat, lon)
+        return _fallback_map_bytes(fetch_w, fetch_h)
 
 
 def _load_excel_data(excel_path: str) -> tuple[pd.DataFrame, tuple[Any, ...]]:
@@ -412,7 +446,8 @@ def _sync_excel_context(excel_path: str) -> tuple[str, float]:
     global _preview_excel_ctx
     ctx = (excel_path, os.path.getmtime(excel_path))
     if _preview_excel_ctx != ctx:
-        _preview_composed_cache.clear()
+        with _cache_lock:
+            _preview_composed_cache.clear()
         _preview_excel_ctx = ctx
     return ctx
 
@@ -422,28 +457,29 @@ def _trim_cache(cache: dict, max_size: int) -> None:
         del cache[next(iter(cache))]
 
 
-def _capture_map_on_pw_thread(lat: float, lon: float, formato: str, *, preview: bool) -> bytes:
-    page = _get_preview_page()
-    return capture_map_for_ubicacion(page, lat, lon, formato, preview=preview)
-
-
-def _get_cached_map_screenshot(lat: float, lon: float, formato: str, *, preview: bool = False) -> bytes:
+def _get_cached_map_screenshot(
+    lat: float,
+    lon: float,
+    formato: str,
+    *,
+    preview: bool = False,
+    map_opts: dict[str, Any] | None = None,
+) -> bytes:
+    """Fetch (or reuse) a static map image for (lat, lon). No browser process needed."""
     key = _map_cache_key(lat, lon, formato, preview=preview)
     cached = _map_screenshot_cache.get(key)
     if cached is not None and _screenshot_has_map_tiles(cached):
         return cached
-    screenshot = _pw_executor.submit(
-        _capture_map_on_pw_thread, lat, lon, formato, preview=preview,
-    ).result()
-    if not _screenshot_has_map_tiles(screenshot):
-        logger.warning("Captura sin tiles; reiniciando browser y reintentando")
-        _pw_executor.submit(_do_cleanup_preview_browser).result()
-        screenshot = _pw_executor.submit(
-            _capture_map_on_pw_thread, lat, lon, formato, preview=preview,
-        ).result()
+    cap_w, cap_h = _map_capture_size(formato, preview=preview)
+    provider = _resolve_provider(map_opts)
+    screenshot = fetch_static_map(
+        lat, lon, cap_w, cap_h, _MAP_ZOOM,
+        provider=provider, google_key=_resolve_google_key(map_opts),
+    )
     if _screenshot_has_map_tiles(screenshot):
-        _map_screenshot_cache[key] = screenshot
-        _trim_cache(_map_screenshot_cache, _MAX_MAP_CACHE)
+        with _cache_lock:
+            _map_screenshot_cache[key] = screenshot
+            _trim_cache(_map_screenshot_cache, _MAX_MAP_CACHE)
     return screenshot
 
 
@@ -486,8 +522,9 @@ def _compose_and_cache_preview(
         total_filas=total_filas,
         formato=formato,
     )
-    _preview_composed_cache[(_FOOTER_LAYOUT_VERSION, _MAP_CAPTURE_VERSION, excel_ctx, row_index, formato)] = data
-    _trim_cache(_preview_composed_cache, _MAX_COMPOSED_CACHE)
+    with _cache_lock:
+        _preview_composed_cache[(_FOOTER_LAYOUT_VERSION, _MAP_CAPTURE_VERSION, excel_ctx, row_index, formato)] = data
+        _trim_cache(_preview_composed_cache, _MAX_COMPOSED_CACHE)
     return data
 
 
@@ -528,226 +565,13 @@ def _get_pin_rgba() -> Image.Image | None:
     return _pin_cache
 
 
-# ── Persistent preview browser ──────────────────────────────────────────────
-# Keeps a single Playwright browser+page alive across preview calls so we
-# don't pay the ~3s browser launch cost on every row navigation.
-#
-# IMPORTANT: Playwright sync_api greenlets are bound to the thread that created
-# them.  The light scheduler lane (ThreadPoolExecutor with light_workers=4)
-# can dispatch preview_ubicacion calls on different worker threads.  If the
-# Page is created on one thread and used on another, Playwright raises:
-#   "Cannot switch to a different thread"
-# and leaves the backend in an unrecoverable state.
-#
-# Solution (Option C — single-thread executor): ``_pw_executor`` is a
-# ThreadPoolExecutor(max_workers=1) that guarantees ALL Playwright operations
-# (browser launch, page creation, navigation, screenshot) run on the SAME
-# thread.  The main thread submits tasks to this executor and waits for the
-# result; Pillow rendering stays on the caller thread (PIL has no thread
-# affinity).
-_preview_browser = None
-_preview_page = None
-_preview_pw = None
-_pw_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="playwright-pw")
+# ── Map source ───────────────────────────────────────────────────────────────
+# The map image is now fetched from a static-map provider (OSM tiles or Google
+# Static Maps) via fetch_static_map() — see the constants block above. This
+# replaced the persistent Playwright/Chromium browser, which was too heavy for
+# the installer and broken in production (no bundled Chromium). No browser
+# process, warmup, or shutdown lifecycle is needed anymore.
 
-
-def _install_preview_routes(context) -> None:
-    """Bloquea analytics/fuentes innecesarias en el browser de preview."""
-    global _preview_routes_installed
-    if _preview_routes_installed:
-        return
-
-    def _route_handler(route) -> None:
-        req = route.request
-        url = req.url
-        if req.resource_type == "font" or any(part in url for part in _BLOCKED_PREVIEW_URL_PARTS):
-            route.abort()
-        else:
-            route.continue_()
-
-    context.route("**/*", _route_handler)
-    _preview_routes_installed = True
-
-
-def _get_preview_page():
-    """Returns a persistent page for fast previews. Initializes on first call.
-
-    Must be called on the ``_pw_executor`` thread so the Playwright sync_api
-    greenlet is always bound to the same thread.
-    """
-    global _preview_browser, _preview_page, _preview_pw, _last_capture_viewport, _preview_routes_installed
-    if _preview_page and _preview_browser and _preview_browser.is_connected():
-        return _preview_page
-    # Cleanup stale references
-    if _preview_browser:
-        with contextlib.suppress(Exception):
-            _preview_browser.close()
-    if _preview_pw:
-        with contextlib.suppress(Exception):
-            _preview_pw.stop()
-    _last_capture_viewport = None
-    _preview_routes_installed = False
-    _preview_pw = sync_playwright().start()
-    _preview_browser = _preview_pw.chromium.launch(headless=True, args=_PREVIEW_BROWSER_ARGS)
-    context = _preview_browser.new_context(
-        viewport={"width": 800, "height": 800},
-        user_agent=_MAPS_USER_AGENT,
-    )
-    _install_preview_routes(context)
-    _preview_page = context.new_page()
-    # Accept cookies once and prime map tile loading
-    with contextlib.suppress(Exception):
-        _preview_page.goto("https://www.google.com/maps", wait_until="domcontentloaded", timeout=6000)
-        _preview_page.wait_for_timeout(600)
-        accept = _preview_page.locator('button:has-text("Accept all"), button:has-text("Aceptar todo")')
-        if accept.count() > 0:
-            accept.first.click()
-            _preview_page.wait_for_timeout(300)
-        _preview_page.goto(
-            "https://www.google.com/maps/@-12.046,-77.042,18z",
-            wait_until="commit",
-            timeout=6000,
-        )
-        _preview_page.wait_for_timeout(400)
-    return _preview_page
-
-
-def _do_cleanup_preview_browser() -> None:
-    """Actual cleanup — must run on the ``_pw_executor`` thread.
-
-    Closes the persistent preview browser and resets all module-level
-    references so the next ``_get_preview_page()`` call re-initializes.
-    """
-    global _preview_browser, _preview_page, _preview_pw, _last_capture_viewport, _preview_routes_installed
-    if _preview_browser:
-        with contextlib.suppress(Exception):
-            _preview_browser.close()
-    if _preview_pw:
-        with contextlib.suppress(Exception):
-            _preview_pw.stop()
-    _preview_browser = None
-    _preview_page = None
-    _preview_pw = None
-    _last_capture_viewport = None
-    _preview_routes_installed = False
-
-
-def _cleanup_preview_browser() -> None:
-    """Closes the persistent preview browser. Call on app shutdown.
-
-    Submits the actual cleanup to ``_pw_executor`` (so it runs on the
-    Playwright thread) with a 5s timeout.  If the executor is stuck (e.g. a
-    Playwright call hung), recreate the executor so the backend can recover.
-    """
-    global _pw_executor
-    try:
-        future = _pw_executor.submit(_do_cleanup_preview_browser)
-        future.result(timeout=5)
-    except FutureTimeoutError:
-        logger.warning("Playwright cleanup timed out, recreating _pw_executor")
-        with contextlib.suppress(Exception):
-            _pw_executor.shutdown(wait=False)
-        _pw_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="playwright-pw")
-    except Exception:
-        logger.exception("Error during Playwright cleanup")
-
-
-def warmup_preview_browser() -> None:
-    """Pre-warm the persistent Playwright browser at app startup.
-
-    Submits ``_get_preview_page()`` to ``_pw_executor`` so the browser is
-    created on the executor thread — the same thread that all future
-    preview calls will use.  This pays the ~3s browser launch cost during
-    backend initialization rather than on the first user preview request.
-    Safe to call multiple times — if the browser is already alive it returns
-    immediately. If this raises, callers should catch and continue; the lazy
-    init path in ``_get_preview_page()`` remains as a fallback.
-    """
-    _pw_executor.submit(_get_preview_page).result()
-    logger.info("Ubicaciones preview browser pre-warmed")
-
-
-def _wait_for_map_ready(page, *, preview: bool = False) -> bool:
-    """Espera a que el canvas del mapa tenga tiles renderizados (preview y export)."""
-    total_ms = 22000 if preview else 16000
-    step_ms = 1500 if preview else 800
-    elapsed = 0
-    while elapsed < total_ms:
-        with contextlib.suppress(PlaywrightTimeoutError):
-            page.wait_for_function(
-                "() => { const c = document.querySelector('canvas'); return c && c.width > 100; }",
-                timeout=4000,
-            )
-        with contextlib.suppress(PlaywrightTimeoutError):
-            page.wait_for_function(_MAP_TILES_READY_SCRIPT, timeout=5000)
-            page.wait_for_timeout(500)
-            return True
-        page.wait_for_timeout(step_ms)
-        elapsed += step_ms + 4000
-    return False
-
-
-def capture_google_maps(
-    page,
-    lat: float,
-    lon: float,
-    width: int,
-    height: int,
-    zoom: int = 18,
-    *,
-    preview: bool = False,
-):
-    """Navega a Google Maps y captura el canvas del mapa sin márgenes laterales."""
-    global _last_capture_viewport
-    url = f"https://www.google.com/maps/@{lat},{lon},{zoom}z"
-    target_viewport = (width, height)
-    if _last_capture_viewport != target_viewport:
-        page.set_viewport_size({"width": width, "height": height})
-        _last_capture_viewport = target_viewport
-
-    nav_timeout = 12000
-    screenshot: bytes | None = None
-    for attempt in range(2):
-        try:
-            page.goto(url, wait_until="commit", timeout=nav_timeout)
-        except PlaywrightTimeoutError:
-            logger.warning(f"Timeout al cargar el mapa para {lat},{lon}, procediendo con lo que cargo.")
-        if preview:
-            with contextlib.suppress(Exception):
-                page.wait_for_load_state("load", timeout=10000)
-        _wait_for_map_ready(page, preview=preview)
-        try:
-            page.evaluate(_MAPS_UI_HIDE_SCRIPT)
-            page.evaluate(_MAPS_EXPAND_SCRIPT)
-            page.wait_for_timeout(400 if preview else 300)
-        except Exception as e:
-            logger.warning(f"Error ocultando UI de Google Maps: {e}")
-        raw = _capture_map_canvas_bytes(page)
-        if raw is None:
-            raw = page.screenshot(type="png")
-        screenshot = _normalize_map_screenshot(raw, width, height)
-        if _screenshot_has_map_tiles(screenshot):
-            return screenshot
-        if attempt == 0:
-            logger.info("Mapa sin tiles detectado, reintentando captura para %s,%s", lat, lon)
-            page.wait_for_timeout(1200)
-    if screenshot is not None:
-        return screenshot
-    raw = _capture_map_canvas_bytes(page) or page.screenshot(type="png")
-    return _normalize_map_screenshot(raw, width, height)
-
-
-def capture_map_for_ubicacion(
-    page,
-    lat: float,
-    lon: float,
-    formato: str,
-    *,
-    preview: bool = False,
-) -> bytes:
-    """Captura el área de mapa para preview o export usando el mismo pipeline."""
-    cap_w, cap_h = _map_capture_size(formato, preview=preview)
-    return capture_google_maps(page, lat, lon, cap_w, cap_h, zoom=18, preview=preview)
 
 def _compose_ubicacion_image(
     datos: dict,
@@ -869,22 +693,37 @@ def _compose_ubicacion_image(
     return final_img
 
 
-def render_ubicacion(datos: dict, formato: str, *, preview: bool = False) -> Image.Image:
+def render_ubicacion(
+    datos: dict,
+    formato: str,
+    *,
+    preview: bool = False,
+    map_opts: dict[str, Any] | None = None,
+) -> Image.Image:
     """Pipeline único: captura mapa + composición WYSIWYG (preview o export)."""
     lat = float(datos["lat"])
     lon = float(datos["lon"])
-    screenshot_bytes = _get_cached_map_screenshot(lat, lon, formato, preview=preview)
+    screenshot_bytes = _get_cached_map_screenshot(lat, lon, formato, preview=preview, map_opts=map_opts)
     return _compose_ubicacion_image(datos, formato, screenshot_bytes, preview=preview)
 
 
-def render_imagen_ubicacion(datos: dict, formato: str) -> Image.Image:
+def render_imagen_ubicacion(
+    datos: dict,
+    formato: str,
+    map_opts: dict[str, Any] | None = None,
+) -> Image.Image:
     """Renderiza la imagen final A4 con mapa, textos, pin y footer."""
-    return render_ubicacion(datos, formato, preview=False)
+    return render_ubicacion(datos, formato, preview=False, map_opts=map_opts)
 
 
-def generar_imagen_ubicacion(datos: dict, output_path: str, formato: str) -> None:
+def generar_imagen_ubicacion(
+    datos: dict,
+    output_path: str,
+    formato: str,
+    map_opts: dict[str, Any] | None = None,
+) -> None:
     """Genera la imagen y la guarda como PDF."""
-    final_img = render_imagen_ubicacion(datos, formato)
+    final_img = render_imagen_ubicacion(datos, formato, map_opts=map_opts)
     final_img.convert("RGB").save(output_path, "PDF", resolution=300.0)
 
 
@@ -939,6 +778,7 @@ def handle_preview_ubicacion(payload: dict) -> dict:
         formato = payload.get("formato", "vertical")
         row_index = payload.get("rowIndex", 0)
         recompose_only = bool(payload.get("recomposeOnly", False))
+        map_opts = {"provider": payload.get("provider"), "google_maps_key": payload.get("google_maps_key")}
 
         if not excel_path:
             return {"success": False, "error": "Falta la ruta del Excel."}
@@ -975,7 +815,7 @@ def handle_preview_ubicacion(payload: dict) -> dict:
                 )
                 return {"success": True, "data": data}
 
-        screenshot_bytes = _get_cached_map_screenshot(lat, lon, formato, preview=True)
+        screenshot_bytes = _get_cached_map_screenshot(lat, lon, formato, preview=True, map_opts=map_opts)
         data = _compose_and_cache_preview(
             excel_ctx, row_index, formato, datos, screenshot_bytes, len(df),
         )
@@ -989,8 +829,6 @@ def handle_preview_ubicacion(payload: dict) -> dict:
         return {"success": True, "data": data}
     except Exception as e:
         logger.exception("Error generando preview de ubicacion")
-        # Si algo fallo, reiniciar el browser persistente
-        _cleanup_preview_browser()
         return {"success": False, "error": str(e)}
 
 def handle_generar_ubicaciones(payload: dict) -> dict:
@@ -999,6 +837,7 @@ def handle_generar_ubicaciones(payload: dict) -> dict:
         output_dir = payload.get("outputDir")
         formato = payload.get("formato", "vertical")
         consolidado = payload.get("consolidado", False)
+        map_opts = {"provider": payload.get("provider"), "google_maps_key": payload.get("google_maps_key")}
 
         if not excel_path or not output_dir:
             return {"success": False, "error": "Faltan rutas de entrada/salida."}
@@ -1024,12 +863,12 @@ def handle_generar_ubicaciones(payload: dict) -> dict:
             t0 = time.perf_counter()
 
             if consolidado:
-                final_img = render_imagen_ubicacion(datos, formato)
+                final_img = render_imagen_ubicacion(datos, formato, map_opts=map_opts)
                 consolidated_images.append(final_img.convert("RGB"))
             else:
                 out_filename = f"{datos['cod_componente']}.pdf".replace("/", "_").replace("\\", "_")
                 out_path = os.path.join(output_dir, out_filename)
-                generar_imagen_ubicacion(datos, out_path, formato)
+                generar_imagen_ubicacion(datos, out_path, formato, map_opts=map_opts)
 
             logger.info(
                 "Ubicacion %s renderizada en %.1fs",

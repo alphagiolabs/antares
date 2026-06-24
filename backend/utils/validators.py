@@ -136,8 +136,17 @@ def is_path_like_key(key: str) -> bool:
     - backend.handlers.common @validate_params decorator (authoritative handler layer)
 
     Keeping this in one place prevents the two layers from drifting.
+
+    Recognises both snake_case (``output_path``) and camelCase (``excelPath``,
+    ``outputDir``) path keys by normalising camelCase to snake_case before
+    applying the suffix heuristic.
     """
     if key in KNOWN_PATH_KEYS:
         return True
     lowered = key.lower()
-    return any(lowered.endswith(suffix) for suffix in PATH_KEY_SUFFIXES)
+    if any(lowered.endswith(suffix) for suffix in PATH_KEY_SUFFIXES):
+        return True
+    # camelCase variants (excelPath, outputDir, filePath) → snake_case, then
+    # re-check the suffix heuristic so camelCase path keys are screened too.
+    snake = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", "_", key).lower()
+    return snake != lowered and any(snake.endswith(suffix) for suffix in PATH_KEY_SUFFIXES)

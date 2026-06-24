@@ -196,16 +196,9 @@ def main() -> None:
     except Exception as exc:
         logger.exception("load_plugins_from_dir failed during startup: %s", exc)
 
-    # Pre-warm the persistent Playwright browser so the first ubicaciones preview
-    # call does not pay the ~3s browser launch cost. Non-fatal: the lazy-init
-    # path in _get_preview_page() remains as fallback if this fails.
-    try:
-        from backend.handlers.ubicaciones import warmup_preview_browser
-
-        warmup_preview_browser()
-        logger.info("Ubicaciones preview browser pre-warmed")
-    except Exception as exc:
-        logger.warning("Could not pre-warm ubicaciones browser: %s", exc)
+    # Note: ubicaciones map previews now use a lightweight static-map HTTP fetch
+    # (OSM tiles / Google Static Maps) instead of a persistent Playwright browser,
+    # so there is no browser to pre-warm at startup.
 
     scheduler = get_scheduler()
 
@@ -250,15 +243,6 @@ def main() -> None:
     finally:
         scheduler.shutdown(wait=True)
         close_connection()
-        # Clean up the single-thread Playwright executor so the worker thread
-        # does not block process exit.
-        try:
-            from backend.handlers.ubicaciones import _cleanup_preview_browser, _pw_executor
-
-            _cleanup_preview_browser()
-            _pw_executor.shutdown(wait=False)
-        except Exception:
-            pass
         logger.info(t("info.backend_shutdown"))
 
 

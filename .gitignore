@@ -69,7 +69,8 @@ skills-lock.json
 opencode.json
 AGENTS.md
 CLAUDE.md
-.githooks/
+.githooks/*
+!.githooks/pre-push
 docs/
 
 # Ruff cache
