@@ -1,7 +1,14 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CHUNK_SIZE, chunkArray, getDefaultHeader } from '../constants';
 import type { CampoPanel, CampoPanelListItem, PhotoFile, ReportTypeConfig } from '../types';
 import { derivePanelLabel } from '../utils/panelLabel';
+import {
+    deleteStoredPanel,
+    loadPanelsByType,
+    panelToStored,
+    savePanel,
+    storedToPanel,
+} from '../utils/storage';
 
 function createPanelId(): string {
     return `panel-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
@@ -21,6 +28,8 @@ export function createEmptyPanel(config: ReportTypeConfig): CampoPanel {
         createdAt: Date.now(),
     };
 }
+
+const SAVE_DEBOUNCE_MS = 400;
 
 export function useCampoPanels(config: ReportTypeConfig) {
     const [panels, setPanels] = useState<CampoPanel[]>(() => [createEmptyPanel(config)]);
@@ -49,6 +58,87 @@ export function useCampoPanels(config: ReportTypeConfig) {
         [panels, selectedPanelId],
     );
 
+    // Refs para evitar closures obsoletas entre renders y cargas async.
+    const panelsRef = useRef(panels);
+    useEffect(() => {
+        panelsRef.current = panels;
+    }, [panels]);
+
+    const reportType = config.id;
+    const loadedTypeRef = useRef<string | null>(null);
+    const saveTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+
+    const cancelPendingSave = useCallback((id: string) => {
+        const timer = saveTimersRef.current.get(id);
+        if (timer) {
+            clearTimeout(timer);
+            saveTimersRef.current.delete(id);
+        }
+    }, []);
+
+    const scheduleSave = useCallback((panel: CampoPanel) => {
+        if (!panel) return;
+        cancelPendingSave(panel.id);
+        const timer = setTimeout(() => {
+            saveTimersRef.current.delete(panel.id);
+            void savePanel(panelToStored(panel, reportType));
+        }, SAVE_DEBOUNCE_MS);
+        saveTimersRef.current.set(panel.id, timer);
+    }, [cancelPendingSave, reportType]);
+
+    // Carga por plantilla: al montar y al cambiar de tipo (config.id).
+    // Reemplaza al resetSession() que antes borraba todo al cambiar de plantilla.
+    useEffect(() => {
+        const type = reportType;
+        const firstRun = loadedTypeRef.current === null;
+
+        // En el primer run, si el usuario ya editó el seed, no lo pisamos.
+        if (firstRun) {
+            loadedTypeRef.current = type;
+        } else if (loadedTypeRef.current === type) {
+            return;
+        } else {
+            loadedTypeRef.current = type;
+        }
+
+        let cancelled = false;
+        void (async () => {
+            const stored = await loadPanelsByType(type);
+            if (cancelled) return;
+
+            if (stored.length === 0) {
+                // Sin hojas guardadas para este tipo:
+                //  - primer montaje: conservar el seed inicial (o trabajo del
+                //    usuario previo a la carga) sin pisarlo.
+                //  - cambio de plantilla: descartar los paneles del tipo anterior
+                //    y crear un seed nuevo.
+                if (firstRun) return;
+                panelsRef.current.forEach((panel) => revokePhotos(panel.photos));
+                const fresh = createEmptyPanel(config);
+                setPanels([fresh]);
+                setSelectedPanelId(fresh.id);
+                return;
+            }
+
+            const restored = stored.map(storedToPanel);
+            panelsRef.current.forEach((panel) => revokePhotos(panel.photos));
+            setPanels(restored);
+            setSelectedPanelId(restored[0]?.id ?? null);
+        })();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [reportType, config]);
+
+    // Limpieza de timers y URLs al desmontar.
+    useEffect(() => {
+        return () => {
+            saveTimersRef.current.forEach((timer) => clearTimeout(timer));
+            saveTimersRef.current.clear();
+        };
+    }, []);
+
     const resetSession = useCallback(() => {
         setPanels((prev) => {
             prev.forEach((panel) => revokePhotos(panel.photos));
@@ -62,8 +152,9 @@ export function useCampoPanels(config: ReportTypeConfig) {
         const panel = createEmptyPanel(config);
         setPanels((prev) => [...prev, panel]);
         setSelectedPanelId(panel.id);
+        scheduleSave(panel);
         return panel;
-    }, [config]);
+    }, [config, scheduleSave]);
 
     const selectPanel = useCallback((id: string) => {
         setSelectedPanelId(id);
@@ -75,10 +166,12 @@ export function useCampoPanels(config: ReportTypeConfig) {
             prev.map((panel) => {
                 if (panel.id !== selectedPanelId) return panel;
                 const header = { ...panel.header, [key]: value };
-                return { ...panel, header, label: derivePanelLabel(header) };
+                const updated = { ...panel, header, label: derivePanelLabel(header) };
+                scheduleSave(updated);
+                return updated;
             }),
         );
-    }, [selectedPanelId, config]);
+    }, [selectedPanelId, scheduleSave]);
 
     const addPhotos = useCallback((files: FileList | null) => {
         if (!files || !selectedPanelId) return { added: 0, rejected: 0 };
@@ -107,12 +200,14 @@ export function useCampoPanels(config: ReportTypeConfig) {
                     previewUrl: URL.createObjectURL(file),
                 }));
 
-                return { ...panel, photos: [...panel.photos, ...newPhotos] };
+                const updated = { ...panel, photos: [...panel.photos, ...newPhotos] };
+                scheduleSave(updated);
+                return updated;
             }),
         );
 
         return { added, rejected };
-    }, [selectedPanelId, config]);
+    }, [selectedPanelId, config, scheduleSave]);
 
     const clearPhotos = useCallback(() => {
         if (!selectedPanelId) return;
@@ -120,12 +215,16 @@ export function useCampoPanels(config: ReportTypeConfig) {
             prev.map((panel) => {
                 if (panel.id !== selectedPanelId) return panel;
                 revokePhotos(panel.photos);
-                return { ...panel, photos: [] };
+                const updated = { ...panel, photos: [] };
+                scheduleSave(updated);
+                return updated;
             }),
         );
-    }, [selectedPanelId]);
+    }, [selectedPanelId, scheduleSave]);
 
     const deletePanel = useCallback((id: string) => {
+        cancelPendingSave(id);
+        void deleteStoredPanel(id);
         setPanels((prev) => {
             const target = prev.find((panel) => panel.id === id);
             if (target) revokePhotos(target.photos);
@@ -145,7 +244,7 @@ export function useCampoPanels(config: ReportTypeConfig) {
 
             return next;
         });
-    }, [selectedPanelId, config]);
+    }, [cancelPendingSave, selectedPanelId, config]);
 
     const duplicatePanel = useCallback((id: string) => {
         const source = panels.find((panel) => panel.id === id);
@@ -168,7 +267,8 @@ export function useCampoPanels(config: ReportTypeConfig) {
 
         setPanels((prev) => [...prev, panel]);
         setSelectedPanelId(panel.id);
-    }, [panels, config]);
+        scheduleSave(panel);
+    }, [panels, config, scheduleSave]);
 
     const goRelativePanel = useCallback((direction: -1 | 1) => {
         const index = panels.findIndex((panel) => panel.id === selectedPanelId);

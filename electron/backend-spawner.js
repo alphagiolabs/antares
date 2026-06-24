@@ -165,9 +165,13 @@ async function startPythonBackend(isDev, attempt = 1) {
     _startInProgress = false;
     return;
   }
-  _isShuttingDown = false;
 
   if (attempt === 1) {
+    // Clear the shutdown flag ONLY for a fresh start cycle (attempt === 1),
+    // never on retries — killPython() may have set it between a failure and
+    // the async retry backoff. Resetting it here would spawn a zombie backend
+    // that outlives the app. manualRestart() resets it explicitly instead.
+    _isShuttingDown = false;
     if (_startInProgress) {
       console.warn('[backend-spawner] Start already in progress, skipping duplicate.');
       return;
@@ -536,6 +540,14 @@ async function manualRestart(isDev, { force = false } = {}) {
     _forceKillProcess(pythonProcess);
     pythonProcess = null;
     _stopHealthCheck();
+
+    // Re-check shutdown flag — killPython() may have been called concurrently
+    // between the guard above (linea 528) and this synchronous section.
+    if (_isShuttingDown) {
+      console.warn('[backend-spawner] Manual restart aborted: shutdown arrived during cleanup.');
+      _manualRestartInProgress = false;
+      return false;
+    }
 
     // Reset ANY state so startPythonBackend can proceed — even if previously fatal.
     _state = STATE.IDLE;

@@ -164,10 +164,10 @@ export default function Sidebar({ activeTab, onTabChange }: SidebarProps) {
       data-testid="app-sidebar"
       data-expanded={expanded ? 'true' : 'false'}
       aria-label="Barra lateral de navegación"
-      className="shrink-0 flex flex-col bg-[var(--bg-base)] border-r border-[var(--border-subtle)] transition-[width] duration-200 ease-out overflow-hidden"
+      className="shrink-0 flex flex-col bg-[var(--bg-base)] transition-[width] duration-200 ease-out overflow-hidden"
       style={{ width: expanded ? SIDEBAR_WIDTH_EXPANDED : SIDEBAR_WIDTH_COLLAPSED }}
     >
-      <div className="flex h-11 items-center gap-1.5 px-2 shrink-0">
+      <div className="relative flex h-11 shrink-0 items-center gap-1.5 px-2">
         <button
           type="button"
           data-testid="sidebar-toggle"
@@ -184,8 +184,13 @@ export default function Sidebar({ activeTab, onTabChange }: SidebarProps) {
             <BrandMark showText size="md" />
           </div>
         )}
+        <div
+          className="absolute right-0 top-1/2 h-8 w-px -translate-y-1/2 bg-[var(--border-subtle)]"
+          aria-hidden="true"
+        />
       </div>
 
+      <div className="flex min-h-0 flex-1 flex-col border-r border-[var(--border-subtle)]">
       <div className="mx-2 mb-2 h-px shrink-0 bg-[var(--border-subtle)]" />
 
       <nav className="flex flex-col gap-0.5 flex-1 py-1 px-2 min-h-0 overflow-y-auto">
@@ -243,6 +248,7 @@ export default function Sidebar({ activeTab, onTabChange }: SidebarProps) {
             {t('auth.signOut')}
           </span>
         </button>
+      </div>
       </div>
     </aside>
   );

@@ -14,6 +14,7 @@ a = Analysis(
     datas=[
         (str(backend_dir / 'templates'), 'backend/templates'),
         (str(backend_dir / 'core' / 'presets.json'), 'backend/core'),
+        (str(project_dir / 'assets' / 'ubicaciones'), 'assets/ubicaciones'),
     ],
     hiddenimports=[
         'backend.core.converter',

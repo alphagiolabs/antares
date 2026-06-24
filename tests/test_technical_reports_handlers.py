@@ -1,7 +1,6 @@
 import base64
 
 from backend.handlers import HANDLERS
-from backend.handlers.technical_reports import _sanitize_html_for_pdf
 
 
 def test_technical_reports_handlers_are_registered(monkeypatch, tmp_path) -> None:
@@ -51,26 +50,9 @@ def test_render_html_prefers_inline_report_over_database(monkeypatch, tmp_path) 
     assert 'font-weight:bold;">2</td>' in result["html"]
 
 
-def test_html_pdf_sanitizer_blocks_remote_and_local_resource_urls() -> None:
-    html = """
-    <html>
-      <head><style>
-        .safe { background-image: url(data:image/png;base64,AAAA); }
-        .local { background-image: url("file:///etc/passwd"); }
-        .remote { background-image: url(https://example.com/a.png); }
-      </style></head>
-      <body>
-        <script>alert(1)</script>
-        <iframe src="file:///etc/passwd"></iframe>
-      </body>
-    </html>
+def test_html_to_pdf_handler_removed_from_backend() -> None:
+    """html_to_pdf is now handled entirely by Electron's dialog-handlers (NATIVE_METHODS).
+    The backend handler was dead code that was never reachable.
     """
+    assert "html_to_pdf" not in HANDLERS, "html_to_pdf should not be in backend HANDLERS (Electron handles it)"
 
-    sanitized = _sanitize_html_for_pdf(html)
-
-    assert "Content-Security-Policy" in sanitized
-    assert "<script" not in sanitized.lower()
-    assert "<iframe" not in sanitized.lower()
-    assert "file:///etc/passwd" not in sanitized
-    assert "https://example.com/a.png" not in sanitized
-    assert "url(data:image/png;base64,AAAA)" in sanitized

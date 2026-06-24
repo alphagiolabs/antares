@@ -2,26 +2,9 @@
 from __future__ import annotations
 
 import base64
-import re
-from typing import Any, cast
+from typing import Any
 
 from backend.handlers.common import with_locale
-
-# ── Pre-compiled sanitization patterns ───────────────────────────────────────
-# Hoisted from _sanitize_html_for_pdf to avoid re-compilation on every html_to_pdf call.
-_RE_SCRIPT = re.compile(r"<script[^>]*>[\s\S]*?</script>", re.IGNORECASE)
-_RE_IFRAME = re.compile(r"<iframe[^>]*>[\s\S]*?</iframe>", re.IGNORECASE)
-_RE_OBJECT = re.compile(r"<object[^>]*>[\s\S]*?</object>", re.IGNORECASE)
-_RE_EMBED = re.compile(r"<embed[^>]*>", re.IGNORECASE)
-_RE_LINK = re.compile(r"<link[^>]*/?>", re.IGNORECASE)
-_RE_EVENT_DQ = re.compile(r'\son[a-z]+\s*=\s*"[^"]*"', re.IGNORECASE)
-_RE_EVENT_SQ = re.compile(r"\son[a-z]+\s*=\s*'[^']*'", re.IGNORECASE)
-_RE_EVENT_BARE = re.compile(r"\son[a-z]+\s*=\s*[^\s>]+", re.IGNORECASE)
-_RE_JS_URI = re.compile(
-    r"(href|src|xlink:href)\s*=\s*(['\"]?)\s*(?:javascript|vbscript):[^\"'>\s]*\2",
-    re.IGNORECASE,
-)
-_RE_CSS_URL = re.compile(r"url\(\s*(['\"]?)(.+?)\1\s*\)", re.IGNORECASE)
 
 
 def _db():
@@ -168,62 +151,6 @@ def technical_reports_render_consolidated_html(params: dict[str, Any]) -> dict[s
     html = render_consolidated_html(reports, params.get("logo_left"), params.get("logo_right"))
     return {"html": html, "filename": f"informes_tecnicos_consolidado_{len(reports)}.pdf", "count": len(reports)}
 
-def _sanitize_html_for_pdf(html: str) -> str:
-    """Strip dangerous HTML elements that could cause local file access via CSS.
-
-    WeasyPrint follows CSS url() directives, which can reference local files
-    (e.g. file:///etc/passwd). This sanitizer removes <script>, <iframe>,
-    <object>, <embed>, <link>, and neutralises CSS url() references while
-    preserving safe inline styles.
-    """
-    safe: str = html
-    safe = _RE_SCRIPT.sub("", safe)
-    safe = _RE_IFRAME.sub("", safe)
-    safe = _RE_OBJECT.sub("", safe)
-    safe = _RE_EMBED.sub("", safe)
-    safe = _RE_LINK.sub("", safe)
-    safe = _RE_EVENT_DQ.sub("", safe)
-    safe = _RE_EVENT_SQ.sub("", safe)
-    safe = _RE_EVENT_BARE.sub("", safe)
-    safe = _RE_JS_URI.sub(r"\1=\2\2", safe)
-
-    def _neutralise_url(m: re.Match) -> str:
-        url_content = m.group(2).strip().strip("'\"")
-        if url_content.lower().startswith("data:"):
-            return str(m.group(0))
-        return "url('')"
-    safe = _RE_CSS_URL.sub(_neutralise_url, safe)
-    csp_meta = '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; style-src \'unsafe-inline\'; img-src data:; font-src data:;">'
-    if "Content-Security-Policy" not in safe:
-        safe = safe.replace("<head>", f"<head>{csp_meta}", 1) if "<head" in safe else csp_meta + safe
-    return cast(str, safe)
-
-
-@with_locale
-def html_to_pdf(params: dict[str, Any]) -> dict[str, str]:
-    import io
-
-    try:
-        from weasyprint import HTML
-    except ImportError as exc:
-        msg = (
-            "WeasyPrint no está instalado en el backend. "
-            "Use la ruta nativa de Electron (html_to_pdf via dialog handler) o instale weasyprint."
-        )
-        raise RuntimeError(msg) from exc
-
-    html = str(params.get("html") or "")
-    filename = str(params.get("filename") or "documento.pdf")
-    if not html:
-        msg = "html es requerido"
-        raise ValueError(msg)
-    if not filename.lower().endswith(".pdf"):
-        filename += ".pdf"
-    html = _sanitize_html_for_pdf(html)
-    pdf_buffer = io.BytesIO()
-    HTML(string=html).write_pdf(pdf_buffer)
-    return {"pdf_base64": base64.b64encode(pdf_buffer.getvalue()).decode("ascii"), "filename": filename}
-
 HANDLERS = {
     "technical_reports_list": technical_reports_list,
     "technical_reports_get": technical_reports_get,
@@ -237,5 +164,4 @@ HANDLERS = {
     "technical_reports_autocomplete_contratista": technical_reports_autocomplete_contratista,
     "technical_reports_render_html": technical_reports_render_html,
     "technical_reports_render_consolidated_html": technical_reports_render_consolidated_html,
-    "html_to_pdf": html_to_pdf,
 }
