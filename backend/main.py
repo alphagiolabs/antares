@@ -89,7 +89,9 @@ HEAVY_METHODS = {
     "db_export",
     "db_clear",
     "preview_image",
+    "process_start",
     "formatos_generate",
+    "formatos_render_template_page",
     "image_optimizer_zip",
     "image_optimizer_save_files",
     "sellador_apply",
@@ -102,6 +104,7 @@ HEAVY_METHODS = {
     "panel_aviso_corte_compute_match",
     "panel_aviso_corte_render_pdf",
     "generar_ubicaciones",
+    "preview_ubicacion",
 }
 
 
