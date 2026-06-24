@@ -8,12 +8,13 @@
 }
 
 .tr-header {
-  min-height: 64px;
+  height: 44px;
+  min-height: 44px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 12px 18px;
+  padding: 0 18px;
   border-bottom: 1px solid var(--border-subtle);
   background: var(--bg-base);
 }
@@ -28,6 +29,7 @@
 .tr-header h1 {
   font-size: 20px;
   font-weight: 700;
+  line-height: 1;
 }
 
 .tr-eyebrow {
@@ -475,7 +477,7 @@
   background: color-mix(in srgb, var(--bg-base), #000 18%);
   border-radius: 8px;
   border: 1px solid var(--border-subtle);
-  padding: 22px;
+  padding: 10px 16px 16px;
 }
 
 .tr-paper {

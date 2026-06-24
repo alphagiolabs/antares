@@ -232,10 +232,7 @@ export default function TechnicalReportsApp() {
   return (
     <div className="tr-app">
       <header className="tr-header">
-        <div>
-          <p className="tr-eyebrow">Herramienta</p>
-          <h1>Informes técnicos</h1>
-        </div>
+        <h1>INFORMES TÉCNICOS</h1>
         <div className="tr-header-toolbar">
           <div className="tr-header-actions">
             <button className="tr-secondary" disabled={busy} onClick={() => importInputRef.current?.click()}>
