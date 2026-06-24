@@ -65,6 +65,10 @@ disallow_untyped_defs = false
 module = "weasyprint"
 ignore_missing_imports = true
 
+[[tool.mypy.overrides]]
+module = "pandas"
+ignore_missing_imports = true
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-v --tb=short -m 'not slow'"

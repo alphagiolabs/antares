@@ -7,7 +7,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FutureTimeoutError
 from io import BytesIO
-from typing import Any
+from typing import Any, cast
 
 import pandas as pd
 from PIL import Image, ImageDraw, ImageFont
@@ -58,10 +58,10 @@ _BG_RGB = (246, 246, 246)
 
 # ── Asset caches (fonts, footers, excel) ─────────────────────────────────────
 _font_cache: dict[tuple[str, int], ImageFont.FreeTypeFont | ImageFont.ImageFont] = {}
-_footer_cache: dict[tuple[str, int, int], Image.Image | None] = {}
+_footer_cache: dict[tuple[int, int, int], Image.Image | None] = {}
 _excel_cache: dict[str, tuple[float, pd.DataFrame, tuple[Any, ...]]] = {}
 _map_screenshot_cache: dict[tuple[Any, ...], bytes] = {}
-_preview_composed_cache: dict[tuple[tuple[str, float], int, str], dict[str, Any]] = {}
+_preview_composed_cache: dict[tuple[int, int, tuple[str, float], int, str], dict[str, Any]] = {}
 _preview_excel_ctx: tuple[str, float] | None = None
 _MAX_MAP_CACHE = 40
 _MAX_COMPOSED_CACHE = 80
@@ -203,7 +203,7 @@ def _crop_footer_bar(img: Image.Image) -> Image.Image:
         total = 0.0
         count = 0
         for x in range(0, w, step):
-            total += sum(rgb.getpixel((x, y)))
+            total += sum(cast(tuple[int, ...], rgb.getpixel((x, y))))
             count += 1
         if count and (total / count) < 120:
             last_black = y
@@ -218,7 +218,7 @@ def _measure_footer_band_height(jpg_path: str) -> int:
     black_rows: list[int] = []
     step = max(1, w // 30)
     for y in range(h):
-        total = sum(sum(img.getpixel((x, y))) for x in range(0, w, step))
+        total = sum(sum(cast(tuple[int, ...], img.getpixel((x, y)))) for x in range(0, w, step))
         if (total / (w // step + 1)) < 100:
             black_rows.append(y)
     if not black_rows:
@@ -282,7 +282,7 @@ def _screenshot_has_map_tiles(screenshot_bytes: bytes) -> bool:
     for i in range(samples):
         x = max(0, min(w - 1, (w * (i + 1)) // (samples + 1)))
         y = max(0, min(h - 1, (h * (i + 1)) // (samples + 1)))
-        r, g, b = img.getpixel((x, y))
+        r, g, b = cast(tuple[int, int, int], img.getpixel((x, y)))
         spread = max(r, g, b) - min(r, g, b)
         lum = r + g + b
         if spread < 14 and lum > 620:
@@ -301,13 +301,13 @@ def _is_gutter_pixel(r: int, g: int, b: int) -> bool:
 def _column_is_gutter(img: Image.Image, x: int) -> bool:
     _w, h = img.size
     step = max(1, h // 80)
-    return all(_is_gutter_pixel(*img.getpixel((x, y))) for y in range(0, h, step))
+    return all(_is_gutter_pixel(*cast(tuple[int, int, int], img.getpixel((x, y)))) for y in range(0, h, step))
 
 
 def _row_is_gutter(img: Image.Image, y: int) -> bool:
     w, _h = img.size
     step = max(1, w // 80)
-    return all(_is_gutter_pixel(*img.getpixel((x, y))) for x in range(0, w, step))
+    return all(_is_gutter_pixel(*cast(tuple[int, int, int], img.getpixel((x, y)))) for x in range(0, w, step))
 
 
 def _trim_map_gutters(img: Image.Image) -> Image.Image:
@@ -363,7 +363,7 @@ def _capture_map_canvas_bytes(page) -> bytes | None:
         locator = page.locator("canvas")
         if locator.count() == 0:
             return None
-        return locator.first.screenshot(type="png")
+        return cast(bytes, locator.first.screenshot(type="png"))
     except Exception:
         logger.debug("Fallo captura de canvas de mapa", exc_info=True)
         return None
@@ -696,7 +696,7 @@ def capture_google_maps(
     zoom: int = 18,
     *,
     preview: bool = False,
-):
+) -> bytes:
     """Navega a Google Maps y captura el canvas del mapa sin márgenes laterales."""
     global _last_capture_viewport
     url = f"https://www.google.com/maps/@{lat},{lon},{zoom}z"
