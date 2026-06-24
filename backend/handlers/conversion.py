@@ -7,6 +7,7 @@ See backend/core/jobs.py for the full explanation of the legacy layer.
 """
 from __future__ import annotations
 
+import contextlib
 import time
 from concurrent.futures import ALL_COMPLETED, CancelledError, wait
 from pathlib import Path
@@ -34,6 +35,23 @@ except ImportError:
 _CANCEL_GRACE_SECONDS = 0.25
 
 _SEQUENCE_MODES = {"record", "global", "filename"}
+
+
+@contextlib.contextmanager
+def _engine_snapshot(engine: RenamerEngine):
+    """Guarda y restaura ``engine.secuencia`` y ``engine._record_sequences``.
+
+    Los previews de catálogo aplican renombres directamente (sin pasar por
+    ``engine.preview_lote``, que ya restaura su propio estado), así que deben
+    aislar los cambios para no alterar el contador del engine entre llamadas.
+    """
+    seq_backup = engine.secuencia
+    record_sequences_backup = engine._record_sequences.copy()
+    try:
+        yield
+    finally:
+        engine.secuencia = seq_backup
+        engine._record_sequences = record_sequences_backup
 
 
 def _resolve_sequence_mode(params: dict[str, Any]) -> SequenceMode:
@@ -251,9 +269,7 @@ def preview(params: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
         key_column = resolved_key
         # Buscamos por código parseado y por stem completo para máxima compatibilidad
         db_cache = buscar_por_columna(list(set(codigos_list + stems)), key_column)
-        seq_backup = engine.secuencia
-        record_sequences_backup = engine._record_sequences.copy()
-        try:
+        with _engine_snapshot(engine):
             for f in files:
                 p = Path(f)
                 code = codigos_manuales[p.name]
@@ -266,9 +282,6 @@ def preview(params: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
                     res.append((f, nombre_nuevo, True))
                 else:
                     res.append((f, p.name, False))
-        finally:
-            engine.secuencia = seq_backup
-            engine._record_sequences = record_sequences_backup
     elif use_column_rename:
         db_cache = {str(i): rec for i, rec in enumerate(obtener_todos(limit=len(files)))}
         def lookup(codigo: str) -> dict[str, Any] | None:
@@ -296,9 +309,7 @@ def preview(params: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
             auto_key = _detect_best_key_column(files, db_cols)
             if auto_key:
                 db_cache = buscar_por_columna(list(set(codigos_list + stems)), auto_key)
-                seq_backup = engine.secuencia
-                record_sequences_backup = engine._record_sequences.copy()
-                try:
+                with _engine_snapshot(engine):
                     for f in files:
                         p = Path(f)
                         code = codigos_manuales[p.name]
@@ -311,9 +322,6 @@ def preview(params: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
                             res.append((f, nombre_nuevo, True))
                         else:
                             res.append((f, p.name, False))
-                finally:
-                    engine.secuencia = seq_backup
-                    engine._record_sequences = record_sequences_backup
                 auto_payload: dict[str, Any] = {
                     "preview": [{"origen": Path(orig).name, "nuevo": nuev, "en_bd": en_bd} for orig, nuev, en_bd in res],
                 }

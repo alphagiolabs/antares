@@ -4,6 +4,7 @@ import Input from '../ui/Input';
 import Toggle from '../ui/Toggle';
 import type { RenamePattern, DBRecord, MappingResult, PreviewItem } from '../../types';
 import { PencilLine, Tags, Database, ArrowRight, AlertTriangle } from 'lucide-react';
+import { fileNameFromPath } from './helpers';
 
 interface RenameCardProps {
   files: string[];
@@ -37,7 +38,6 @@ interface RenameCardProps {
   onWordSeparatorChange?: (sep: string) => void;
 }
 
-const fileNameFromPath = (path: string) => path.split(/[\\/]/).pop() || path;
 const RESERVED_PATTERN_KEYS = new Set(['seq', 'ext', 'sep']);
 
 const getPatternColumns = (pattern: string) => {
