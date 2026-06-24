@@ -17,9 +17,9 @@
  *   2 = error inesperado
  *
  * Uso:
- *   node scripts/release-loop.mjs           # dry-run
- *   node scripts/release-loop.mjs --ship    # release real
- *   node scripts/release-loop.mjs --ship --build  # release + build local
+ *   node scripts/release-loop.js           # dry-run
+ *   node scripts/release-loop.js --ship    # release real
+ *   node scripts/release-loop.js --ship --build  # release + build local
  */
 
 const fs = require('fs');
@@ -298,6 +298,14 @@ function main() {
   console.log(`  ${mode}`);
   console.log(`════════════════════════════════════════════\n`);
 
+  try {
+    runReleaseLoop(isShip, doBuild);
+  } catch (err) {
+    die(err.message || 'Release loop falló.', err.code || 1);
+  }
+}
+
+function runReleaseLoop(isShip, doBuild) {
   // ── Step 1: Validate Environment ──
   step('① Entorno (gh auth, remote, branch, clean, up-to-date)', validateEnvironment);
 
@@ -351,7 +359,7 @@ function main() {
   } else {
     console.log(`  ✅ Dry-run: todas las validaciones pasaron.`);
     console.log(`  Para hacer el release real:`);
-    console.log(`    node scripts/release-loop.mjs --ship`);
+    console.log(`    node scripts/release-loop.js --ship`);
   }
   console.log(`════════════════════════════════════════════\n`);
 }
