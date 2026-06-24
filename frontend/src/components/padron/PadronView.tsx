@@ -25,10 +25,12 @@ import {
   Trash2,
   CheckCircle,
   PanelLeft,
+  HelpCircle,
 } from 'lucide-react';
 import DatePicker from '../ui/DatePicker';
 import PreviewPage from './PreviewPage';
 import WaterCutNoticePage from './WaterCutNoticePage';
+import TutorialOverlay from './components/TutorialOverlay';
 import {
   HEADER_FIELDS,
   OUTPUT_FORMAT_OPTIONS,
@@ -96,6 +98,7 @@ export default function PadronView() {
   const [pdfProgress, setPdfProgress] = useState('');
   const [previewPageOffset, setPreviewPageOffset] = useState(0);
   const [sidebarVisible, setSidebarVisible] = useState(true);
+  const [isTutorialOpen, setIsTutorialOpen] = useState(false);
 
   const pdfContainerRef = useRef<HTMLDivElement>(null);
 
@@ -593,6 +596,11 @@ export default function PadronView() {
 
   const handlePrint = useCallback(() => window.print(), []);
 
+  const openTutorial = useCallback(() => {
+    setSidebarVisible(true);
+    setIsTutorialOpen(true);
+  }, []);
+
   return (
     <div className="vpad-app vpad-app-embedded">
       <aside className={`vpad-sidebar${sidebarVisible ? '' : ' collapsed'}`}>
@@ -605,7 +613,7 @@ export default function PadronView() {
               </div>
 
               <label
-                className={`vpad-upload-zone${isImporting ? ' active' : ''}${importedFileName ? ' loaded' : ''}`}
+                className={`vpad-upload-zone vpad-btn-import${isImporting ? ' active' : ''}${importedFileName ? ' loaded' : ''}`}
               >
                 <input
                   type="file"
@@ -663,7 +671,7 @@ export default function PadronView() {
               )}
             </section>
 
-            <section className="vpad-section">
+            <section className="vpad-section vpad-section-format">
               <div className="vpad-section-header">
                 <span className="vpad-section-number">2</span>
                 <h3 className="vpad-section-title">Formato de Salida</h3>
@@ -789,7 +797,7 @@ export default function PadronView() {
               </div>
             </section>
 
-            <section className="vpad-section">
+            <section className="vpad-section vpad-section-data">
               <div className="vpad-section-header">
                 <span className="vpad-section-number">3</span>
                 <h3 className="vpad-section-title">
@@ -857,7 +865,7 @@ export default function PadronView() {
 
             <div className="vpad-action-box">
               <button
-                className="vpad-btn vpad-btn-primary"
+                className="vpad-btn vpad-btn-primary vpad-btn-download"
                 onClick={handleGeneratePdf}
                 disabled={isGeneratingPdf}
               >
@@ -931,9 +939,18 @@ export default function PadronView() {
               </button>
             </div>
           )}
+          <button
+            className="tutorial-trigger-btn"
+            onClick={openTutorial}
+            title="Ver tutorial de como usar Generar Padrones"
+            type="button"
+          >
+            <HelpCircle size={16} />
+            Como usar
+          </button>
         </header>
 
-        <div className="vpad-preview-scroll-container">
+        <div className="vpad-preview-scroll-container vpad-preview-pane">
           <div className="vpad-print-doc" ref={previewRef}>
             {(isWaterCutNotice ? previewPages.waterCutItems : previewPages.serviceItems).map((pageItems, i) => {
               const globalIndex = previewPages.start + i;
@@ -968,6 +985,10 @@ export default function PadronView() {
         </div>
       </main>
       <div ref={pdfContainerRef} className="vpad-pdf-hidden-container" />
+      <TutorialOverlay
+        isOpen={isTutorialOpen}
+        onClose={() => setIsTutorialOpen(false)}
+      />
     </div>
   );
 }
