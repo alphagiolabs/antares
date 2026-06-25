@@ -2,57 +2,100 @@
 import sys
 from pathlib import Path
 
+from PyInstaller.utils.hooks import collect_submodules, collect_data_files
+
 block_cipher = None
 
 backend_dir = Path(sys._getframe().f_code.co_filename).parent.resolve()
 project_dir = backend_dir.parent
 
+# ── Collect all submodules for complex packages ───────────────────────────
+# Manual hiddenimports lists miss dynamically-imported submodules (e.g.
+# pandas._config.localization, openpyxl submodules, docx oxml parts).
+# collect_submodules walks the installed package and returns every importable
+# submodule, preventing ModuleNotFoundError at runtime in the frozen build.
+_hidden = [
+    'backend.core.converter',
+    'backend.core.database',
+    'backend.core.renamer',
+    'backend.core.config_fields',
+    'backend.core.config_theme',
+    'backend.core.plugins',
+    'backend.core.history',
+    'backend.core.format_registry',
+    'backend.core.formatos',
+    'backend.core.technical_reports',
+    'backend.core.technical_reports.models',
+    'backend.core.technical_reports.database',
+    'backend.core.technical_reports.importer',
+    'backend.core.technical_reports.rendering',
+    'backend.utils.validators',
+    'backend.utils.paths',
+    'backend.ipc_protocol',
+    'backend.handlers',
+    'backend.version',
+]
+# Collect ALL submodules from heavy third-party deps so PyInstaller does not
+# miss dynamically-loaded ones (pandas._config.localization caused a startup
+# crash in v0.10.10/v0.10.11 — see CHANGELOG).
+for _pkg in ('pandas', 'openpyxl', 'weasyprint', 'PIL', 'lxml', 'pypdf',
+             'jinja2', 'jsonschema', 'docx'):
+    _hidden += collect_submodules(_pkg)
+
+# psutil has optional platform-specific binary extensions; collect them too.
+try:
+    _hidden += collect_submodules('psutil')
+except Exception:
+    _hidden.append('psutil')
+
+# WeasyPrint uses urllib.request.HTTPSHandler and ssl at runtime for URL
+# fetching (CSS url(), remote images). PyInstaller misses these on Windows
+# because they are conditionally imported via C extensions. Add them
+# explicitly so PDF generation does not crash with
+# "module 'urllib.request' has no attribute 'HTTPSHandler'".
+# ssl must be collected with its binaries (_ssl.pyd, libssl, libcrypto) —
+# collect_submodules alone is not enough because PyInstaller may strip the
+# native crypto DLLs, causing `import ssl` to silently fail, which makes
+# urllib.request set _have_ssl=False and skip HTTPSHandler definition.
+_hidden += [
+    'ssl',
+    'urllib.request',
+    'urllib.error',
+    'urllib.parse',
+    'http.client',
+    'http.server',
+    'email.mime.text',
+    'email.mime.multipart',
+    'ctypes',
+    'ctypes.wintypes',
+]
+
+# Collect ssl native binaries (_ssl.pyd and its dependencies) explicitly.
+# strip=True on these DLLs can corrupt them on some toolchains, so we add
+# them to upx_exclude as well.
+_ssl_binaries = []
+_ssl_dir = Path(sys.base_prefix) / 'DLLs'
+for _name in ('_ssl.pyd', '_hashlib.pyd', 'libssl-3.dll', 'libcrypto-3.dll',
+              'libssl-1_1.dll', 'libcrypto-1_1.dll'):
+    _candidate = _ssl_dir / _name
+    if _candidate.exists():
+        _ssl_binaries.append((str(_candidate), '.'))
+
+# Collect data files (templates, fonts, CSS) bundled inside packages.
+_datas = [
+    (str(backend_dir / 'templates'), 'backend/templates'),
+    (str(backend_dir / 'core' / 'presets.json'), 'backend/core'),
+    (str(project_dir / 'assets' / 'ubicaciones'), 'assets/ubicaciones'),
+]
+# weasyprint ships CSS default stylesheets and font config that must be present.
+_datas += collect_data_files('weasyprint')
+
 a = Analysis(
     [str(backend_dir / 'main.py')],
     pathex=[str(backend_dir), str(project_dir)],
-    binaries=[],
-    datas=[
-        (str(backend_dir / 'templates'), 'backend/templates'),
-        (str(backend_dir / 'core' / 'presets.json'), 'backend/core'),
-        (str(project_dir / 'assets' / 'ubicaciones'), 'assets/ubicaciones'),
-    ],
-    hiddenimports=[
-        'backend.core.converter',
-        'backend.core.database',
-        'backend.core.renamer',
-        'backend.core.config_fields',
-        'backend.core.config_theme',
-        'backend.core.plugins',
-        'backend.core.history',
-        'backend.core.format_registry',
-        'backend.core.formatos',
-        'backend.core.technical_reports',
-        'backend.core.technical_reports.models',
-        'backend.core.technical_reports.database',
-        'backend.core.technical_reports.importer',
-        'backend.core.technical_reports.rendering',
-        'backend.utils.validators',
-        'backend.utils.paths',
-        'backend.ipc_protocol',
-        'backend.handlers',
-        'backend.version',
-        'jinja2',
-        'weasyprint',
-        'weasyprint.css',
-        'weasyprint.text',
-        'weasyprint.layout',
-        'weasyprint.images',
-        'weasyprint.pdf',
-        'weasyprint.formatting_structure',
-        'PIL',
-        'PIL.Image',
-        'pandas',
-        'pandas._libs.tslibs',
-        'openpyxl',
-        'pypdf',
-        'pypdf.generic',
-        'pypdf.generic._data_structures',
-    ],
+    binaries=_ssl_binaries,
+    datas=_datas,
+    hiddenimports=_hidden,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
@@ -62,10 +105,6 @@ excludes=[
         'scipy',
         'numba',
         'llvmlite',
-        'pandas._testing',
-        'pandas.io.parquet',
-        'pandas.io.json',
-        'pandas.io.sql',
         'numpy.testing',
         'numpy.distutils',
         'numpy.f2py',
@@ -100,9 +139,16 @@ exe = EXE(
     name='AntaresBackend',
     debug=False,
     bootloader_ignore_signals=False,
-    strip=True,
+    strip=False,
     upx=True,
-    upx_exclude=[],
+    upx_exclude=[
+        '_ssl.pyd',
+        '_hashlib.pyd',
+        'libssl-3.dll',
+        'libcrypto-3.dll',
+        'libssl-1_1.dll',
+        'libcrypto-1_1.dll',
+    ],
     runtime_tmpdir=None,
     console=True,
     disable_windowed_traceback=False,
