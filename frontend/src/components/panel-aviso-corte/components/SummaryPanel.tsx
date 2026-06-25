@@ -6,55 +6,58 @@ interface Props {
   onExportModeChange: (mode: 'skip_empty' | 'include_empty') => void;
 }
 
+interface StatProps {
+  label: string;
+  value: number;
+  warn?: boolean;
+}
+
+function Stat({ label, value, warn }: StatProps) {
+  const valueClass = warn && value > 0 ? 'pac-stat__value pac-stat__value--warn' : 'pac-stat__value';
+  return (
+    <div className="pac-stat">
+      <span className="pac-stat__label">{label}</span>
+      <span className={valueClass}>{value}</span>
+    </div>
+  );
+}
+
 export default function SummaryPanel({ result, exportMode, onExportModeChange }: Props) {
   if (!result) return null;
   const s = result.summary;
   return (
-    <div className="flex flex-col gap-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-4">
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-[var(--text-primary)]">Resumen de emparejamiento</h3>
+    <div className="pac-summary">
+      <div className="pac-summary__header">
+        <span className="pac-summary__title">Emparejamiento</span>
         <select
           aria-label="Modo de exportación"
-          className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-base)] px-2 py-1 text-xs text-[var(--text-primary)]"
+          className="pac-summary__select"
           value={exportMode}
-          onChange={(e) => onExportModeChange(e.target.value as any)}
+          onChange={(e) => onExportModeChange(e.target.value as 'skip_empty' | 'include_empty')}
         >
           <option value="skip_empty">Omitir vacíos</option>
           <option value="include_empty">Incluir vacíos</option>
         </select>
       </div>
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
-        <div className="rounded-md bg-[var(--bg-elevated)] px-2 py-1.5">
-          <span className="block text-[var(--text-muted)]">Filas</span>
-          <span className="block font-semibold text-[var(--text-primary)]">{s.totalRows}</span>
-        </div>
-        <div className="rounded-md bg-[var(--bg-elevated)] px-2 py-1.5">
-          <span className="block text-[var(--text-muted)]">Con imágenes</span>
-          <span className="block font-semibold text-[var(--text-primary)]">{s.rowsWithImages}</span>
-        </div>
-        <div className="rounded-md bg-[var(--bg-elevated)] px-2 py-1.5">
-          <span className="block text-[var(--text-muted)]">Imágenes</span>
-          <span className="block font-semibold text-[var(--text-primary)]">{s.totalImages}</span>
-        </div>
-        <div className="rounded-md bg-[var(--bg-elevated)] px-2 py-1.5">
-          <span className="block text-[var(--text-muted)]">Sin emparejar</span>
-          <span className="block font-semibold text-[var(--text-primary)]">{s.unmatchedImages}</span>
-        </div>
+      <div className="pac-summary-stats">
+        <Stat label="Filas" value={s.totalRows} />
+        <Stat label="Con imágenes" value={s.rowsWithImages} />
+        <Stat label="Imágenes" value={s.totalImages} />
+        <Stat label="Sin emparejar" value={s.unmatchedImages} warn />
       </div>
       {result.warnings.length > 0 && (
-        <div className="flex flex-col gap-1">
-          <span className="text-xs font-medium text-[var(--text-secondary)]">Advertencias</span>
+        <div className="pac-summary__section">
           {result.warnings.map((w, i) => (
-            <span key={i} className="text-[11px] text-amber-600">{w}</span>
+            <span key={i} className="text-[10px] leading-snug text-amber-600">{w}</span>
           ))}
         </div>
       )}
       {s.unmatchedImageNames.length > 0 && (
-        <div className="flex flex-col gap-1">
-          <span className="text-xs font-medium text-[var(--text-secondary)]">Imágenes no emparejadas</span>
+        <div className="pac-summary__section">
+          <span className="pac-summary__section-title">Sin emparejar</span>
           <div className="flex flex-wrap gap-1">
             {s.unmatchedImageNames.map((n) => (
-              <span key={n} className="px-1.5 py-0.5 rounded bg-[var(--bg-elevated)] text-[10px] text-[var(--text-muted)] border border-[var(--border-subtle)]">{n}</span>
+              <span key={n} className="pac-summary__tag">{n}</span>
             ))}
           </div>
         </div>
