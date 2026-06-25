@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { api } from '../../api';
 import { useToast } from '../../hooks/useToast';
+import { useBackendStatus } from '../../hooks/useBackendStatus';
 import PreviewPanel, { renderPreviewHtml } from './PreviewPanel';
 import { REPORT_FIELDS } from './constants';
 import {
@@ -163,6 +164,7 @@ function SegmentedControl<T extends string>({
 
 export default function PreviewPanelView() {
   const { addToast } = useToast();
+  const { backendState } = useBackendStatus();
   const panelRef = useRef<HTMLIFrameElement>(null);
 
   // ─── Data State ───
@@ -240,10 +242,18 @@ export default function PreviewPanelView() {
 
   // ─── Load backend templates ───
   useEffect(() => {
+    if (backendState !== 'ready') return;
+
+    let cancelled = false;
     api.templatesList().then(res => {
+      if (cancelled) return;
       setAvailableTemplates(res.templates || []);
-    }).catch(() => addToast({ message: 'Error cargando plantillas', type: 'error' }));
-  }, [addToast]);
+    }).catch(() => {
+      if (cancelled) return;
+      addToast({ message: 'Error cargando plantillas', type: 'error' });
+    });
+    return () => { cancelled = true; };
+  }, [backendState, addToast]);
 
   // ─── Logo upload ───
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>, side: 'left' | 'right') => {
