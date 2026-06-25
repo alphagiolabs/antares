@@ -17,6 +17,12 @@ import type {
   MatchRule,
   PanelVM,
 } from '../types';
+import {
+  buildExcelPreviewPanels,
+  normalizePanelDateStr,
+  resolveDefaultAddressColumn,
+  resolveDefaultKeyColumn,
+} from '../utils/excelPreview';
 
 export interface PanelSession {
   headerForm: HeaderFormState;
@@ -159,44 +165,30 @@ export function usePanelSession(): PanelSession {
     []
   );
 
-  /**
-   * Normalize a raw date string to ISO YYYY-MM-DD for the date input.
-   */
-  const _normalizeDateStr = useCallback((raw: string): string => {
-    const s = raw.trim();
-    if (!s) return '';
-    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
-    // ISO datetime with time (e.g. "2024-05-15 00:00:00")
-    const isoMatch = s.match(/^(\d{4}-\d{2}-\d{2})\s+\d{2}:\d{2}/);
-    if (isoMatch) return isoMatch[1];
-    // DD/MM/YYYY or DD-MM-YYYY
-    const dmyMatch = s.match(/^(\d{1,2})[/\-](\d{1,2})[/\-](\d{4})$/);
-    if (dmyMatch) {
-      const [, d, m, y] = dmyMatch;
-      return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
-    }
-    return s;
-  }, []);
-
   const setExcelSource = useCallback(
     (src: ExcelSource | null) => {
       setExcelSourceState(src);
       if (src && src.rows.length > 0) {
-        // Auto-populate form fields from the first row
         const cuadrante = _findColumnValue(src, 'cuadrante afectado');
         const fechaRaw = _findColumnValue(src, 'fecha de corte');
         const motivo = _findColumnValue(src, 'motivo');
         setHeaderFormState({
           cuadrante,
-          fechaCorte: _normalizeDateStr(fechaRaw),
+          fechaCorte: normalizePanelDateStr(fechaRaw),
           motivo,
         });
+        setMatchRuleState((prev) => ({
+          ...prev,
+          keyColumn: resolveDefaultKeyColumn(src),
+        }));
+        setAddressColumnState(resolveDefaultAddressColumn(src));
       } else {
-        // Reset form when Excel is cleared
         setHeaderFormState({ cuadrante: '', fechaCorte: '', motivo: '' });
+        setMatchRuleState({ keyColumn: '', strategy: 'prefix' });
+        setAddressColumnState('');
       }
     },
-    [_findColumnValue, _normalizeDateStr]
+    [_findColumnValue]
   );
 
   const computeMatch = useCallback(async () => {
@@ -287,27 +279,24 @@ export function usePanelSession(): PanelSession {
 
   const previewPanels = useMemo(() => {
     if (matchResult) return matchResult.panels;
-    if (!excelSource) {
-      // Form mode: agrupar imágenes en paneles de 4 con numeración secuencial global
-      const panels: PanelVM[] = [];
-      for (let i = 0; i < images.length; i += 4) {
-        const chunk = images.slice(i, i + 4);
-        const refs = chunk.map((img, idx) => ({
-          filename: img.file.name,
-          caption: `IMAGEN N°${i + idx + 1}: (Indicar dirección según lista de usuarios)`,
-          position: idx + 1,
-        }));
-        panels.push({
-          cuadrante: headerForm.cuadrante,
-          fechaCorte: headerForm.fechaCorte,
-          motivo: headerForm.motivo,
-          imagenes: refs,
-          sourceRowIndex: null,
-        });
-      }
-      return panels;
+    if (excelSource) return buildExcelPreviewPanels(excelSource);
+    const panels: PanelVM[] = [];
+    for (let i = 0; i < images.length; i += 4) {
+      const chunk = images.slice(i, i + 4);
+      const refs = chunk.map((img, idx) => ({
+        filename: img.file.name,
+        caption: `IMAGEN N°${i + idx + 1}: (Indicar dirección según lista de usuarios)`,
+        position: idx + 1,
+      }));
+      panels.push({
+        cuadrante: headerForm.cuadrante,
+        fechaCorte: headerForm.fechaCorte,
+        motivo: headerForm.motivo,
+        imagenes: refs,
+        sourceRowIndex: null,
+      });
     }
-    return [];
+    return panels;
   }, [matchResult, excelSource, images, headerForm]);
 
   return {
