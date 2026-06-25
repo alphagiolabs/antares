@@ -5,6 +5,17 @@ Todas las versiones notables de ANTARES se documentan aquí.
 Formato basado en [Keep a Changelog](https://keepachangelog.com/),
 y este proyecto sigue [Semantic Versioning](https://semver.org/).
 
+## [0.10.11] — 2026-06-25
+
+### Added
+- Reportes de Campo: persistencia de hojas por plantilla en IndexedDB, con tests de serialización de fotos.
+- Panel Aviso de Corte: vista previa inmediata por fila de Excel (`excelPreview`) y auto-selección de columnas clave (`ID`) y dirección.
+
+### Fixed
+- Ubicaciones: incluir `assets/ubicaciones` en el spec de PyInstaller para que el instalador empaquetado tenga los recursos necesarios.
+- Preview Panel: esperar a que el backend esté `ready` antes de llamar a `templates_list`, evitando fallos IPC al arranque.
+- Panel Aviso de Corte: corregida vista previa vacía tras importar Excel sin imágenes emparejadas aún.
+
 ## [0.10.10] — 2026-06-23
 
 ### Added
