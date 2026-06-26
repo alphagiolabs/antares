@@ -5,6 +5,7 @@ import { IMAGE_OPTIMIZER_PRESETS } from './presets';
 
 interface PreviewWorkspaceProps {
   items: ImageItem[];
+  downloadNameMap: Map<string, string>;
   activeItem: ImageItem | null;
   activeItemSettings: BatchSettings;
   activeItemOutputName: string;
@@ -32,6 +33,7 @@ interface PreviewWorkspaceProps {
 
 export default function PreviewWorkspace({
   items,
+  downloadNameMap,
   activeItem,
   activeItemSettings,
   activeItemOutputName,
@@ -73,6 +75,7 @@ export default function PreviewWorkspace({
         <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto p-4">
           <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))' }}>
             {items.map((item) => {
+              const outputName = downloadNameMap.get(item.id) || item.originalName;
               const statusColor = item.excluded ? '#52525b'
                 : item.status === 'error' ? '#ef4444'
                   : item.stale ? '#f59e0b'
@@ -121,9 +124,17 @@ export default function PreviewWorkspace({
 
                   <div className="flex items-center gap-1.5 px-2 py-1.5">
                     <div className="min-w-0 flex-1">
-                      <p className={`truncate text-[10px] font-mono leading-tight text-[var(--text-primary)] ${item.excluded ? 'line-through opacity-50' : ''}`}>
-                        {item.originalName}
+                      <p
+                        className={`truncate text-[10px] font-mono leading-tight text-[var(--text-primary)] ${item.excluded ? 'line-through opacity-50' : ''}`}
+                        title={outputName !== item.originalName ? item.originalName : undefined}
+                      >
+                        {outputName}
                       </p>
+                      {outputName !== item.originalName && (
+                        <p className="truncate text-[9px] font-mono leading-tight text-[var(--text-muted)]">
+                          {item.originalName}
+                        </p>
+                      )}
                       <p className="mt-0.5 text-[9px] font-mono leading-tight text-[var(--text-muted)]">
                         {item.sourceWidth && item.sourceHeight ? `${item.sourceWidth}×${item.sourceHeight} · ` : ''}
                         {/* formatBytes inlined to avoid dependency cycle */}
@@ -169,7 +180,12 @@ export default function PreviewWorkspace({
         {/* Item header */}
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between shrink-0">
           <div className="min-w-0 flex items-center gap-2">
-            <p className="truncate font-mono text-sm tracking-wide text-[var(--text-primary)]">{activeItem.originalName}</p>
+            <div className="min-w-0">
+              <p className="truncate font-mono text-sm tracking-wide text-[var(--text-primary)]">{activeItemOutputName}</p>
+              {activeItemOutputName !== activeItem.originalName && (
+                <p className="truncate text-[10px] font-mono text-[var(--text-muted)]">{activeItem.originalName}</p>
+              )}
+            </div>
             {activeItem.status === 'completed' && !activeItem.stale ? <CheckCircle2 size={13} className="text-emerald-400 shrink-0" /> : null}
             {activeItem.excluded && <span className="shrink-0 rounded-full border border-red-500/20 bg-red-500/10 px-2 py-0.5 text-[10px] font-mono text-red-400">Excluida</span>}
             {activeItem.stale && <span className="shrink-0 rounded-full border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-[10px] font-mono text-amber-400">Stale</span>}

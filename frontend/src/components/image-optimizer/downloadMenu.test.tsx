@@ -191,7 +191,12 @@ describe('ImageOptimizer download menu', () => {
     });
     await waitFor(() => {
       expect(mockApi.imageOptimizerSaveFiles).toHaveBeenCalledWith(
-        expect.objectContaining({ output_folder: folder }),
+        expect.objectContaining({
+          output_folder: folder,
+          files: expect.arrayContaining([
+            expect.objectContaining({ filename: 'foto_001.jpg' }),
+          ]),
+        }),
       );
     });
   });

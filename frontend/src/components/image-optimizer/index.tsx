@@ -11,7 +11,7 @@ import { DEFAULT_BATCH_SETTINGS, IMAGE_OPTIMIZER_PRESETS, cloneBatchSettings } f
 import { BatchSettings, CropOffset, ImageItem, PresetId, Toast } from './types';
 import {
   arrayBufferToBase64,
-  buildDownloadNameMap,
+  buildExportNameMap,
   buildZipFilename,
   generateId,
   getCropRectangle,
@@ -260,8 +260,18 @@ export default function ImageOptimizer() {
   const scopedItems = useMemo(() => getEligibleItems(items, activeScope), [activeScope, items]);
   const downloadableItems = useMemo(() => getDownloadableItems(items, settings, activeScope), [activeScope, items, settings]);
   const processableItems = useMemo(() => getProcessableItems(items, settings, activeScope), [activeScope, items, settings]);
-  const downloadNameMap = useMemo(() => buildDownloadNameMap(getEligibleItems(items), settings), [items, settings]);
-  const previewNames = useMemo(() => previewFilenames(settings, items.length), [items.length, settings]);
+  const downloadNameMap = useMemo(() => buildExportNameMap(items, settings), [items, settings]);
+
+  const getExportNameMap = useCallback(
+    () => buildExportNameMap(itemsRef.current, settingsRef.current),
+    [],
+  );
+  const previewNames = useMemo(() => {
+    const previewSettings = settings.operations.renameEnabled
+      ? settings
+      : { ...settings, operations: { ...settings.operations, renameEnabled: true } };
+    return previewFilenames(previewSettings, items.length);
+  }, [items.length, settings]);
   const primaryActionLabel = useMemo(() => getPrimaryActionLabel(scopedItems, settings), [scopedItems, settings]);
 
   const handleApplyGlobalPreset = useCallback((presetId: PresetId) => {
@@ -385,7 +395,7 @@ export default function ImageOptimizer() {
       return;
     }
 
-    const nameMap = buildDownloadNameMap(entries.map((entry) => entry.item), settingsRef.current);
+    const nameMap = getExportNameMap();
     try {
       const zipFilename = buildZipFilename(settingsRef.current);
       const zipBlob = await createStoredZipBlob(
@@ -402,7 +412,7 @@ export default function ImageOptimizer() {
       const message = error instanceof Error ? error.message : 'Error desconocido';
       addToast(`No se pudo generar el ZIP: ${message}.`, 'error', 4200);
     }
-  }, [addToast, collectDownloadEntries]);
+  }, [addToast, collectDownloadEntries, getExportNameMap]);
 
   const downloadItems = useCallback(async (itemsToDownload: ImageItem[]) => {
     const entries = collectDownloadEntries(itemsToDownload);
@@ -417,7 +427,7 @@ export default function ImageOptimizer() {
       return;
     }
 
-    const nameMap = buildDownloadNameMap(entries.map((entry) => entry.item), settingsRef.current);
+    const nameMap = getExportNameMap();
 
     if (entries.length === 1) {
       const entry = entries[0];
@@ -428,7 +438,7 @@ export default function ImageOptimizer() {
     }
 
     await downloadItemsAsZip(itemsToDownload);
-  }, [addToast, collectDownloadEntries, downloadItemsAsZip]);
+  }, [addToast, collectDownloadEntries, downloadItemsAsZip, getExportNameMap]);
 
   const downloadItemsIndividually = useCallback(async (itemsToDownload: ImageItem[]) => {
     const entries = collectDownloadEntries(itemsToDownload);
@@ -442,7 +452,7 @@ export default function ImageOptimizer() {
       );
       return;
     }
-    const nameMap = buildDownloadNameMap(entries.map((entry) => entry.item), settingsRef.current);
+    const nameMap = getExportNameMap();
 
     // Browsers block multiple simultaneous downloads spawned by script. We
     // trigger them sequentially with a small delay, awaiting one frame after
@@ -468,7 +478,7 @@ export default function ImageOptimizer() {
         await nextFrame();
       }
     }
-  }, [addToast, collectDownloadEntries]);
+  }, [addToast, collectDownloadEntries, getExportNameMap]);
 
   const saveItemsToFolder = useCallback(async (itemsToSave: ImageItem[]) => {
     const entries = collectDownloadEntries(itemsToSave);
@@ -482,7 +492,7 @@ export default function ImageOptimizer() {
       );
       return;
     }
-    const nameMap = buildDownloadNameMap(entries.map((entry) => entry.item), settingsRef.current);
+    const nameMap = getExportNameMap();
 
     // Native folder picker — returns the raw folder path, no recursive scan.
     const folderResult = await api.dialogFolder({ title: 'Carpeta de salida', pickOnly: true });
@@ -530,7 +540,7 @@ export default function ImageOptimizer() {
       setProcessingMessage('');
       setProcessingProgress({ current: 0, total: 0 });
     }
-  }, [addToast, collectDownloadEntries]);
+  }, [addToast, collectDownloadEntries, getExportNameMap]);
 
   const handleDownloadSingle = useCallback((item: ImageItem) => {
     downloadItems([item]);
@@ -757,13 +767,14 @@ export default function ImageOptimizer() {
             settings={settings}
             previewNames={previewNames}
             activeItem={activeItem}
-            renameOnlyMode={false}
+            renameOnlyMode={activePresetId === 'rename-only'}
             onUpdateSettings={updateSettings}
             onOpenCropEditor={handleOpenCropEditor}
           />
 
           <PreviewWorkspace
             items={items}
+            downloadNameMap={downloadNameMap}
             activeItem={activeItem}
             activeItemSettings={activeItemSettings}
             activeItemOutputName={activeItemOutputName}

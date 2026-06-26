@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_BATCH_SETTINGS } from './presets';
 import { BatchSettings, ImageItem } from './types';
-import { arrayBufferToBase64, buildDownloadNameMap, buildZipFilename, reorderImageItems } from './utils';
+import { arrayBufferToBase64, buildDownloadNameMap, buildExportNameMap, buildZipFilename, previewFilenames, resolveExportFilename, reorderImageItems } from './utils';
 
 function makeItem(id: string, originalName: string): ImageItem {
   return {
@@ -75,6 +75,30 @@ describe('image optimizer queue order', () => {
     expect(names.get('third')).toBe('foto_001.jpg');
     expect(names.get('first')).toBe('foto_002.jpg');
     expect(names.get('second')).toBe('foto_003.jpg');
+  });
+});
+
+describe('image optimizer export naming', () => {
+  it('preserves queue indices when resolving names for a download subset', () => {
+    const items = [
+      makeItem('first', 'a.jpg'),
+      makeItem('second', 'b.jpg'),
+      makeItem('third', 'c.jpg'),
+    ];
+    const fullMap = buildExportNameMap(items, renameSettings);
+    const subsetMap = buildDownloadNameMap([items[0], items[2]], renameSettings);
+
+    expect(fullMap.get('first')).toBe('foto_001.jpg');
+    expect(fullMap.get('third')).toBe('foto_003.jpg');
+    expect(subsetMap.get('third')).toBe('foto_002.jpg');
+    expect(resolveExportFilename('third', items, renameSettings)).toBe('foto_003.jpg');
+  });
+
+  it('previewFilenames shows sequential names when rename is enabled', () => {
+    const names = previewFilenames(renameSettings, 0);
+    expect(names[0]).toBe('foto_001.jpg');
+    expect(names[1]).toBe('foto_002.jpg');
+    expect(names[2]).toBe('foto_003.jpg');
   });
 });
 
