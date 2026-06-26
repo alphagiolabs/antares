@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import base64
+from pathlib import Path
 from typing import Any
 
 from backend.core.panel_aviso_corte import build_panels, parse_excel_bytes, render_docx, render_pdf
@@ -74,6 +75,7 @@ def panel_aviso_corte_render_pdf(params: dict[str, Any]) -> dict[str, Any]:
     images_raw = params.get("images") or {}
     image_paths_raw = params.get("image_paths") or {}
     fmt = str(params.get("format", "pdf")).lower()
+    output_path = str(params.get("output_path") or "").strip() or None
     if not panels_raw:
         msg = "panels es requerido"
         raise ValueError(msg)
@@ -89,6 +91,16 @@ def panel_aviso_corte_render_pdf(params: dict[str, Any]) -> dict[str, Any]:
             image_paths=image_paths,
             export_mode="include_empty",
         )
+        if output_path:
+            Path(output_path).write_bytes(docx_bytes)
+            return {
+                "pdf_base64": "",
+                "content_base64": "",
+                "saved_path": output_path,
+                "filename": Path(output_path).name,
+                "format": "docx",
+                "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            }
         encoded = base64.b64encode(docx_bytes).decode("ascii")
         # NOTE: `pdf_base64` is kept for backward compatibility with existing
         # frontend code. New consumers should rely on `content_base64` +
@@ -107,6 +119,16 @@ def panel_aviso_corte_render_pdf(params: dict[str, Any]) -> dict[str, Any]:
         image_paths=image_paths,
         export_mode="include_empty",
     )
+    if output_path:
+        Path(output_path).write_bytes(pdf_bytes)
+        return {
+            "pdf_base64": "",
+            "content_base64": "",
+            "saved_path": output_path,
+            "filename": Path(output_path).name,
+            "format": "pdf",
+            "mime_type": "application/pdf",
+        }
     encoded = base64.b64encode(pdf_bytes).decode("ascii")
     return {
         "pdf_base64": encoded,

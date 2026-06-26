@@ -36,7 +36,7 @@ ROW_HEIGHTS_CM = {
 CELL_MARGIN_TWIPS = 104
 PHOTO_WIDTH_CM = 7.36
 PHOTO_HEIGHT_CM = ROW_HEIGHTS_CM["image"]
-LOGO_WIDTH_CM = 5.49
+LOGO_WIDTH_CM = 5.76
 
 
 def _template_dir() -> Path:
@@ -383,12 +383,24 @@ def render_docx(
 
     for pidx, panel in enumerate(panels):
         if pidx > 0:
-            doc.add_page_break()
+            # Insert a page break on the first row of the new table instead
+            # of using doc.add_page_break(), which creates a standalone empty
+            # paragraph that Word renders as a blank page between panels.
+            pass
 
         table = doc.add_table(rows=9, cols=4)
         table.alignment = WD_TABLE_ALIGNMENT.CENTER
         table.autofit = False
         table.allow_autofit = False
+
+        # Page break before this table (except the first one), applied as a
+        # paragraph property on the first cell so no extra paragraph is added.
+        if pidx > 0:
+            first_cell = table.cell(0, 0)
+            pPr = first_cell.paragraphs[0]._p.get_or_add_pPr()
+            pPr.append(parse_xml(
+                '<w:pageBreakBefore xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"/>',
+            ))
 
         tblPr = table._tbl.tblPr
         existing_borders = tblPr.find(qn("w:tblBorders"))

@@ -178,7 +178,7 @@ export default function PanelAvisoCorteApp() {
           </div>
         )}
 
-        <div className="flex-1 overflow-auto p-6 flex items-start justify-center">
+        <div className="flex-1 overflow-auto px-6 pb-6 pt-2 flex items-start justify-center">
           {currentPanel ? (
             <SheetPreview
               panel={currentPanel}
