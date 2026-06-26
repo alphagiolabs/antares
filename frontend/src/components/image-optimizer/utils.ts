@@ -316,6 +316,21 @@ export function buildDownloadNameMap(items: ImageItem[], settings: BatchSettings
   return new Map(items.map((item, index) => [item.id, uniqueNames[index]]));
 }
 
+/** Name map keyed by queue position (non-excluded items only). Use for UI and export lookup. */
+export function buildExportNameMap(allItems: ImageItem[], settings: BatchSettings): Map<string, string> {
+  return buildDownloadNameMap(getEligibleItems(allItems), settings);
+}
+
+export function resolveExportFilename(
+  itemId: string,
+  allItems: ImageItem[],
+  settings: BatchSettings,
+): string {
+  const nameMap = buildExportNameMap(allItems, settings);
+  const item = allItems.find((entry) => entry.id === itemId);
+  return nameMap.get(itemId) ?? item?.originalName ?? 'archivo';
+}
+
 export function reorderImageItems(items: ImageItem[], draggedId: string, targetId: string): ImageItem[] {
   if (draggedId === targetId) {
     return items;

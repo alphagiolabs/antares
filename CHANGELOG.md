@@ -5,6 +5,16 @@ Todas las versiones notables de ANTARES se documentan aquí.
 Formato basado en [Keep a Changelog](https://keepachangelog.com/),
 y este proyecto sigue [Semantic Versioning](https://semver.org/).
 
+## [0.10.13] — 2026-06-26
+
+### Fixed
+- **Panel Aviso de Corte (batching)**: Restaurado el agrupamiento original de 4 imágenes por panel. Un cambio en v0.6.10 había roto la lógica de `build_panels()`, creando un panel por cada fila del Excel en lugar de agrupar las imágenes coincidentes en bloques de 4, lo que provocaba que las imágenes solo aparecieran en la primera posición del grid.
+- **Panel Aviso de Corte (exportación grande)**: Añadido parámetro `output_path` para que el backend escriba el DOCX/PDF directamente a disco en lugar de devolver ~180MB de base64 por el pipe IPC, lo que causaba el error "Response too large" con 200+ imágenes. El frontend usa `dialogSave` de Electron para que el usuario elija la ruta de guardado.
+- **Panel Aviso de Corte (layout PDF/preview)**: Alineadas las dimensiones de las fotos en el PDF y la vista previa con las del DOCX, cambiando de `width:100%; height:100%` a `7.36cm × 9.82cm` fijos.
+- **Panel Aviso de Corte (logo PDF)**: Restaurada la altura del `.logo-box` (1.5cm) que fue removida accidentalmente, causando que el div colapsara y el logo no se renderizara. Aumentado el ancho del logo de 5.49cm a 5.76cm en los tres formatos (DOCX, PDF, preview). El límite de 1.5cm es el máximo que WeasyPrint tolera sin generar páginas extra.
+- **Panel Aviso de Corte (páginas en blanco)**: Reemplazado `doc.add_page_break()` por la propiedad XML `<w:pageBreakBefore/>` en la primera celda de cada tabla subsiguiente, eliminando los párrafos vacíos que Word renderizaba como páginas en blanco entre paneles. Un export de 54 paneles ahora genera exactamente 54 páginas.
+- **Panel Aviso de Corte (preview)**: Reducido el padding superior del preview debajo de la barra de herramientas.
+
 ## [0.10.12] — 2026-06-25
 
 ### Fixed

@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { ChevronDown, FileDown, FolderDown, Loader2, Sparkles, Trash2, Upload } from 'lucide-react';
+import { AlertCircle, ChevronDown, FileDown, FolderOpen, Loader2, Sparkles, Trash2, Upload } from 'lucide-react';
 import CropEditor from './CropEditor';
 import PreviewWorkspace from './PreviewWorkspace';
 import QueuePanel from './QueuePanel';
@@ -11,7 +11,7 @@ import { DEFAULT_BATCH_SETTINGS, IMAGE_OPTIMIZER_PRESETS, cloneBatchSettings } f
 import { BatchSettings, CropOffset, ImageItem, PresetId, Toast } from './types';
 import {
   arrayBufferToBase64,
-  buildDownloadNameMap,
+  buildExportNameMap,
   buildZipFilename,
   generateId,
   getCropRectangle,
@@ -153,6 +153,24 @@ export default function ImageOptimizer() {
     commitSettings(draft, null);
   }, [commitSettings]);
 
+  const outputFolderLabel = useMemo(() => {
+    const folder = settings.export.outputFolder.trim();
+    if (!folder) return 'Carpeta de destino';
+    return folder.split(/[\\/]/).pop() || folder;
+  }, [settings.export.outputFolder]);
+
+  const handlePickOutputFolder = useCallback(async () => {
+    try {
+      const result = await api.dialogFolder({ title: 'Carpeta de destino', pickOnly: true });
+      const folder = result?.folder?.trim();
+      if (folder) {
+        updateSettings((draft) => { draft.export.outputFolder = folder; });
+      }
+    } catch (error) {
+      console.error('[ImageOptimizer] Error al seleccionar carpeta de destino:', error);
+    }
+  }, [updateSettings]);
+
   const updateItem = useCallback((id: string, updater: (item: ImageItem) => ImageItem) => {
     commitItems((prev) => prev.map((item) => {
       if (item.id !== id) return item;
@@ -260,8 +278,18 @@ export default function ImageOptimizer() {
   const scopedItems = useMemo(() => getEligibleItems(items, activeScope), [activeScope, items]);
   const downloadableItems = useMemo(() => getDownloadableItems(items, settings, activeScope), [activeScope, items, settings]);
   const processableItems = useMemo(() => getProcessableItems(items, settings, activeScope), [activeScope, items, settings]);
-  const downloadNameMap = useMemo(() => buildDownloadNameMap(getEligibleItems(items), settings), [items, settings]);
-  const previewNames = useMemo(() => previewFilenames(settings, items.length), [items.length, settings]);
+  const downloadNameMap = useMemo(() => buildExportNameMap(items, settings), [items, settings]);
+
+  const getExportNameMap = useCallback(
+    () => buildExportNameMap(itemsRef.current, settingsRef.current),
+    [],
+  );
+  const previewNames = useMemo(() => {
+    const previewSettings = settings.operations.renameEnabled
+      ? settings
+      : { ...settings, operations: { ...settings.operations, renameEnabled: true } };
+    return previewFilenames(previewSettings, items.length);
+  }, [items.length, settings]);
   const primaryActionLabel = useMemo(() => getPrimaryActionLabel(scopedItems, settings), [scopedItems, settings]);
 
   const handleApplyGlobalPreset = useCallback((presetId: PresetId) => {
@@ -372,133 +400,14 @@ export default function ImageOptimizer() {
     return entries.length > 0 ? entries : null;
   }, [getResolvedBlob]);
 
-  const downloadItemsAsZip = useCallback(async (itemsToDownload: ImageItem[]) => {
-    const entries = collectDownloadEntries(itemsToDownload);
-    if (!entries) {
-      addToast(
-        itemsToDownload.length === 0
-          ? 'No hay archivos listos para descargar en este alcance.'
-          : 'Todavia no hay resultados descargables.',
-        'info',
-        2200,
-      );
-      return;
-    }
-
-    const nameMap = buildDownloadNameMap(entries.map((entry) => entry.item), settingsRef.current);
-    try {
-      const zipFilename = buildZipFilename(settingsRef.current);
-      const zipBlob = await createStoredZipBlob(
-        entries.map((entry) => ({
-          filename: nameMap.get(entry.item.id) || entry.item.originalName,
-          blob: entry.blob,
-        })),
-        zipFilename,
-      );
-      downloadBlob(zipBlob, zipFilename);
-      addToast(`ZIP generado con ${entries.length} archivo(s).`, 'success', 2400);
-    } catch (error) {
-      console.error('ZIP creation failed', error);
-      const message = error instanceof Error ? error.message : 'Error desconocido';
-      addToast(`No se pudo generar el ZIP: ${message}.`, 'error', 4200);
-    }
-  }, [addToast, collectDownloadEntries]);
-
-  const downloadItems = useCallback(async (itemsToDownload: ImageItem[]) => {
-    const entries = collectDownloadEntries(itemsToDownload);
-    if (!entries) {
-      addToast(
-        itemsToDownload.length === 0
-          ? 'No hay archivos listos para descargar en este alcance.'
-          : 'Todavia no hay resultados descargables.',
-        'info',
-        2200,
-      );
-      return;
-    }
-
-    const nameMap = buildDownloadNameMap(entries.map((entry) => entry.item), settingsRef.current);
-
-    if (entries.length === 1) {
-      const entry = entries[0];
-      const filename = nameMap.get(entry.item.id) || entry.item.originalName;
-      downloadBlob(entry.blob, filename);
-      addToast('Descargando 1 archivo.', 'success', 2200);
-      return;
-    }
-
-    await downloadItemsAsZip(itemsToDownload);
-  }, [addToast, collectDownloadEntries, downloadItemsAsZip]);
-
-  const downloadItemsIndividually = useCallback(async (itemsToDownload: ImageItem[]) => {
-    const entries = collectDownloadEntries(itemsToDownload);
-    if (!entries) {
-      addToast(
-        itemsToDownload.length === 0
-          ? 'No hay archivos listos para descargar en este alcance.'
-          : 'Todavia no hay resultados descargables.',
-        'info',
-        2200,
-      );
-      return;
-    }
-    const nameMap = buildDownloadNameMap(entries.map((entry) => entry.item), settingsRef.current);
-
-    // Browsers block multiple simultaneous downloads spawned by script. We
-    // trigger them sequentially with a small delay, awaiting one frame after
-    // each click so the browser actually starts the download before the next.
-    addToast(`Descargando ${entries.length} archivo(s) individualmente.`, 'success', 2400);
-    const DELAY_MS = 220;
-    const nextFrame = () => new Promise<void>((resolve) => {
-      // setTimeout is more reliable than requestAnimationFrame here because
-      // the optimizer may be in a background tab or window without RAF.
-      window.setTimeout(resolve, DELAY_MS);
-    });
-    for (let index = 0; index < entries.length; index += 1) {
-      const entry = entries[index];
-      const filename = nameMap.get(entry.item.id) || entry.item.originalName;
-      try {
-        downloadBlob(entry.blob, filename);
-      } catch (err) {
-        console.error('Individual download failed', err);
-        addToast(`No se pudo descargar "${filename}".`, 'error', 2800);
-        return;
-      }
-      if (index < entries.length - 1) {
-        await nextFrame();
-      }
-    }
-  }, [addToast, collectDownloadEntries]);
-
-  const saveItemsToFolder = useCallback(async (itemsToSave: ImageItem[]) => {
-    const entries = collectDownloadEntries(itemsToSave);
-    if (!entries) {
-      addToast(
-        itemsToSave.length === 0
-          ? 'No hay archivos listos para guardar en este alcance.'
-          : 'Todavia no hay resultados descargables.',
-        'info',
-        2200,
-      );
-      return;
-    }
-    const nameMap = buildDownloadNameMap(entries.map((entry) => entry.item), settingsRef.current);
-
-    // Native folder picker — returns the raw folder path, no recursive scan.
-    const folderResult = await api.dialogFolder({ title: 'Carpeta de salida', pickOnly: true });
-    const folder = folderResult?.folder;
-    if (!folder) {
-      addToast('Operacion cancelada.', 'info', 1800);
-      return;
-    }
+  const writeEntriesToFolder = useCallback(async (entries: DownloadEntry[], folder: string) => {
+    const nameMap = getExportNameMap();
 
     setIsProcessing(true);
     setProcessingProgress({ current: 0, total: entries.length });
     setProcessingMessage('Guardando archivos en carpeta...');
 
     try {
-      // base64-encode each blob. Done sequentially to avoid peak memory
-      // spikes when saving dozens of high-res images at once.
       const files: Array<{ filename: string; content_b64: string }> = [];
       for (let index = 0; index < entries.length; index += 1) {
         const entry = entries[index];
@@ -530,11 +439,103 @@ export default function ImageOptimizer() {
       setProcessingMessage('');
       setProcessingProgress({ current: 0, total: 0 });
     }
-  }, [addToast, collectDownloadEntries]);
+  }, [addToast, getExportNameMap]);
 
-  const handleDownloadSingle = useCallback((item: ImageItem) => {
-    downloadItems([item]);
-  }, [downloadItems]);
+  const downloadItemsAsZip = useCallback(async (itemsToDownload: ImageItem[]) => {
+    const entries = collectDownloadEntries(itemsToDownload);
+    if (!entries) {
+      addToast(
+        itemsToDownload.length === 0
+          ? 'No hay archivos listos para descargar en este alcance.'
+          : 'Todavia no hay resultados descargables.',
+        'info',
+        2200,
+      );
+      return;
+    }
+
+    const nameMap = getExportNameMap();
+    try {
+      const zipFilename = buildZipFilename(settingsRef.current);
+      const zipBlob = await createStoredZipBlob(
+        entries.map((entry) => ({
+          filename: nameMap.get(entry.item.id) || entry.item.originalName,
+          blob: entry.blob,
+        })),
+        zipFilename,
+      );
+      downloadBlob(zipBlob, zipFilename);
+      addToast(`ZIP generado con ${entries.length} archivo(s).`, 'success', 2400);
+    } catch (error) {
+      console.error('ZIP creation failed', error);
+      const message = error instanceof Error ? error.message : 'Error desconocido';
+      addToast(`No se pudo generar el ZIP: ${message}.`, 'error', 4200);
+    }
+  }, [addToast, collectDownloadEntries, getExportNameMap]);
+
+  const downloadItems = useCallback(async (itemsToDownload: ImageItem[]) => {
+    const entries = collectDownloadEntries(itemsToDownload);
+    if (!entries) {
+      addToast(
+        itemsToDownload.length === 0
+          ? 'No hay archivos listos para descargar en este alcance.'
+          : 'Todavia no hay resultados descargables.',
+        'info',
+        2200,
+      );
+      return;
+    }
+
+    const nameMap = getExportNameMap();
+
+    if (entries.length === 1) {
+      const entry = entries[0];
+      const filename = nameMap.get(entry.item.id) || entry.item.originalName;
+      downloadBlob(entry.blob, filename);
+      addToast('Descargando 1 archivo.', 'success', 2200);
+      return;
+    }
+
+    await downloadItemsAsZip(itemsToDownload);
+  }, [addToast, collectDownloadEntries, downloadItemsAsZip, getExportNameMap]);
+
+  const downloadItemsIndividually = useCallback(async (itemsToDownload: ImageItem[]) => {
+    const entries = collectDownloadEntries(itemsToDownload);
+    if (!entries) {
+      addToast(
+        itemsToDownload.length === 0
+          ? 'No hay archivos listos para descargar en este alcance.'
+          : 'Todavia no hay resultados descargables.',
+        'info',
+        2200,
+      );
+      return;
+    }
+
+    const outputFolder = settingsRef.current.export.outputFolder.trim();
+    if (!outputFolder) {
+      addToast('Elige la carpeta de destino junto al boton Procesar antes de exportar individualmente.', 'info', 3600);
+      return;
+    }
+
+    await writeEntriesToFolder(entries, outputFolder);
+  }, [addToast, collectDownloadEntries, writeEntriesToFolder]);
+
+  const handleDownloadSingle = useCallback(async (item: ImageItem) => {
+    const entries = collectDownloadEntries([item]);
+    if (!entries) {
+      addToast('Todavia no hay resultados descargables.', 'info', 2200);
+      return;
+    }
+
+    const outputFolder = settingsRef.current.export.outputFolder.trim();
+    if (outputFolder) {
+      await writeEntriesToFolder(entries, outputFolder);
+      return;
+    }
+
+    await downloadItems([item]);
+  }, [addToast, collectDownloadEntries, downloadItems, writeEntriesToFolder]);
 
   const handleProcessScope = useCallback(async (scope: 'all' | 'selected') => {
     const targets = getProcessableItems(itemsRef.current, settingsRef.current, scope);
@@ -637,6 +638,19 @@ export default function ImageOptimizer() {
             </div>
             <div className="flex w-full flex-wrap items-center justify-end gap-2 xl:w-auto xl:flex-nowrap">
               <button
+                type="button"
+                aria-label="Elegir carpeta de destino"
+                onClick={handlePickOutputFolder}
+                disabled={isProcessing}
+                className="inline-flex min-w-0 max-w-[min(12rem,100%)] items-center gap-2 rounded-full border border-[var(--border-medium)] bg-[var(--bg-surface)] px-4 py-2 text-[10px] font-mono uppercase tracking-[0.12em] text-[var(--text-muted)] transition-colors hover:border-[var(--text-primary)]/30 hover:text-[var(--text-primary)] disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <FolderOpen size={13} className="shrink-0" />
+                <span className="truncate">{outputFolderLabel}</span>
+                {!settings.export.outputFolder.trim() && (
+                  <AlertCircle size={12} className="shrink-0 text-[var(--accent-yellow)]" />
+                )}
+              </button>
+              <button
                 onClick={() => handleProcessScope(activeScope)}
                 disabled={isProcessing || stats.includedCount === 0}
                 className="inline-flex items-center gap-2 rounded-full border border-[var(--border-medium)] bg-[var(--text-primary)] px-4 py-2 text-[10px] font-mono uppercase tracking-[0.15em] text-[var(--bg-base)] transition-all hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-30"
@@ -695,19 +709,7 @@ export default function ImageOptimizer() {
                       className="flex w-full items-center gap-2.5 px-4 py-2.5 text-left text-[11px] font-mono tracking-wide text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-elevated)]"
                     >
                       <FileDown size={13} className="text-sky-500 shrink-0" />
-                      Descargar individual
-                      <span className="ml-auto text-[9px] text-[var(--text-muted)]">{downloadableItems.length} archivo{downloadableItems.length === 1 ? '' : 's'}</span>
-                    </button>
-                    <div className="my-1 h-px bg-[var(--border-medium)]" />
-                    <button
-                      type="button"
-                      role="menuitem"
-                      onClick={() => { saveItemsToFolder(downloadableItems); closeDownloadMenu(); }}
-                      disabled={isProcessing}
-                      className="flex w-full items-center gap-2.5 px-4 py-2.5 text-left text-[11px] font-mono tracking-wide text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-elevated)] disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      <FolderDown size={13} className="text-amber-500 shrink-0" />
-                      Guardar en carpeta...
+                      Descargar individual a carpeta
                       <span className="ml-auto text-[9px] text-[var(--text-muted)]">{downloadableItems.length} archivo{downloadableItems.length === 1 ? '' : 's'}</span>
                     </button>
                   </div>
@@ -757,13 +759,14 @@ export default function ImageOptimizer() {
             settings={settings}
             previewNames={previewNames}
             activeItem={activeItem}
-            renameOnlyMode={false}
+            renameOnlyMode={activePresetId === 'rename-only'}
             onUpdateSettings={updateSettings}
             onOpenCropEditor={handleOpenCropEditor}
           />
 
           <PreviewWorkspace
             items={items}
+            downloadNameMap={downloadNameMap}
             activeItem={activeItem}
             activeItemSettings={activeItemSettings}
             activeItemOutputName={activeItemOutputName}

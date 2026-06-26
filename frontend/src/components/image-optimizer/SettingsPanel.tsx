@@ -202,11 +202,16 @@ export default function SettingsPanel({
             />
           </label>
         </div>
-        <div className="rounded-lg border border-[var(--border-medium)] bg-[var(--bg-base)] px-3 py-2">
-          <p className="text-[10px] font-mono text-[var(--text-muted)] uppercase tracking-widest">Preview</p>
-          <p className="mt-1 text-[11px] font-mono text-[var(--text-primary)]/90 truncate">{previewNames.join(', ')}</p>
-        </div>
       </OperationSection>
+      <div
+        className={`shrink-0 overflow-hidden rounded-[14px] border border-[var(--border-medium)] bg-[var(--bg-surface)] px-4 py-3 transition-opacity ${settings.operations.renameEnabled ? 'opacity-100' : 'opacity-60'}`}
+        style={{ borderLeftColor: '#06B6D4', borderLeftWidth: '3px' }}
+      >
+        <p className="text-[10px] font-mono text-[var(--text-muted)] uppercase tracking-widest">
+          Preview {settings.operations.renameEnabled ? '' : '(activa Renombrar para aplicar)'}
+        </p>
+        <p className="mt-1 text-[11px] font-mono text-[var(--text-primary)]/90 truncate">{previewNames.join(', ')}</p>
+      </div>
 
       {/* Exportar — always visible, no toggle */}
       <OperationSection

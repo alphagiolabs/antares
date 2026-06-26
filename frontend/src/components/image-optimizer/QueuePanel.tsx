@@ -1,7 +1,7 @@
 import { DragEvent, useMemo, useState } from 'react';
 import { Crop, FileDown, GripVertical, Image as ImageIcon, Loader2, Trash2 } from 'lucide-react';
 import { BatchSettings, ImageItem } from './types';
-import { formatBytes, buildDownloadNameMap, resolveSettingsForItem } from './utils';
+import { formatBytes, buildExportNameMap, resolveSettingsForItem } from './utils';
 
 interface QueuePanelProps {
   items: ImageItem[];
@@ -49,7 +49,7 @@ export default function QueuePanel({
   const [draggedItemId, setDraggedItemId] = useState<string | null>(null);
   const [dropTargetId, setDropTargetId] = useState<string | null>(null);
   const downloadNameMap = useMemo(
-    () => buildDownloadNameMap(items.filter((item) => !item.excluded), settings),
+    () => buildExportNameMap(items, settings),
     [items, settings]
   );
   const pendingCount = items.filter(i => i.status === 'pending' && !i.excluded).length;
