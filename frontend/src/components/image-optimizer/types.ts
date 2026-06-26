@@ -60,6 +60,7 @@ export interface RenameSettings {
 export interface ExportSettings {
   mode: ExportMode;
   zipName: string;
+  outputFolder: string;
 }
 
 export interface BatchSettings {

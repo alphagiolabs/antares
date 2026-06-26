@@ -129,26 +129,23 @@ describe('ImageOptimizer download menu', () => {
   });
 
   it('shows the download chevron with a single downloadable image', async () => {
-    // Default preset = direct-export, so a single added image is immediately
-    // downloadable without processing. The chevron must be present so the
-    // user can reach "Guardar en carpeta..." even with one file.
     await mountAndAddFiles([makeDownloadableItem('a', 'foto.jpg')]);
     expect(screen.getByLabelText('Opciones de descarga')).toBeInTheDocument();
   });
 
-  it('reveals "Guardar en carpeta..." option when the chevron is clicked', async () => {
+  it('reveals individual export option when the chevron is clicked', async () => {
     await mountAndAddFiles([makeDownloadableItem('a', 'foto.jpg')]);
 
     await act(async () => {
       fireEvent.click(screen.getByLabelText('Opciones de descarga'));
     });
 
-    expect(screen.getByRole('menuitem', { name: /Guardar en carpeta/i })).toBeInTheDocument();
-    // The ZIP option is intentionally hidden with a single file.
+    expect(screen.getByRole('menuitem', { name: /Descargar individual a carpeta/i })).toBeInTheDocument();
     expect(screen.queryByRole('menuitem', { name: /Descargar como ZIP/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: /Guardar en carpeta/i })).not.toBeInTheDocument();
   });
 
-  it('shows all three download options with multiple downloadable images', async () => {
+  it('shows both download options with multiple downloadable images', async () => {
     await mountAndAddFiles([
       makeDownloadableItem('a', 'foto1.jpg'),
       makeDownloadableItem('b', 'foto2.jpg'),
@@ -159,45 +156,72 @@ describe('ImageOptimizer download menu', () => {
     });
 
     expect(screen.getByRole('menuitem', { name: /Descargar como ZIP/i })).toBeInTheDocument();
-    expect(screen.getByRole('menuitem', { name: /Descargar individual/i })).toBeInTheDocument();
-    expect(screen.getByRole('menuitem', { name: /Guardar en carpeta/i })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: /Descargar individual a carpeta/i })).toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: /Guardar en carpeta/i })).not.toBeInTheDocument();
   });
 
-  it('invokes the save-to-folder backend flow when "Guardar en carpeta" is clicked', async () => {
-    const folder = 'C:\\Users\\test\\out';
-    mockApi.dialogFolder.mockResolvedValue({ paths: [], folder });
-    mockApi.imageOptimizerSaveFiles.mockResolvedValue({
-      saved_path: folder,
-      saved_count: 1,
-      skipped_count: 0,
-      saved: [{ filename: 'foto.jpg', path: `${folder}\\foto.jpg` }],
-      skipped: [],
-    });
-
-    await mountAndAddFiles([makeDownloadableItem('a', 'foto.jpg')]);
+  it('warns when "Descargar individual a carpeta" is clicked without output folder', async () => {
+    await mountAndAddFiles([
+      makeDownloadableItem('a', 'foto1.jpg'),
+      makeDownloadableItem('b', 'foto2.jpg'),
+    ]);
 
     await act(async () => {
       fireEvent.click(screen.getByLabelText('Opciones de descarga'));
     });
 
     await act(async () => {
-      fireEvent.click(screen.getByRole('menuitem', { name: /Guardar en carpeta/i }));
+      fireEvent.click(screen.getByRole('menuitem', { name: /Descargar individual a carpeta/i }));
     });
 
     await waitFor(() => {
-      expect(mockApi.dialogFolder).toHaveBeenCalledWith(
-        expect.objectContaining({ pickOnly: true }),
-      );
+      expect(screen.getByText(/Elige la carpeta de destino/i)).toBeInTheDocument();
     });
+    expect(mockApi.imageOptimizerSaveFiles).not.toHaveBeenCalled();
+  });
+
+  it('saves all files via backend when output folder is configured', async () => {
+    const folder = 'C:\\Users\\test\\destino';
+    mockApi.dialogFolder.mockResolvedValue({ paths: [], folder });
+    mockApi.imageOptimizerSaveFiles.mockResolvedValue({
+      saved_path: folder,
+      saved_count: 2,
+      skipped_count: 0,
+      saved: [
+        { filename: 'foto_001.jpg', path: `${folder}\\foto_001.jpg` },
+        { filename: 'foto_002.jpg', path: `${folder}\\foto_002.jpg` },
+      ],
+      skipped: [],
+    });
+
+    await mountAndAddFiles([
+      makeDownloadableItem('a', 'foto1.jpg'),
+      makeDownloadableItem('b', 'foto2.jpg'),
+    ]);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /Elegir carpeta de destino/i }));
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByLabelText('Opciones de descarga'));
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('menuitem', { name: /Descargar individual a carpeta/i }));
+    });
+
     await waitFor(() => {
       expect(mockApi.imageOptimizerSaveFiles).toHaveBeenCalledWith(
         expect.objectContaining({
           output_folder: folder,
           files: expect.arrayContaining([
             expect.objectContaining({ filename: 'foto_001.jpg' }),
+            expect.objectContaining({ filename: 'foto_002.jpg' }),
           ]),
         }),
       );
     });
+    expect(mockApi.imageOptimizerSaveFiles).toHaveBeenCalledTimes(1);
   });
 });

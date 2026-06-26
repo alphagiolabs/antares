@@ -32,6 +32,7 @@ export const DEFAULT_BATCH_SETTINGS: BatchSettings = {
   export: {
     mode: 'zip',
     zipName: 'imagenes_optimizadas',
+    outputFolder: '',
   },
 };
 
@@ -77,7 +78,7 @@ export const IMAGE_OPTIMIZER_PRESETS: PresetDefinition[] = [
       crop: { aspectRatio: '4:5', cropOrigin: 'bottom' },
       resize: { maxWidth: 1080, maxHeight: 1350, noUpscale: true },
       compression: { maxSizeMB: 0.8, quality: 0.82, useWebWorker: true },
-      export: { mode: 'zip', zipName: 'social-media' },
+      export: { mode: 'zip', zipName: 'social-media', outputFolder: '' },
     }),
   },
   {
@@ -95,7 +96,7 @@ export const IMAGE_OPTIMIZER_PRESETS: PresetDefinition[] = [
       },
       crop: { aspectRatio: 'original', cropOrigin: 'bottom' },
       format: { outputFormat: 'original' },
-      export: { mode: 'zip', zipName: 'imagenes_renombradas' },
+      export: { mode: 'zip', zipName: 'imagenes_renombradas', outputFolder: '' },
     }),
   },
   {
@@ -107,7 +108,7 @@ export const IMAGE_OPTIMIZER_PRESETS: PresetDefinition[] = [
       operations: { cropEnabled: false, resizeEnabled: false, formatEnabled: true, compressionEnabled: true, renameEnabled: false },
       format: { outputFormat: 'webp' },
       compression: { maxSizeMB: 0.7, quality: 0.75, useWebWorker: true },
-      export: { mode: 'zip', zipName: 'imagenes_webp' },
+      export: { mode: 'zip', zipName: 'imagenes_webp', outputFolder: '' },
     }),
   },
   {
@@ -119,7 +120,7 @@ export const IMAGE_OPTIMIZER_PRESETS: PresetDefinition[] = [
       operations: { cropEnabled: true, resizeEnabled: false, formatEnabled: false, compressionEnabled: false, renameEnabled: false },
       crop: { aspectRatio: '1:1', cropOrigin: 'bottom' },
       format: { outputFormat: 'original' },
-      export: { mode: 'zip', zipName: 'recortes' },
+      export: { mode: 'zip', zipName: 'recortes', outputFolder: '' },
     }),
   },
 ];

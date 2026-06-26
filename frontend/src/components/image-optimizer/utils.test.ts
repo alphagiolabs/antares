@@ -109,6 +109,7 @@ describe('image optimizer zip export', () => {
       export: {
         mode: 'zip',
         zipName: 'fotos_cliente.zip',
+        outputFolder: '',
       },
     };
 
@@ -121,6 +122,7 @@ describe('image optimizer zip export', () => {
       export: {
         mode: 'zip',
         zipName: 'imagenes optimizadas cliente.zip',
+        outputFolder: '',
       },
     };
 
