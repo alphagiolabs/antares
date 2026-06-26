@@ -89,7 +89,8 @@
 }
 
 .pac-cell-logo img {
-  width: 5.49cm;
+  width: 5.76cm;
+  max-height: 1.5cm;
   object-fit: contain;
 }
 
