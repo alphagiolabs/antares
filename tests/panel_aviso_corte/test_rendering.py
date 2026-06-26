@@ -101,7 +101,7 @@ def test_pdf_template_photos_fill_their_cells() -> None:
     template = template_path.read_text(encoding="utf-8")
 
     assert ".cell-photo-inner {\n      width: 100%;\n      height: 9.82cm;" in template
-    assert ".cell-photo img {\n      width: 100%;\n      height: 100%;" in template
+    assert ".cell-photo img {\n      width: 7.36cm;\n      height: 9.82cm;" in template
     assert "object-fit: cover;" in template
 
 

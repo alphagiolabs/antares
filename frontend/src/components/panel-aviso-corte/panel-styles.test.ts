@@ -10,8 +10,8 @@ describe('panel aviso preview styles', () => {
     );
 
     expect(css).toMatch(/\.pac-cell-photo-inner\s*\{[^}]*height:\s*9\.82cm/s);
-    expect(css).toMatch(/\.pac-cell-photo img\s*\{[^}]*width:\s*100%/s);
-    expect(css).toMatch(/\.pac-cell-photo img\s*\{[^}]*height:\s*100%/s);
+    expect(css).toMatch(/\.pac-cell-photo img\s*\{[^}]*width:\s*7\.36cm/s);
+    expect(css).toMatch(/\.pac-cell-photo img\s*\{[^}]*height:\s*9\.82cm/s);
     expect(css).toMatch(/\.pac-cell-photo img\s*\{[^}]*object-fit:\s*cover/s);
   });
 });

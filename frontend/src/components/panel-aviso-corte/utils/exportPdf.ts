@@ -23,6 +23,12 @@ export async function buildImagePayload(
   return { imagePaths, imagesBase64 };
 }
 
+function _defaultFilename(format: 'pdf' | 'docx'): string {
+  const now = new Date();
+  const ts = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`;
+  return `panel_aviso_corte_${ts}.${format}`;
+}
+
 export async function exportPanelDocument(
   panels: PanelVM[],
   logoLeft: File | null,
@@ -58,6 +64,33 @@ export async function exportPanelDocument(
     source_row_index: p.sourceRowIndex,
   }));
 
+  const ext = format === 'docx' ? 'docx' : 'pdf';
+  const defaultName = _defaultFilename(format);
+
+  // In Electron: write directly to disk via save dialog to avoid
+  // base64-encoding large documents through IPC (which caps at ~128MB).
+  if (window.electronAPI?.invoke) {
+    const dialogResp = await api.dialogSave({
+      title: 'Guardar documento',
+      defaultPath: defaultName,
+      filters: [{ name: format === 'docx' ? 'Word' : 'PDF', extensions: [ext] }],
+    });
+    if (dialogResp.paths && dialogResp.paths.length > 0) {
+      const outputPath = dialogResp.paths[0];
+      const resp = await api.panelAvisoCorteRenderPdf({
+        panels: panelsPayload,
+        logos,
+        images: imagesBase64,
+        image_paths: imagePaths,
+        format,
+        output_path: outputPath,
+      });
+      return { filename: resp.filename || outputPath };
+    }
+    return { filename: '' };
+  }
+
+  // Browser fallback: download via blob
   const resp = await api.panelAvisoCorteRenderPdf({
     panels: panelsPayload,
     logos,
@@ -66,7 +99,8 @@ export async function exportPanelDocument(
     format,
   });
 
-  const contentBytes = atob(resp.pdf_base64);
+  const content = resp.content_base64 || resp.pdf_base64;
+  const contentBytes = atob(content);
   const buffer = new Uint8Array(contentBytes.length);
   for (let i = 0; i < contentBytes.length; i++) {
     buffer[i] = contentBytes.charCodeAt(i);

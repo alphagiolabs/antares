@@ -108,3 +108,59 @@ def test_render_docx_response_advertises_docx_format(monkeypatch) -> None:
     assert "wordprocessingml" in result["mime_type"]
     assert result["pdf_base64"] == result["content_base64"]
     assert result["filename"].endswith(".docx")
+
+
+def test_render_pdf_writes_to_disk_when_output_path_given(monkeypatch, tmp_path) -> None:
+    """When output_path is provided, the handler writes the file to disk
+    and returns saved_path instead of base64-encoding the content.
+    """
+    def fake_render_pdf(*, panels, logos, images, image_paths, export_mode):  # type: ignore[no-untyped-def]
+        return b"%PDF-1.4disk-content", "panel.pdf"
+
+    monkeypatch.setattr(handler_module, "render_pdf", fake_render_pdf)
+
+    output_file = tmp_path / "output.pdf"
+    result = handler_module.panel_aviso_corte_render_pdf(
+        {
+            "panels": [_panel_payload()],
+            "logos": {},
+            "images": {},
+            "image_paths": {},
+            "format": "pdf",
+            "output_path": str(output_file),
+        },
+    )
+
+    assert result["saved_path"] == str(output_file)
+    assert result["pdf_base64"] == ""
+    assert result["content_base64"] == ""
+    assert result["filename"] == "output.pdf"
+    assert output_file.read_bytes() == b"%PDF-1.4disk-content"
+
+
+def test_render_docx_writes_to_disk_when_output_path_given(monkeypatch, tmp_path) -> None:
+    """When output_path is provided with format=docx, the handler writes
+    the file to disk and returns saved_path instead of base64.
+    """
+    def fake_render_docx(*, panels, logos, images, image_paths, export_mode):  # type: ignore[no-untyped-def]
+        return b"PK\x03\x04docx-disk-content", "panel.docx"
+
+    monkeypatch.setattr(handler_module, "render_docx", fake_render_docx)
+
+    output_file = tmp_path / "output.docx"
+    result = handler_module.panel_aviso_corte_render_pdf(
+        {
+            "panels": [_panel_payload()],
+            "logos": {},
+            "images": {},
+            "image_paths": {},
+            "format": "docx",
+            "output_path": str(output_file),
+        },
+    )
+
+    assert result["saved_path"] == str(output_file)
+    assert result["pdf_base64"] == ""
+    assert result["content_base64"] == ""
+    assert result["filename"] == "output.docx"
+    assert output_file.read_bytes() == b"PK\x03\x04docx-disk-content"
