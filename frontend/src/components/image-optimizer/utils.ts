@@ -48,6 +48,45 @@ export function generateId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
+export type OptimizerFile = { filename: string; content_b64: string };
+
+/**
+ * Reparte una lista de archivos (con content_b64) en chunks cuyo tamaño total
+ * de base64 queda por debajo del cap de línea stdin del backend
+ * (ANTARES_IPC_MAX_STDIN_LINE, default 64MB) y cuyo conteo no excede el cap
+ * por-solicitud del handler (500 archivos). Enviando el batch entero en un
+ * solo mensaje IPC, ~50 imágenes a 1MB ya superan el cap y el backend dropea
+ * la línea (el await del renderer queda colgado). El handler save_files es
+ * independiente por-archivo con dedup on-disk, así que los chunks son seguros
+ * entre sí. ponytail: ceiling = 32MB base64/chunk (~24MB decodificados, bajo
+ * el techo de 512MB del handler y el de 64MB del transporte); upgrade path:
+ * streamed decode a disco.
+ */
+export function chunkFilesForIpc(
+  files: readonly OptimizerFile[],
+  maxBytesPerChunk = 32 * 1024 * 1024,
+  maxFilesPerChunk = 500,
+): OptimizerFile[][] {
+  const chunks: OptimizerFile[][] = [];
+  let current: OptimizerFile[] = [];
+  let currentBytes = 0;
+  for (const file of files) {
+    const size = file.content_b64.length;
+    if (
+      current.length > 0 &&
+      (currentBytes + size > maxBytesPerChunk || current.length >= maxFilesPerChunk)
+    ) {
+      chunks.push(current);
+      current = [];
+      currentBytes = 0;
+    }
+    current.push(file);
+    currentBytes += size;
+  }
+  if (current.length > 0) chunks.push(current);
+  return chunks;
+}
+
 export function getAspectRatioValue(ratio: AspectRatio): number | null {
   const option = ASPECT_RATIO_OPTIONS.find((item) => item.value === ratio);
   return option?.ratio ?? null;

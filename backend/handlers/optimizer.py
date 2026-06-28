@@ -9,7 +9,34 @@ from io import BytesIO
 from pathlib import Path
 from typing import Any
 
-from backend.handlers.common import with_locale
+from backend.handlers.common import guard_user_path, with_locale
+
+# ponytail: techos anti-DoS para batches del optimizer (renderer comprometido
+# podría enviar base64 gigante). 500 archivos / 512MB totales cubren batches
+# legítimos grandes; encima se rechaza con error claro. Ceiling: un solo
+# archivo de 512MB aún se procesa; upgrade path: streamed decode a disco.
+_MAX_OPTIMIZER_FILES: int = 500
+_MAX_OPTIMIZER_TOTAL_BYTES: int = 512 * 1024 * 1024
+
+
+def _decode_len(content_b64: str) -> int:
+    """Estima el tamaño en bytes del payload base64 decodificado."""
+    return (len(content_b64) * 3) // 4
+
+
+def _enforce_optimizer_bounds(files: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Acota el batch: máximo número de archivos y máximo de bytes totales.
+
+    Devuelve la lista truncada a ``_MAX_OPTIMIZER_FILES`` y lanza
+    ``ValueError`` si los bytes decodificados exceden el techo. Aditivo: los
+    batches legítimos (por debajo de ambos techos) pasan sin cambios.
+    """
+    capped = list(files[:_MAX_OPTIMIZER_FILES])
+    total = sum(_decode_len(str(f.get("content_b64", "") or "")) for f in capped)
+    if total > _MAX_OPTIMIZER_TOTAL_BYTES:
+        msg = "Demasiados datos de imagen en una sola solicitud"
+        raise ValueError(msg)
+    return capped
 
 
 def _safe_name(value: str, fallback: str) -> str:
@@ -86,9 +113,10 @@ def image_optimizer_zip(params: dict[str, Any]) -> dict[str, str]:
     if not files:
         msg = "No files provided"
         raise ValueError(msg)
+    files = _enforce_optimizer_bounds(files)
     output_path = str(params.get("output_path") or "").strip()
     if output_path:
-        destination = Path(output_path).expanduser().resolve()
+        destination = guard_user_path(output_path, params, label="ZIP de salida")
         if destination.suffix.lower() != ".zip":
             destination = destination.with_suffix(".zip")
         destination.parent.mkdir(parents=True, exist_ok=True)
@@ -119,12 +147,22 @@ def image_optimizer_save_files(params: dict[str, Any]) -> dict[str, Any]:
         msg = "output_folder is required"
         raise ValueError(msg)
 
-    destination = Path(output_folder).expanduser().resolve()
+    all_files = list(files)
+    files = _enforce_optimizer_bounds(all_files)
+    overflow_count = len(all_files) - len(files)
+
+    destination = guard_user_path(output_folder, params, label="Carpeta de salida")
     destination.mkdir(parents=True, exist_ok=True)
 
     seen: dict[str, int] = {}
     saved: list[dict[str, str]] = []
     skipped: list[dict[str, str]] = []
+
+    # Archivos más allá del techo del batch: se reportan como skipped en vez de
+    # dropped silenciosamente, conservando el contrato del retorno.
+    for idx in range(overflow_count):
+        raw_name = str(all_files[len(all_files) - overflow_count + idx].get("filename", "") or "archivo")
+        skipped.append({"filename": _safe_filename(raw_name, "archivo"), "reason": "batch_limit_exceeded"})
 
     for file_info in files:
         raw_name = str(file_info.get("filename", "") or "archivo")

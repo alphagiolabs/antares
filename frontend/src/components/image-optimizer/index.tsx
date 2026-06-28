@@ -13,6 +13,7 @@ import {
   arrayBufferToBase64,
   buildExportNameMap,
   buildZipFilename,
+  chunkFilesForIpc,
   generateId,
   getCropRectangle,
   getDownloadableItems,
@@ -27,6 +28,7 @@ import {
   revokeItemUrls,
   syncStaleState,
   downloadBlob,
+  type OptimizerFile,
 } from './utils';
 import { createStoredZipBlob } from './zip';
 import { saveFeatureHistory } from '../../utils/history';
@@ -408,21 +410,26 @@ export default function ImageOptimizer() {
     setProcessingMessage('Guardando archivos en carpeta...');
 
     try {
-      const files: Array<{ filename: string; content_b64: string }> = [];
+      const allFiles: OptimizerFile[] = [];
       for (let index = 0; index < entries.length; index += 1) {
         const entry = entries[index];
         const filename = nameMap.get(entry.item.id) || entry.item.originalName;
         const buffer = await entry.blob.arrayBuffer();
-        files.push({
-          filename,
-          content_b64: arrayBufferToBase64(buffer),
-        });
+        allFiles.push({ filename, content_b64: arrayBufferToBase64(buffer) });
         setProcessingProgress({ current: index + 1, total: entries.length });
       }
 
-      const result = await api.imageOptimizerSaveFiles({ files, output_folder: folder });
-      const saved = result?.saved_count ?? 0;
-      const skipped = result?.skipped_count ?? 0;
+      // SEC-008a reconciliación: el backend dropea líneas IPC > 64MB, así que
+      // un batch de ~50 imágenes a 1MB en un solo mensaje se pierde. Se envía
+      // en chunks por tamaño base64 + conteo (ver chunkFilesForIpc).
+      let saved = 0;
+      let skipped = 0;
+      for (const chunk of chunkFilesForIpc(allFiles)) {
+        const result = await api.imageOptimizerSaveFiles({ files: chunk, output_folder: folder });
+        saved += result?.saved_count ?? 0;
+        skipped += result?.skipped_count ?? 0;
+      }
+
       if (saved === 0) {
         addToast('No se pudo guardar ningun archivo en la carpeta.', 'error', 4200);
       } else if (skipped === 0) {
