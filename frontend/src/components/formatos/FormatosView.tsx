@@ -110,7 +110,7 @@ function PdfMultiViewer({ blob, desde, total, padLen, zoom }: { blob: Blob | nul
             const ab = await blob!.arrayBuffer();
             if (cancelled) return;
 
-            const pdf = await pdfjs.getDocument({ data: new Uint8Array(ab) }).promise;
+            const pdf = await pdfjs.getDocument({ data: new Uint8Array(ab), isEvalSupported: false }).promise;
             if (cancelled) return;
             const numPages = pdf.numPages;
             const rawContainerW = (containerRef.current?.clientWidth ?? 1100) - 32;
