@@ -56,3 +56,17 @@ class TestPluginLoader:
         load_plugins_from_dir(plugins_dir)
         # Should not crash
         assert registry.list_formats() == []
+
+    def test_kill_switch_disables_loading(self, tmp_path, monkeypatch) -> None:
+        """SEC-002: ANTARES_PLUGINS_DISABLED=1 skips plugin loading entirely."""
+        registry = format_registry.FormatRegistry()
+        monkeypatch.setattr(format_registry, "_registry", registry)
+        monkeypatch.setenv("ANTARES_PLUGINS_DISABLED", "1")
+
+        plugins_dir = tmp_path / "plugins"
+        plugins_dir.mkdir()
+        (plugins_dir / "p.py").write_text(
+            'def register(registry):\n    registry.add_format("KILLSW", ".ks", ("RGB",))\n',
+        )
+        load_plugins_from_dir(plugins_dir)
+        assert "KILLSW" not in registry.list_formats()
