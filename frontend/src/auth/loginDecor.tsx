@@ -1,3 +1,4 @@
+import './_loginDecor.css';
 import { useState, useRef, useEffect, useCallback, type MouseEvent as ReactMouseEvent } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { LogIn, UserPlus, Loader2 } from 'lucide-react';
