@@ -1,3 +1,22 @@
+# catálogo legacy (sin uso)
+
+Este archivo **NO se lee en runtime**. El catálogo activo está en
+`data/formatos/catalog.json` (resuelto por `_CATALOG_PATH` en
+`backend/core/formatos.py`). Ver `issues/simplification/simplification-023-...md`
+para la triple fuente de verdad de formatos built-in.
+
+Movido desde `formatos/catalog.json` (simplification-007). Conservado por
+historial: era un duplicado con valores **divergentes** del catálogo activo y de
+`_BUILTIN_FORMATS` en Python (ej. `televisiva.y = 41.0` aquí vs `25` en Python;
+`maquina.height = 21.0` aquí vs `20` en Python), lo que inducía a creer que
+editarlo cambiaba el catálogo en runtime. No lo hacía.
+
+Los archivos `.b64` (`template-d.b64`, `maquina.b64`, `televisiva.b64`) **sí** se
+leen vía `_resolve_path` y permanecen en `formatos/` (sin cambios).
+
+## Contenido original (formatos/catalog.json)
+
+```json
 [
   {
     "id": "template-d",
@@ -85,3 +104,4 @@
     "has_mapping": true
   }
 ]
+```
