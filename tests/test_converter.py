@@ -4,13 +4,22 @@ Crea imágenes reales con Pillow para verificar conversiones,
 redimensiones y manejo de errores.
 """
 
+import base64
+import io
 from pathlib import Path
 
+import numpy as np
 import pytest
 from PIL import Image
 
-from backend.core.converter import convertir_imagen
+import backend.core.converter  # noqa: F401  (SEC-008b: triggers MAX_IMAGE_PIXELS cap)
+from backend.core.converter import convertir_a_preview, convertir_imagen
 from backend.core.format_registry import get_registry
+
+
+def test_pillow_decompression_bomb_cap_is_set() -> None:
+    """SEC-008b: converter setea Image.MAX_IMAGE_PIXELS para frenar bombas."""
+    assert Image.MAX_IMAGE_PIXELS == 50_000_000
 
 
 @pytest.fixture
@@ -106,3 +115,75 @@ class TestConvertirImagen:
 
         assert resultado == salida
         assert salida.read_text(encoding="utf-8") == "TXTIMG:RGB:100x100:77"
+
+
+# ─── perf-12: convertir_a_preview single resize ─────────────────────────────
+
+
+def _decode_preview_uri(uri: str) -> Image.Image:
+    raw = uri.split(",", 1)[1]
+    return Image.open(io.BytesIO(base64.b64decode(raw)))
+
+
+def _make_image(path: Path, size: tuple[int, int], stripes: bool = False) -> Path:
+    if stripes:
+        arr = np.zeros((size[1], size[0], 3), dtype=np.uint8)
+        for x in range(size[0]):
+            arr[:, x, :] = 255 if (x // 4) % 2 == 0 else 0
+        Image.fromarray(arr, "RGB").save(path)
+    else:
+        Image.new("RGB", size, (200, 50, 80)).save(path)
+    return path
+
+
+def test_convertir_a_preview_resizes_once_when_resize_given(tmp_path, monkeypatch) -> None:
+    """perf-12: when `resize` is provided, the preview must be produced with a
+    single LANCZOS resize. The old code resized to 400px first and then resized
+    again to `resize` — a double resample."""
+    path = _make_image(tmp_path / "big.png", (1200, 800))
+    calls: list[int] = []
+    orig_resize = Image.Image.resize
+
+    def counting_resize(self, *a, **kw):
+        calls.append(1)
+        return orig_resize(self, *a, **kw)
+
+    monkeypatch.setattr(Image.Image, "resize", counting_resize)
+    result = convertir_a_preview(path, "PNG", 85, resize=(800, 533))
+    assert len(calls) == 1, f"expected a single resize, got {len(calls)}"
+    with _decode_preview_uri(result["preview"]) as img:
+        assert img.size == (800, 533)
+
+
+def test_convertir_a_preview_without_resize_caps_at_400(tmp_path) -> None:
+    """perf-12 regression guard: without `resize`, the 400px preview cap holds."""
+    path = _make_image(tmp_path / "big.png", (1200, 800))
+    result = convertir_a_preview(path, "PNG", 85)
+    with _decode_preview_uri(result["preview"]) as img:
+        assert img.size == (400, int(800 * 400 / 1200))
+        assert max(img.size) <= 400
+
+
+def test_convertir_a_preview_large_resize_is_sharper_than_double_resample(tmp_path) -> None:
+    """perf-12: with resize > 400px, a single resize from the source is sharper
+    than the old 400px-cap-then-upscale double resample (the issue's acceptance
+    test). Verifies the fix removes the blurry upsampling path."""
+    path = _make_image(tmp_path / "stripes.png", (1600, 1067), stripes=True)
+
+    new_result = convertir_a_preview(path, "PNG", 85, resize=(800, 533))
+    with _decode_preview_uri(new_result["preview"]) as nimg:
+        new_arr = np.asarray(nimg.convert("L"), dtype=np.int32)
+
+    with Image.open(path) as src:
+        longest = max(src.size)
+        ratio = min(400 / longest, 1.0)
+        mid = src.resize((int(src.width * ratio), int(src.height * ratio)), Image.Resampling.LANCZOS)
+        old = mid.resize((800, 533), Image.Resampling.LANCZOS)
+    old_arr = np.asarray(old.convert("L"), dtype=np.int32)
+
+    def sharpness(arr: np.ndarray) -> float:
+        return float(np.abs(np.diff(arr, axis=1)).sum())
+
+    assert sharpness(new_arr) > sharpness(old_arr), (
+        "single resize from source should be sharper than 400px-then-upscale"
+    )
