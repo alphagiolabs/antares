@@ -9,7 +9,7 @@ export default function AntaresScene({ reducedMotion }: AntaresSceneProps) {
       {reducedMotion ? (
         <img
           className="at-scene-shell__poster"
-          src="./sign-up-image.png"
+          src="./sign-up-image.webp"
           alt=""
           draggable={false}
         />
@@ -20,8 +20,8 @@ export default function AntaresScene({ reducedMotion }: AntaresSceneProps) {
           loop
           muted
           playsInline
-          poster="./sign-up-image.png"
-          preload="auto"
+          poster="./sign-up-image.webp"
+          preload="metadata"
           aria-hidden="true"
         >
           <source src="./sign-up-video.mp4" type="video/mp4" />
