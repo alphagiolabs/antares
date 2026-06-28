@@ -13,6 +13,7 @@ from concurrent.futures import ALL_COMPLETED, CancelledError, wait
 from pathlib import Path
 from typing import Any, cast
 
+from backend.core.column_detection import detect_best_key_column as _detect_key_column_core
 from backend.core.converter import FORMATOS_SOPORTADOS, convertir_imagen, copiar_archivo, copiar_video, es_video
 from backend.core.jobs import (
     Job,
@@ -22,7 +23,7 @@ from backend.core.jobs import (
 )
 from backend.core.renamer import RenamerEngine, SequenceMode
 from backend.core.scheduler import get_scheduler
-from backend.handlers.common import log_message, validate_params, with_locale
+from backend.handlers.common import guard_user_path, log_message, validate_params, with_locale
 from backend.ipc_protocol import send_notification
 from backend.utils.i18n import set_locale, t
 from backend.utils.validators import parse_filename_parts
@@ -112,36 +113,8 @@ def _detect_best_key_column(
         return ""
     if len(db_columns) == 1:
         return db_columns[0]
-
-    from backend.core.database import buscar_por_columna
-
-    # Parse codes from a sample of files
-    sample_files = files[:sample_size]
-    codigos = []
-    stems = []
-    for f in sample_files:
-        p = Path(f)
-        code, _ = parse_filename_parts(p.name)
-        codigos.append(code)
-        stems.append(p.stem)
-
-    search_keys = list(set(codigos + stems))
-    if not search_keys:
-        return db_columns[0]
-
-    best_col = db_columns[0]
-    best_count = -1
-    for col in db_columns:
-        try:
-            matches = buscar_por_columna(search_keys, col)
-            count = len(matches)
-        except Exception:
-            count = -1
-        if count > best_count:
-            best_count = count
-            best_col = col
-
-    return best_col
+    final, _, _ = _detect_key_column_core(files, db_columns, sample_size=sample_size)
+    return final
 
 
 def _resolve_key_column(
@@ -163,41 +136,10 @@ def _resolve_key_column(
         return key_column
     if len(columns) == 1:
         return columns[0]
-
-    # Parse codes once and reuse for both best-detection and user comparison
-    from backend.core.database import buscar_por_columna
-
-    sample_files = files[:30]
-    codigos: list[str] = []
-    stems: list[str] = []
-    for f in sample_files:
-        p = Path(f)
-        code, _ = parse_filename_parts(p.name)
-        codigos.append(code)
-        stems.append(p.stem)
-    search_keys = list(set(codigos + stems))
-    if not search_keys:
-        return columns[0]
-
-    # Probe all columns in a single pass, remembering the user's count
-    best_col = columns[0]
-    best_count = -1
-    user_count = -1
-    for col in columns:
-        try:
-            count = len(buscar_por_columna(search_keys, col))
-        except Exception:
-            count = -1
-        if col == key_column:
-            user_count = count
-        if count > best_count:
-            best_count = count
-            best_col = col
-
-    # Keep the user's choice if it matches equally well as the best
-    if key_column and key_column in columns and user_count >= 0 and user_count >= best_count and user_count > 0:
-        return key_column
-    return best_col
+    final, _, _ = _detect_key_column_core(
+        files, columns, preferred=key_column if key_column else None
+    )
+    return final
 
 
 @with_locale
@@ -436,12 +378,14 @@ def process_cancel(params: dict[str, Any]) -> dict[str, Any]:
 @with_locale
 def preview_image(params: dict[str, Any]) -> dict[str, str]:
     from backend.core.converter import convertir_a_preview
-    return convertir_a_preview(params.get("path", ""), params.get("formato", "PNG"), params.get("calidad", 85), params.get("resize"))
+    path = guard_user_path(params.get("path", ""), params, label="Vista previa")
+    return convertir_a_preview(str(path), params.get("formato", "PNG"), params.get("calidad", 85), params.get("resize"))
 
 
 @with_locale
 def is_video(params: dict[str, Any]) -> dict[str, bool]:
-    return {"is_video": es_video(params.get("path", ""))}
+    path = guard_user_path(params.get("path", ""), params, label="Archivo de video")
+    return {"is_video": es_video(str(path))}
 
 
 def _run_conversion_job(job: Job) -> None:
@@ -457,6 +401,13 @@ def _run_conversion_job(job: Job) -> None:
         set_locale(params.get("locale", "es"))
         files = params.get("files", [])
         destino = params.get("destino", "")
+        # SEC-003 Capa 2: confina files (read), destino (write-root) y
+        # mapping_path (read) a raíces vouched cuando el router las inyecta
+        # (enforce). En warn solo aplica el piso system-sensitive (redundante
+        # con is_safe_user_path del límite IPC) — sin cambio de comportamiento.
+        files = [str(guard_user_path(f, params, label="Archivo a convertir")) for f in files if f]
+        if destino:
+            destino = str(guard_user_path(destino, params, label="Destino de conversión"))
         formato = params.get("formato", "JPEG")
         calidad = params.get("calidad", 95)
         conversion_enabled = params.get("conversion_enabled", True)
@@ -472,6 +423,8 @@ def _run_conversion_job(job: Job) -> None:
         key_column = params.get("key_column", "")
         file_mapping = params.get("mapping") or None
         mapping_path = params.get("mapping_path") or ""
+        if mapping_path:
+            mapping_path = str(guard_user_path(mapping_path, params, label="Excel de mapeo"))
         mapping_id_column = params.get("id_column") or None
         mapping_rename_column = params.get("rename_column") or None
         mapping_index = None
@@ -767,7 +720,6 @@ def db_detect_key_column(params: dict[str, Any]) -> dict[str, Any]:
         return {"key_column": "", "matches": 0, "columns": []}
 
     from backend.core.config_fields import get_field_names
-    from backend.core.database import buscar_por_columna
 
     db_cols = get_field_names()
     if not db_cols:
@@ -776,39 +728,8 @@ def db_detect_key_column(params: dict[str, Any]) -> dict[str, Any]:
     if len(db_cols) == 1:
         return {"key_column": db_cols[0], "matches": 0, "columns": [{"name": db_cols[0], "matches": 0}]}
 
-    # Parse codes from a sample of files (30 is enough for detection)
-    sample_files = files[:30]
-    codigos: list[str] = []
-    stems: list[str] = []
-    for f in sample_files:
-        p = Path(f)
-        code, _ = parse_filename_parts(p.name)
-        codigos.append(code)
-        stems.append(p.stem)
-
-    search_keys = list(set(codigos + stems))
-    if not search_keys:
-        return {"key_column": db_cols[0], "matches": 0, "columns": []}
-
-    column_results: list[dict[str, Any]] = []
-    best_col = db_cols[0]
-    best_count = -1
-    for col in db_cols:
-        try:
-            matches = buscar_por_columna(search_keys, col)
-            count = len(matches)
-        except Exception:
-            count = -1
-        column_results.append({"name": col, "matches": count})
-        if count > best_count:
-            best_count = count
-            best_col = col
-
-    return {
-        "key_column": best_col,
-        "matches": best_count,
-        "columns": column_results,
-    }
+    final, best_count, col_results = _detect_key_column_core(files, db_cols)
+    return {"key_column": final, "matches": best_count, "columns": col_results}
 
 
 HANDLERS = {

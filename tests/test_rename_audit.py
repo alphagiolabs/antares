@@ -58,7 +58,13 @@ def _setup_fields(monkeypatch, tmp_path, fields):
         "backend.core.config_fields._invalidate_fields_cache",
         lambda: None,
     )
+    import backend.core.database
+    monkeypatch.setattr(
+        "backend.core.database.contar_matches_por_columna",
+        lambda codes, cols: {col: len(backend.core.database.buscar_por_columna(codes, col)) for col in cols}
+    )
     save_fields(fields)
+
 
 
 def _make_job(tmp_path, files, **extra):
