@@ -1,3 +1,5 @@
+import { isVouchedPath } from './vouchedPaths';
+
 export type PdfQuality = 'high' | 'low';
 
 export interface PdfImageSource {
@@ -37,7 +39,11 @@ export async function fileToPdfImageSource(
   localImagePaths: Record<string, string>,
 ): Promise<string> {
   const localPath = getElectronFilePath(file);
-  if (localPath) {
+  // SEC-004 Capa 2: solo usamos token disk-backed si la ruta fue vouched por
+  // un diálogo nativo (marcada vía api.dialog*). Un File de input/drag-drop
+  // expone .path pero no está vouched → caemos a data URL para no reabrir el
+  // vector de disclosure (warn) ni que se descarte en enforce. PDF idéntico.
+  if (localPath && isVouchedPath(localPath)) {
     const token = buildLocalImageToken(key);
     localImagePaths[token] = localPath;
     return token;
@@ -104,7 +110,9 @@ export async function imageToPdfSource(
 ): Promise<PdfImageSource> {
   if (quality === 'high') {
     const localPath = getElectronFilePath(file);
-    if (localPath) {
+    // SEC-004 Capa 2: solo disk-backed si la ruta está vouched por un diálogo
+    // nativo. input/drag-drop no vouched → data URL (compresión high).
+    if (localPath && isVouchedPath(localPath)) {
       const token = buildLocalImageToken(key);
       return { src: token, localPath, token };
     }

@@ -1,4 +1,25 @@
 (function () {
+  // ponytail: espejo mínimo de frontend/src/utils/themeValidate.ts (no puede
+  // importar TS por ser un script clásico pre-bundle). Validar antes de
+  // inyectar para frenar CSS injection desde un localStorage manipulado.
+  var COLOR_RE = /^(#[0-9a-f]{3,8}|(?:rgba?|hsla?)\([0-9.,%\s/]+\)|[a-z]+)$/i;
+  var LENGTH_RE = /^-?\d+(?:\.\d+)?(?:px|rem|em|%|vh|vw|pt)?$/i;
+  var FONT_RE = /^[A-Za-z0-9 _.,\-"'']+$/;
+  var COLOR_VARS = '--bg-base --mc-canvas --bg-surface --bg-elevated --mc-lifted --mc-bone --text-primary --mc-ink --text-secondary --text-muted --mc-charcoal --mc-slate --mc-graphite --text-secondary-strong --text-tertiary --accent-primary --accent-orange --border-active --mc-signal --accent-primary-hover --accent-orange-hover --mc-signalLight --mc-clay --border-subtle --border-medium --mc-granite --mc-dust --accent-red --mc-red --accent-yellow --mc-yellow --accent-green --accent-secondary --mc-linkBlue --bg-input --mc-ghost --text-on-accent --accent-primary-glow --accent-orange-glow --scrollbar-thumb --scrollbar-thumb-hover --selection-bg --selection-fg';
+  var FONT_VARS = '--app-interface-font --app-code-font';
+  var LENGTH_VARS = '--app-font-size --app-code-font-size';
+  function safeThemeValue(key, value) {
+    if (typeof key !== 'string' || key.slice(0, 2) !== '--') return null;
+    if (typeof value !== 'string') return null;
+    var v = value.trim();
+    if (!v || v.length > 200) return null;
+    var re;
+    if (COLOR_VARS.indexOf(key) !== -1) re = COLOR_RE;
+    else if (FONT_VARS.indexOf(key) !== -1) re = FONT_RE;
+    else if (LENGTH_VARS.indexOf(key) !== -1) re = LENGTH_RE;
+    else return null;
+    return re.test(v) ? v : null;
+  }
   try {
     var cache = localStorage.getItem('hc_theme_css_cache');
     if (cache) {
@@ -6,7 +27,8 @@
       var root = document.documentElement;
       for (var key in vars) {
         if (Object.prototype.hasOwnProperty.call(vars, key)) {
-          root.style.setProperty(key, vars[key]);
+          var safe = safeThemeValue(key, vars[key]);
+          if (safe !== null) root.style.setProperty(key, safe);
         }
       }
     }
