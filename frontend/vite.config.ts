@@ -58,7 +58,7 @@ export default defineConfig(({ mode }) => ({
           'vendor-jspdf': ['jspdf'],
           'vendor-html-to-image': ['html-to-image'],
           'vendor-pdfjs': ['pdfjs-dist'],
-          'vendor-data': ['xlsx'],
+          'vendor-data': ['@e965/xlsx'],
           'vendor-i18n': ['i18next', 'react-i18next'],
         },
         assetFileNames: (assetInfo) => {
