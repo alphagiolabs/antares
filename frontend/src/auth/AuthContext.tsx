@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import { supabase, type AppUser } from '../lib/supabase';
+import { useAuthThrottle } from './useAuthThrottle';
 
 interface AuthContextValue {
   user: AppUser | null;
@@ -52,6 +53,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // resolves and calls setUser without re-entering the loading state,
   // producing flicker login→app and non-deterministic session visibility.
   const authGenRef = useRef(0);
+  const authThrottle = useAuthThrottle();
 
   useEffect(() => { loadingRef.current = loading; }, [loading]);
 
@@ -128,25 +130,42 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signIn = useCallback(async (email: string, password: string) => {
     if (!supabase) return { error: 'Supabase no configurado' };
+    // SEC-015: throttle client-side de intentos.
+    const lockedMs = authThrottle.isLocked();
+    if (lockedMs > 0) {
+      const msg = `Demasiados intentos fallidos. Intenta en ${Math.ceil(lockedMs / 60000)} min`;
+      setError(msg);
+      return { error: msg };
+    }
     const { error: sbError } = await supabase.auth.signInWithPassword({ email, password });
     if (sbError) {
+      authThrottle.lock();
       setError(sbError.message);
       return { error: sbError.message };
     }
+    authThrottle.reset();
     setError(null);
     return { error: null };
-  }, []);
+  }, [authThrottle]);
 
   const signUp = useCallback(async (email: string, password: string) => {
     if (!supabase) return { error: 'Supabase no configurado' };
+    // SEC-015: respetar el lock también en signUp.
+    const lockedMs = authThrottle.isLocked();
+    if (lockedMs > 0) {
+      const msg = `Demasiados intentos fallidos. Intenta en ${Math.ceil(lockedMs / 60000)} min`;
+      setError(msg);
+      return { error: msg };
+    }
     const { error: sbError } = await supabase.auth.signUp({ email, password });
     if (sbError) {
       setError(sbError.message);
       return { error: sbError.message };
     }
+    authThrottle.reset();
     setError(null);
     return { error: null };
-  }, []);
+  }, [authThrottle]);
 
   const signOut = useCallback(async () => {
     if (!supabase) return;
