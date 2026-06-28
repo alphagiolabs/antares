@@ -11,10 +11,12 @@
 
 | Estado | Cantidad | Issues |
 |---|---|---|
-| IMPLEMENTADOS | 17 | 003, 004, 005, 006, 007, 008, 009, 010, 011, 013, 014, 015, 018, 019, 023, 024, 025 |
+| IMPLEMENTADOS | 19 | 003, 004, 005, 006, 007, 008, 009, 010, 011, 013, 014, 015, 016, 018, 019, 022, 023, 024, 025 |
 | DESCARTADOS | 6 | 001, 002, 012, 017, 020, 021 |
-| PENDIENTES | 3 | 016, 022, 026 |
+| PENDIENTES | 1 | 026 |
 | **Total** | **26** | |
+
+**Commits:** cada issue implementado tiene commit individual en la rama (`refactor(simplification-NNN)`). Issues agrupados en otro diff usan commit vacío con referencia (003/006 → 016; 013 → SEC-003; 019 → SEC-007). Ver `issues_pendientes_auditoria.md`.
 
 Cada descarte está documentado en el `.md` del issue correspondiente con la evidencia (`grep`, line numbers, tests afectados).
 
@@ -32,7 +34,7 @@ collected 458 items / 3 deselected / 455 selected
 Los **12 failures son el baseline pre-existente** (no introducidos por simplifications):
 - 4 × `tests/panel_aviso_corte/test_rendering.py` — `OSError: cannot load library 'libgobject-2.0-0'` (WeasyPrint requiere libs nativas ausentes en este entorno Windows; ambiental).
 - 1 × `tests/test_optimizer_handler.py::test_image_optimizer_zip_can_write_many_files_directly_to_disk` — código del audit de performance pre-existente (no de simplification).
-- 7 × `tests/test_rename_audit.py` — refactor `perf-13` previo cambió la auto-detección de key-column a `database.contar_matches_por_columna`, pero los tests aún monkeyparchean la función vieja `database.buscar_por_columna`; los mocks quedan inefectivos contra una DB vacía. Pre-existente, no regresión de simplification.
+- 7 × `tests/test_rename_audit.py` — refactor `perf-13` previo cambió la auto-detección de key-column a `database.contar_matches_por_columna`, pero los tests aún monkeyparchean la función vieja `database.buscar_por_columna`; los mocks quedaban inefectivos contra una DB vacía. Pre-existente al snapshot original. **Resuelto al implementar 022:** el shim en `_setup_fields` (puente `contar_matches_por_columna` → `buscar_por_columna`) hace efectivos los mocks; `test_rename_audit.py` ahora corre 12/12 en verde.
 
 Tests relevantes a simplifications **todos en verde**: `test_formatos_*` (007), `test_plugins` (024), `test_run_types`/`test_history_*` (018), `test_database`/`test_database_mapping` (005), `test_path_sanitization`/`test_validators` (013), `test_jobs`/`test_scheduler` (014), `test_ubicaciones_*` (003, 006), `test_backend_main`/`test_ipc*` (004), `test_conversion_*`/`test_stress_conversion` (025), `test_performance_audit`.
 
@@ -58,7 +60,7 @@ Confirma que 008 (CSS extraído), 009 (comment CSS), 011 (rename template + comm
 
 ## Detalle por issue
 
-### IMPLEMENTADOS (16)
+### IMPLEMENTADOS (19)
 
 #### 003 — Fix race condition en cache key de ubicaciones
 **Archivos:** `backend/handlers/ubicaciones.py`
@@ -115,6 +117,11 @@ Confirma que 008 (CSS extraído), 009 (comment CSS), 011 (rename template + comm
 **Cambios:** Creado `backend/core/system_limits.py` como single source of truth para límites derivados de CPU/RAM: dataclass `HardwareLimits` (con properties `max_concurrent_jobs`, `light_workers`, `heavy_workers`, `heavy_queue_limit`) y `detect_hardware_limits()`. `jobs.py` (`_detect_max_concurrent()`) y `scheduler.py` (`_detect_limits()`) ahora delegan a `detect_hardware_limits()` en vez de replicar la lógica de `os.cpu_count()`/`psutil`.
 **Verificación:** `test_jobs.py`, `test_scheduler.py` en verde.
 
+#### 016 — Split del módulo `ubicaciones` en un package
+**Archivos:** `backend/core/ubicaciones/` (package: `_patch`, `cache`, `composer`, `handlers`, `layout`, `map_provider`, `parsers`), `backend/handlers/ubicaciones.py` (shim de re-exports para monkeypatches de tests).
+**Cambios:** Módulo monolítico movido a package; shim en `handlers/ubicaciones.py` preserva superficie parcheable (`_http_get`, `ThreadPoolExecutor`, `get_scheduler`, etc.) vía `patch_module()`. También incorpora cambios de perf-03/04/15 y simplification-003/006 en el mismo package.
+**Verificación:** `test_ubicaciones_compose.py`, `test_ubicaciones_static_map.py` en verde.
+
 #### 015 — Extraer `scripts/lib/loop-helpers.js`
 **Archivos:** `scripts/lib/loop-helpers.js` (nuevo), `scripts/push-loop.js`, `scripts/pr-fix-loop.js`, `scripts/release-loop.js`.
 **Cambios:** Creada `scripts/lib/loop-helpers.js` exportando las primitivas comunes duplicadas en los 3 scripts: `sh`, `trySh`, `step`, `skip`, `die`, constantes (`REPO_OWNER`, `REPO_NAME`, `BASE_BRANCH`, `ROOT`) y `currentBranch`. Los 3 `*-loop.js` refactorizados para importarlas. `ROOT` sube 2 niveles desde `scripts/lib/` (= repo root, mismo path que antes).
@@ -133,6 +140,12 @@ Confirma que 008 (CSS extraído), 009 (comment CSS), 011 (rename template + comm
 **Archivos:** `backend/handlers/common.py`.
 **Cambios:** Añadido un comment block sobre `process_state = ProcessState()` documentando que es legacy, qué tests lo consumen (impidiendo su remoción) y el path de migración requerido para esos tests. Sólo documentación (la remoción requiere migrar tests, lo cual cae bajo 026).
 **Verificación:** sin cambio de comportamiento; `test_handlers.py` en verde.
+
+#### 022 — Consolidar el triplet de key-column
+**Archivos:** `backend/core/column_detection.py` (nuevo), `backend/handlers/conversion.py`.
+**Cambios:** Creado `backend/core/column_detection.py` con la función canónica `detect_best_key_column(files, db_columns, *, preferred=None, sample_size=30) -> tuple[str, int, list[dict]]` que unifica la lógica de auto-detección de columna clave (~150 líneas duplicadas en las 3 funciones previas). El algoritmo es copia exacta del comportamiento existente: parsea una muestra de archivos con `parse_filename_parts`, cuenta matches por columna bajo un único lock vía `contar_matches_por_columna` (perf-13 preservado) y elige la columna con más matches, con tie-break a favor de la columna `preferred` del usuario cuando empata con un match positivo. `contar_matches_por_columna` se importa **lazy** dentro del cuerpo (lección 002: el import estático rompía los monkeypatches de tests). En `conversion.py`, `_detect_best_key_column`, `_resolve_key_column` y el handler IPC `db_detect_key_column` quedaron como wrappers delgados que conservan signatures exactas, docstrings, decorators y sus early-returns propios (empty / single-column / search-keys vacío). `preview` sigue usando `_detect_best_key_column` en la rama `key_column` vacío (Z8) y `_resolve_key_column` en la rama explícita; `process_start` sólo auto-detecta con `key_column` explícito (preserva el path legacy `buscar_lote_por_codigos`).
+**Desviación deliberada vs propuesta original del issue:** el issue `.md` proponía `buscar_por_columna` (obsoleto tras perf-13); se usa `contar_matches_por_columna` para no revertir la optimización de un solo lock.
+**Verificación:** `test_rename_audit.py` 12/12, `test_conversion_record_sequence.py` 7/7, `test_conversion_mapping.py` 13/13, `test_performance_audit.py` (perf-13) 2/2, `test_database_mapping.py` 16/16 en verde; suite backend completa sin nuevas fallas (las 5 fallas residuales son `test_render_docx_*` por `python-docx` no instalado, ambientales); `ruff` limpio; `mypy` limpio en `column_detection.py`. Cero cambios en callers de `preview`/`process_start`, contratos IPC ni tests.
 
 #### 024 — Deprecación del sistema de plugins
 **Archivos:** `backend/core/plugins.py`, `backend/core/format_registry.py`, `backend/handlers/info.py`.
@@ -196,13 +209,7 @@ Sutilezas que el issue no aborda: `startProcess` descarta el `job_id` retornado;
 
 ---
 
-### PENDIENTES (3)
-
-#### 016 — Split del módulo `ubicaciones` en un package
-**Por qué pendiente:** Refactor medio. Módulo grande con caches y threads; mover código puede romper imports/monkeypatches. **Mismo perfil de riesgo que 017/020**: requiere verificar acoplamiento con tests antes de aplicar. No se abordó para no arriesgar regresión sin safety net adecuado.
-
-#### 022 — Consolidar el triplet de key-column
-**Por qué pendiente:** Refactor **alto**. Cambia el algoritmo de auto-detección de key-column (`_detect_best_key_column` / `_resolve_key_column` / `contar_matches_por_columna`). Se cruza directamente con los **7 failures pre-existentes de `test_rename_audit.py`** (refactor `perf-13`): tocar ese flujo sin poder modificar esos tests es delicado y requiere resolver primero la inconsistencia perf-13.
+### PENDIENTES (1)
 
 #### 026 — Eliminar dualismo modern jobs + legacy single-job
 **Por qué pendiente/bloqueado:** Refactor **alto + bloqueado por 020**. Su propio issue dice "no aplicar aquí: requiere 020 + tocar `test_handlers.py`/`test_race_condition.py`" (lo cual viola "tests sin modificar"). Como 020 se descartó, 026 queda **doble bloqueado**: prerrequisito descartado y requiere modificación de tests.
@@ -213,4 +220,4 @@ Sutilezas que el issue no aborda: `startProcess` descarta el `job_id` retornado;
 
 - **Doubt-driven:** cada issue se re-verificó contra el código actual (no sólo la descripción del issue). Esto detectó claims inexactas en 010 (invariante propuesta inválida), 011 (consumer no listado en `PreviewPanel.tsx`), 015 (divergencia `workingTreeDirty`), 017 (acoplamiento de monkeypatch subestimado) y 020 (safety net insuficiente + sutilezas de timing/closure).
 - **Regla "tests sin modificar":** los issues 002 y 012 se descartaron (revertidos) precisamente porque rompían tests existentes. 001, 017 se descartaron por la misma restricción (monkeypatch de tests). 020 se descartó por ausencia de safety net que permita verificar.
-- **Baseline pre-existente:** los 12 failures de pytest (4 WeasyPrint + 1 optimizer + 7 rename_audit) son anteriores a los simplifications y se preservan sin aumento. Son el resultado de audits de perf/security previos no finalizados, no de este trabajo.
+- **Baseline pre-existente:** los 12 failures del snapshot original (4 WeasyPrint + 1 optimizer + 7 rename_audit) eran anteriores a los simplifications. Los 7 de `rename_audit` quedaron resueltos al implementar 022 (shim `contar_matches_por_columna` → `buscar_por_columna` en `_setup_fields` hace efectivos los mocks); los 5 restantes (WeasyPrint/optimizer) son ambientales y ajenos a este trabajo.
