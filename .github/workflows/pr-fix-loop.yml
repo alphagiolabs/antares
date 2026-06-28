@@ -42,10 +42,13 @@ jobs:
           cache: npm
 
       - name: Install dependencies
+        # SEC-013: npm ci (reproducible desde lockfile) + registry oficial.
+        env:
+          npm_config_registry: https://registry.npmjs.org
         run: |
           pip install -e ".[dev]"
-          npm install
-          cd frontend && npm install && cd ..
+          npm ci
+          cd frontend && npm ci && cd ..
 
       - name: Run PR Fix Loop
         run: |
