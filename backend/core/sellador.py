@@ -163,13 +163,33 @@ def _apply_stamp_placements(
             raise ValueError(msg)
         by_page.setdefault(page_idx, []).append(placement)
 
+    # ponytail: cache the prepared stamp PDF page by (width, height) so
+    # placements sharing the same geometry reuse one resize + PNG/PDF encode
+    # (the non-placements path already prepares the stamp once). The same
+    # stamp_page is safe to merge onto many pages/positions: merge_transformed
+    # page reads the stamp and never mutates it (proven by the non-placements
+    # loop reusing one stamp_page across pages and across repeated stamps on a
+    # single page).
+    # Ceiling: if every placement has a distinct size, the cache is a no-op
+    # (N preps, same as before) — no regression.
+    stamp_cache: dict[tuple[float, float], tuple[Any, float]] = {}
+
+    def _prepared_stamp(width: float, height: float) -> tuple[Any, float]:
+        key = (width, height)
+        cached = stamp_cache.get(key)
+        if cached is None:
+            stamp_img, _actual_w_pt, actual_h_pt = _prepare_stamp_image(stamp_bytes, width, height)
+            stamp_pdf_bytes = _stamp_image_to_pdf_page(stamp_img)
+            stamp_page = PdfReader(io.BytesIO(stamp_pdf_bytes)).pages[0]
+            cached = (stamp_page, actual_h_pt)
+            stamp_cache[key] = cached
+        return cached
+
     for page_idx, page in enumerate(writer.pages):
         for placement in by_page.get(page_idx, ()):
             width = float(placement["width"])
             height = float(placement["height"])
-            stamp_img, _actual_w_pt, actual_h_pt = _prepare_stamp_image(stamp_bytes, width, height)
-            stamp_pdf_bytes = _stamp_image_to_pdf_page(stamp_img)
-            stamp_page = PdfReader(io.BytesIO(stamp_pdf_bytes)).pages[0]
+            stamp_page, actual_h_pt = _prepared_stamp(width, height)
             _apply_stamp_to_page(
                 page,
                 stamp_page,
