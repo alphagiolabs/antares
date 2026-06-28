@@ -1,4 +1,20 @@
-"""Legacy XObject strategy for PDF correlative number generation."""
+"""Legacy XObject strategy for PDF correlative number generation.
+
+DEPRECATED (simplification-025): this strategy performs low-level surgery on
+the bytes of the SEDAPAL "Formato D" template (``template-d.b64``). The magic
+markers in ``_NUMBER_XOBJECT_MARKERS`` / ``_NUMBER_XOBJECT_DRAW_COUNT`` and the
+hardcoded content stream in ``_update_number_xobject`` depend on the *internal*
+PDF structure of that specific template, not on a documented contract.
+
+The cleaner alternative is ``VisualOverlayStrategy`` (draw the correlative
+number as text at an XY position with configurable font/colour, as already done
+for "Máquina"/"Televisiva"). That requires regenerating the SEDAPAL template
+with a white box where the number goes — which is only safe if the template has
+no required electronic signature/metadata. That decision belongs to the product
+owner; do not migrate until confirmed. Active consumers: ``formatos.py`` dispatch,
+``FormatosView.tsx`` (2 UI branches on the ``legacy_xobject`` string), and
+``catalog.json`` entry ``template-d``.
+"""
 from __future__ import annotations
 
 import io
