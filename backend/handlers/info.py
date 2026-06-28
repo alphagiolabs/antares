@@ -18,6 +18,9 @@ def formats(params: dict[str, Any]) -> dict[str, list[str]]:
 
 @with_locale
 def plugin_formats(params: dict[str, Any]) -> dict[str, list[str]]:
+    # DEPRECATED (simplification-024): declared in api.ts but no UI component
+    # calls it. Pending product-owner decision to confirm or remove the plugin
+    # subsystem. Do not extend.
     from backend.core.format_registry import get_registry
     return {"formats": get_registry().list_formats()}
 
