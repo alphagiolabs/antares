@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { ipcStorage } from './supabase-storage';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
@@ -20,6 +21,9 @@ export const supabase: SupabaseClient | null = supabaseUrl && supabaseAnonKey
         persistSession: true,
         autoRefreshToken: true,
         detectSessionInUrl: false,
+        // SEC-009: persistir el token fuera del renderer (main process,
+        // cifrado en reposo) en vez de localStorage.
+        storage: ipcStorage,
       },
     })
   : null;
