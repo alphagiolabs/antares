@@ -12,6 +12,7 @@ from backend.handlers.ubicaciones import (
     _compose_ubicacion_image,
     _crop_footer_bar,
     _dimensions_for,
+    _fetch_osm_tiles_map,
     _is_gutter_pixel,
     _map_cache_key,
     _map_capture_size,
@@ -211,3 +212,167 @@ def test_compose_skips_resize_when_map_size_matches(monkeypatch: pytest.MonkeyPa
         preview=False,
     )
     assert (out_w, map_h) not in resize_sizes
+
+
+# --- perf-03: parallel OSM tile fetch -------------------------------------------------
+
+
+class _RecordingExecutor:
+    """Fake ThreadPoolExecutor that records max_workers and runs ``map``
+    synchronously so the test is deterministic (no real threads / network).
+    Proves the parallel code path is used with a bounded worker count."""
+
+    def __init__(self, max_workers: int | None = None, **_kwargs: object) -> None:
+        self.max_workers = max_workers
+        self.map_calls = 0
+
+    def __enter__(self) -> "_RecordingExecutor":
+        return self
+
+    def __exit__(self, *exc: object) -> bool:
+        return False
+
+    def map(self, fn, iterable):
+        self.map_calls += 1
+        for item in iterable:
+            yield fn(item)
+
+
+def _red_tile_png() -> bytes:
+    buf = BytesIO()
+    Image.new("RGB", (256, 256), (255, 0, 0)).save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def test_fetch_osm_tiles_map_uses_bounded_pool_and_covers_viewport(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """perf-03: tiles are fetched via a bounded ThreadPoolExecutor and composited
+    identically to the serial path (full coverage of a fully-valid viewport)."""
+    red = _red_tile_png()
+    calls: list[str] = []
+
+    def fake_http_get(url: str, headers: dict[str, str]) -> bytes:
+        calls.append(url)
+        return red
+
+    created: list[_RecordingExecutor] = []
+
+    def factory(*a: object, **k: object) -> _RecordingExecutor:
+        ex = _RecordingExecutor(*a, **k)  # type: ignore[arg-type]
+        created.append(ex)
+        return ex
+
+    monkeypatch.setattr("backend.handlers.ubicaciones._http_get", fake_http_get)
+    monkeypatch.setattr("backend.handlers.ubicaciones.ThreadPoolExecutor", factory)
+
+    # lat=0, lon=0, zoom=2, 512x512 → 3x3 grid of valid tiles (n=4, ty in [1,3]).
+    img = _fetch_osm_tiles_map(0.0, 0.0, 512, 512, 2)
+
+    assert img.size == (512, 512)
+    assert len(created) == 1 and created[0].map_calls == 1, "tiles must go through the pool, not a serial loop"
+    assert created[0].max_workers is not None and created[0].max_workers <= 8, "worker cap (OSM policy)"
+    assert len(calls) == 9, f"expected 9 tile fetches (3x3 grid), got {len(calls)}"
+    # Full coverage: every pixel is the red tile (no gray holes from a missed paste).
+    assert img.convert("RGB").getcolors() == [(512 * 512, (255, 0, 0))]
+
+
+def test_fetch_osm_tiles_map_preserves_failed_tile_as_gray(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """perf-03: a failed tile (None) is skipped → the gray canvas background shows
+    through, exactly as the serial version did (failure path preserved)."""
+    red = _red_tile_png()
+    state = {"n": 0}
+
+    def fake_http_get(url: str, headers: dict[str, str]):
+        state["n"] += 1
+        return None if state["n"] == 1 else red
+
+    monkeypatch.setattr("backend.handlers.ubicaciones._http_get", fake_http_get)
+    monkeypatch.setattr("backend.handlers.ubicaciones.ThreadPoolExecutor", lambda *a, **k: _RecordingExecutor(*a, **k))
+
+    img = _fetch_osm_tiles_map(0.0, 0.0, 512, 512, 2).convert("RGB")
+    color_set = {c for _, c in img.getcolors()}
+    assert (218, 218, 218) in color_set, "failed tile should leave the gray canvas background"
+    assert (255, 0, 0) in color_set, "other tiles should still paste"
+
+
+# --- perf-04: ubicaciones export dispatches rows via WorkScheduler -------------------
+
+
+def test_handle_generar_ubicaciones_dispatches_rows_via_scheduler(tmp_path, monkeypatch) -> None:
+    """perf-04: handle_generar_ubicaciones dispatches each valid row to the
+    WorkScheduler heavy lane (not a serial loop), skips NaN rows, preserves row
+    order (consolidado page order), and writes one PDF per row in per-file mode."""
+    from concurrent.futures import Future
+    from pathlib import Path
+
+    import pandas as pd
+
+    from backend.handlers import ubicaciones as ub
+
+    df = pd.DataFrame(
+        [
+            {"cod_componente": "C1", "latitud": 0.0, "longitud": 0.0},
+            {"cod_componente": "C2", "latitud": float("nan"), "longitud": 0.0},
+            {"cod_componente": "C3", "latitud": 1.0, "longitud": 1.0},
+        ]
+    )
+    excel_path = tmp_path / "in.xlsx"
+    df.to_excel(excel_path, index=False, engine="openpyxl")
+
+    submitted = []
+
+    class _SyncScheduler:
+        def submit_heavy(self, fn, *args, **kwargs):
+            submitted.append(args[0] if args else None)
+            fut = Future()
+            try:
+                fut.set_result(fn(*args))
+            except Exception as exc:
+                fut.set_exception(exc)
+            return fut
+
+    render_order = []
+
+    def fake_render(d, formato, map_opts=None):
+        render_order.append(d["cod_componente"])
+        return Image.new("RGB", (10, 10), (12, 34, 56))
+
+    def fake_generar(d, out_path, formato, map_opts=None):
+        render_order.append(d["cod_componente"])
+        Path(out_path).write_bytes(b"%PDF-1.4 placeholder")
+
+    monkeypatch.setattr(ub, "get_scheduler", lambda: _SyncScheduler())
+    monkeypatch.setattr(ub, "render_imagen_ubicacion", fake_render)
+    monkeypatch.setattr(ub, "generar_imagen_ubicacion", fake_generar)
+
+    out_dir = tmp_path / "out"
+    result = ub.handle_generar_ubicaciones({
+        "excelPath": str(excel_path),
+        "outputDir": str(out_dir),
+        "formato": "vertical",
+        "consolidado": False,
+    })
+    assert result["success"] is True
+    assert result["data"]["generados"] == 2
+    assert len(submitted) == 2, "each valid row must go through submit_heavy (perf-04)"
+    assert render_order == ["C1", "C3"], "NaN row skipped, order preserved"
+    assert (out_dir / "C1.pdf").exists() and (out_dir / "C3.pdf").exists()
+    assert not (out_dir / "C2.pdf").exists()
+
+    submitted.clear()
+    render_order.clear()
+    out_dir2 = tmp_path / "out2"
+    result2 = ub.handle_generar_ubicaciones({
+        "excelPath": str(excel_path),
+        "outputDir": str(out_dir2),
+        "formato": "vertical",
+        "consolidado": True,
+    })
+    assert result2["success"] is True
+    assert result2["data"]["generados"] == 2
+    assert len(submitted) == 2
+    assert render_order == ["C1", "C3"], "consolidado must preserve row order"
+    assert (out_dir2 / "ubicaciones_consolidado.pdf").exists()
