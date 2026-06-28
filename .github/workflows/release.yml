@@ -39,10 +39,13 @@ jobs:
           echo "WEASYPRINT_DLL_DIRECTORIES=C:\msys64\mingw64\bin" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: Install dependencies
+        # SEC-013: npm ci (reproducible desde lockfile) + registry oficial.
+        env:
+          npm_config_registry: https://registry.npmjs.org
         run: |
-          npm install
+          npm ci
           cd frontend
-          npm install
+          npm ci
           cd ..
           pip install pyinstaller
           pip install -e ".[dev]"
@@ -62,4 +65,13 @@ jobs:
       - name: Build and Publish Electron App
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npx electron-builder --win --publish always
+          # SEC-005: firma de código Windows. Con secrets vacíos, electron-builder
+          # firma omite la firma (build sin firma = comportamiento actual).
+          # WINDOWS_CERT_B64 = base64 del .pfx; WINDOWS_CERT_PASSWORD = passphrase.
+          # Con cert presente, enable-build-signing.js flípea verifyUpdateCodeSignature
+          # a true para que electron-updater verifique las firmas de los updates.
+          CSC_LINK: ${{ secrets.WINDOWS_CERT_B64 }}
+          CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
+        run: |
+          node scripts/enable-build-signing.js
+          npx electron-builder --win --publish always

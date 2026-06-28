@@ -85,8 +85,12 @@ win:
   icon: assets/icon.ico
   legalTrademarks: "ANTARES"
   requestedExecutionLevel: asInvoker
-  # Disabled because installers are not code-signed. Required for
-  # electron-updater to accept new versions on unsigned Windows builds.
+  # SEC-005: false por defecto — los builds sin firma necesitan que
+  # electron-updater NO verifique firma para aceptar updates. scripts/enable-
+  # build-signing.js lo flípea a true en CI sólo cuando CSC_LINK (mapeado desde
+  # secrets.WINDOWS_CERT_B64 en release.yml) está presente (build firmado);
+  # entonces electron-updater rechaza updates no firmados/con firma inválida.
+  # Una vez exista un release firmado, puede quedarse true permanente aquí.
   verifyUpdateCodeSignature: false
   signtoolOptions:
     signingHashAlgorithms:
@@ -139,6 +143,9 @@ portable:
 dmg:
   artifactName: "Antares-${version}-${arch}.dmg"
   icon: assets/icon.icns
+  # SEC-005: sin firma macOS por ahora. Para firmar+notarizar en el futuro:
+  # añadir un job macOS en release.yml con APPLE_ID/APPLE_APP_SPECIFIC_PASSWORD/
+  # APPLE_TEAM_ID y CSC_LINK/CSC_KEY_PASSWORD, y poner `sign: true` aquí.
   sign: false
   contents:
     - x: 130
