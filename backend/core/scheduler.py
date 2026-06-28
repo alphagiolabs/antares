@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import logging
-import os
 import threading
 import time
 from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 from typing import Any
+
+from backend.core.system_limits import detect_hardware_limits
 
 logger = logging.getLogger(__name__)
 
@@ -20,27 +21,14 @@ class SchedulerBusy(RuntimeError):
 def _detect_limits() -> tuple[int, int, int]:
     """Return conservative `(light_workers, heavy_workers, heavy_queue_limit)`.
 
-    Note: This is intentionally separate from JobManager._detect_max_concurrent().
-    Scheduler controls thread-pool + heavy semaphore slots for individual
-    work items (image conversion, PDF render, etc.).
-    JobManager controls how many high-level user jobs can run concurrently.
-    They compose (a job can submit multiple heavy tasks).
-    See jobs.py for the other detector and backend/handlers/conversion.py
-    for how they interact in practice.
+    Delegates to backend.core.system_limits (shared with JobManager) so the two
+    detectors can no longer drift. Scheduler controls thread-pool + heavy
+    semaphore slots for individual work items (image conversion, PDF render,
+    etc.). JobManager controls how many high-level user jobs can run
+    concurrently. They compose (a job can submit multiple heavy tasks).
     """
-    cpu_count = os.cpu_count() or 2
-    try:
-        import psutil
-
-        available_gb = psutil.virtual_memory().available / (1024 ** 3)
-    except ImportError:
-        available_gb = 4
-
-    light_workers = max(2, min(cpu_count, 4))
-    ram_limited_heavy = max(1, int(available_gb // 3))
-    heavy_workers = max(2, min(max(1, cpu_count // 2), ram_limited_heavy, 6))
-    heavy_queue_limit = max(heavy_workers, heavy_workers * 2)
-    return light_workers, heavy_workers, heavy_queue_limit
+    lim = detect_hardware_limits()
+    return lim.light_workers, lim.heavy_workers, lim.heavy_queue_limit
 
 
 class WorkScheduler:
