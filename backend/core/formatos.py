@@ -46,6 +46,14 @@ LEGACY_XOBJECT = "legacy_xobject"
 VISUAL_OVERLAY = "visual_overlay"
 SIMPLE_OVERLAY = "simple_overlay"
 
+# Single source of truth para los defaults de formatos built-in (simplification-023).
+# _BUILTIN_FORMATS es la fuente canónica de los mapeos built-in (template-d, maquina,
+# televisiva). `data/formatos/catalog.json` es el ESTADO PERSISTIDO: customizaciones
+# hechas vía UI (update_mapping) + formatos uploaded. Al cargar, _load_catalog permite
+# que el catalog.json sobrescriba el mapping de un built-in (override intencional para
+# recalibraciones del usuario), pero los defaults iniciales provienen de aquí.
+# El repo debe mantener las entradas built-in de catalog.json alineadas con estos
+# valores (ver tests/test_formatos_catalog_sync.py).
 _BUILTIN_FORMATS: list[dict[str, Any]] = [
     {
         "id": "template-d",
