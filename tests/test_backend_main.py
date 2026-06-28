@@ -39,3 +39,11 @@ def test_dispatch_uses_heavy_scheduler_for_heavy_methods(monkeypatch) -> None:
     backend_main._submit_handler(lambda _params: {}, {}, "2", "version")
 
     assert calls == [("heavy", "db_import"), ("light", "version")]
+
+
+def test_redact_paths_keeps_messages_strips_paths() -> None:
+    """SEC-007: user-facing messages pass through; internal paths are redacted."""
+    assert backend_main._redact_paths("Cantidad de sellos inválido") == "Cantidad de sellos inválido"
+    redacted = backend_main._redact_paths("[Errno 2] No such file: 'C:\\Users\\x\\f.pdf'")
+    assert "C:" not in redacted and "Users" not in redacted and "[ruta]" in redacted
+    assert backend_main._redact_paths("Traversal ../etc") == "Traversal [ruta]etc"
