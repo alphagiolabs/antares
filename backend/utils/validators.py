@@ -5,6 +5,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from backend.utils.paths import _SYSTEM_SENSITIVE_ROOTS, _SYSTEM_SENSITIVE_ROOTS_PREFIXED
+
 _EXTENSIONES_IMAGEN: set[str] = {
     ".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tiff", ".tif", ".gif", ".ico",
 }
@@ -22,13 +24,34 @@ def es_imagen(ruta: str | Path) -> bool:
     return Path(ruta).suffix.lower() in _EXTENSIONES_IMAGEN
 
 
+# SEC-003: system-sensitive absolute-path floor. Pure-string (no FS access) so
+# the hot IPC path-key screen stays fast and side-effect free. The denylist is
+# the single canonical one in backend.utils.paths (shared with the Path-based
+# sellador check), so the two layers can no longer drift.
+
+
+def _is_system_sensitive_path_str(value: str) -> bool:
+    norm = value.strip().lower().replace("\\", "/")
+    if norm in _SYSTEM_SENSITIVE_ROOTS:
+        return True
+    return any(norm.startswith(p) for p in _SYSTEM_SENSITIVE_ROOTS_PREFIXED)
+
+
 def is_safe_user_path(value: object) -> bool:
-    """Return whether a user-provided path string avoids traversal patterns."""
+    """Return whether a user-provided path string avoids traversal patterns and
+    system-sensitive absolute locations (SEC-003).
+
+    Backward compatible: relative paths and absolute paths under user-writable
+    locations (home, tmp, external drives) still pass; only traversal patterns,
+    null bytes, encoded traversal, and system dirs (C:\\Windows, /etc, ...) fail.
+    """
     if not isinstance(value, str) or not value:
         return True
     if "\x00" in value:
         return False
     if "../" in value or "..\\" in value or value.endswith(("/..", "\\..")) or value in ("..", "."):
+        return False
+    if _is_system_sensitive_path_str(value):
         return False
     lowered = value.lower()
     return not ("%2e%2e" in lowered or "%252e" in lowered)
