@@ -6,6 +6,7 @@ import {
   mergeHtmlDocuments,
   selectRowsForPdfExport,
 } from './pdfExport';
+import { markVouchedPaths, clearVouchedPaths } from '../../utils/vouchedPaths';
 
 const file = (name: string) => ({ name } as File);
 
@@ -84,7 +85,11 @@ describe('preview panel PDF export helpers', () => {
     expect(html).toContain('@page { size: A4 portrait; margin: 0; }');
   });
 
-  it('uses local file references for high quality export when Electron exposes a path', async () => {
+  it('uses local file references for high quality export when Electron exposes a vouched path', async () => {
+    // SEC-004 Capa 2: el token disk-backed solo se usa si la ruta fue vouched
+    // por un diálogo nativo. Marcamos la ruta para preservar el intent del test.
+    clearVouchedPaths();
+    markVouchedPaths(['C:\\tmp\\foto.jpg']);
     const source = await imageToPdfSource(
       { name: 'foto.jpg', path: 'C:\\tmp\\foto.jpg' } as unknown as File,
       'high',
@@ -94,5 +99,6 @@ describe('preview panel PDF export helpers', () => {
     expect(source.src).toBe(buildLocalImageToken('row-1-img-0'));
     expect(source.token).toBe(source.src);
     expect(source.localPath).toBe('C:\\tmp\\foto.jpg');
+    clearVouchedPaths();
   });
 });
