@@ -35,11 +35,13 @@ sys.path = adjust_backend_import_path(
 
 import locale
 import logging
+import re
 import signal
 import time
 import traceback
 import warnings
 from concurrent.futures import Future
+from dataclasses import dataclass
 
 from backend.core.database import init_db
 from backend.core.plugins import load_plugins_from_dir
@@ -83,6 +85,36 @@ logging.basicConfig(
     stream=sys.stderr,
 )
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class ErrorBudget:
+    """Tracks consecutive main-loop errors to avoid spamming logs / spinning on
+    persistent issues. Encapsulates the counter + thresholds that were
+    previously ad-hoc locals in main() (simplification-004). Behavior preserved
+    1:1: same max (100), same recovery sleep (0.5s), same break-on-exhaustion.
+    """
+
+    consecutive: int = 0
+    max_consecutive: int = 100
+    recovery_sleep_seconds: float = 0.5
+
+    def record_error(self) -> bool:
+        """Increment on error; return True when the budget is exhausted."""
+        self.consecutive += 1
+        return self.consecutive >= self.max_consecutive
+
+    def record_success(self) -> None:
+        """Full reset on a dispatched or cleanly rejected message."""
+        self.consecutive = 0
+
+    def record_skip(self) -> None:
+        """Partial recovery on a skipped (already-responded) parse error."""
+        self.consecutive = max(0, self.consecutive - 1)
+
+    def sleep_recovery(self) -> None:
+        time.sleep(self.recovery_sleep_seconds)
+
 
 HEAVY_METHODS = {
     "db_import",
@@ -140,15 +172,36 @@ def _validate_encoding() -> None:
 _validate_encoding()
 
 
+# SEC-007: redact path-like substrings from messages echoed to the renderer.
+# Full detail (class name + message + traceback) still goes to stderr via logger.
+_PATH_LEAK_RE = re.compile(
+    r"'[^'\n]*[\\/][^'\n]*'"                 # '...path...'
+    r'|"[^"\n]*[\\/][^"\n]*"'                # "...path..."
+    r"|[A-Za-z]:[\\/][^\s'\"\)]*"            # C:\... / C:/...
+    r"|\\\\[^\s'\"\)]*"                      # \\server\share...
+    r"|/(?:[A-Za-z0-9._-]+/)+[A-Za-z0-9._-]*"  # /a/b/c
+    r"|\.\.[\\/]"                            # ../  ..\
+)
+
+
+def _redact_paths(text: str) -> str:
+    return _PATH_LEAK_RE.sub("[ruta]", text)
+
+
 def _dispatch(handler, params, msg_id, method_name) -> None:
     """Run a handler in a worker thread and send its response back."""
     try:
         result = handler(params)
         send_response(result, msg_id)
     except Exception as exc:
-        error_msg = f"{type(exc).__name__}: {exc}"
-        logger.exception("Error en %s: %s\n%s", method_name, error_msg, traceback.format_exc())
-        send_response(None, msg_id, error=error_msg)
+        # SEC-007: full exception (class name + message + traceback) is logged
+        # to stderr only. The renderer gets the user-facing message text with
+        # path-like substrings redacted — no class name, no internal paths.
+        logger.exception("Error en %s: %s\n%s", method_name, exc, traceback.format_exc())
+        msg_text = str(exc).strip()
+        if not msg_text:
+            msg_text = "Error interno del backend."
+        send_response(None, msg_id, error=_redact_paths(msg_text))
 
 
 def _log_future_exception(future: Future) -> None:
@@ -206,8 +259,7 @@ def main() -> None:
     scheduler = get_scheduler()
 
     # Track consecutive errors to avoid spamming logs on persistent issues
-    _consecutive_errors = 0
-    _MAX_CONSECUTIVE_ERRORS = 100
+    budget = ErrorBudget()
 
     try:
         while True:
@@ -225,22 +277,21 @@ def main() -> None:
                     logger.error("EOF on stdin — pipe closed. Exiting immediately.")
                     break
                 if msg is _SKIP:
-                    _consecutive_errors = max(0, _consecutive_errors - 1)
+                    budget.record_skip()
                     continue  # Parse error, already responded
 
                 if msg.method in HANDLERS:
                     _submit_handler(HANDLERS[msg.method], msg.params, msg.id, msg.method)
                 else:
                     send_response(None, msg.id, error=f"Método desconocido: {msg.method}")
-                _consecutive_errors = 0
+                budget.record_success()
             except Exception as exc:
                 # Global handler: any unexpected exception in the loop should NOT kill the process
-                _consecutive_errors += 1
-                logger.exception("Unexpected error in main loop (consecutive=%d): %s", _consecutive_errors, exc)
-                if _consecutive_errors >= _MAX_CONSECUTIVE_ERRORS:
+                logger.exception("Unexpected error in main loop (consecutive=%d): %s", budget.consecutive, exc)
+                if budget.record_error():
                     logger.error("Too many consecutive errors, exiting.")
                     break
-                time.sleep(0.5)
+                budget.sleep_recovery()
     except KeyboardInterrupt:
         logger.info("Keyboard interrupt received")
     finally:
