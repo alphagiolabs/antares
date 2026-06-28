@@ -79,6 +79,20 @@ function createWindow(isDev) {
     return { action: 'deny' };
   });
 
+  // SEC-014: bloquear los atajos de teclado de DevTools (F12 /
+  // Ctrl+Shift+I|J|C) en builds empaquetados. El menú de la app ya oculta
+  // "Herramientas de desarrollo" en prod (buildAppMenu), pero Chromium abre
+  // DevTools por teclado por defecto — esto cierra ese vector.
+  if (app && app.isPackaged) {
+    mainWindow.webContents.on('before-input-event', (event, input) => {
+      if (input.type !== 'keyDown') return;
+      const isDevtoolsShortcut =
+        input.key === 'F12' ||
+        (input.control && input.shift && (input.key === 'I' || input.key === 'J' || input.key === 'C'));
+      if (isDevtoolsShortcut) event.preventDefault();
+    });
+  }
+
   mainWindow.webContents.setBackgroundThrottling(false);
   mainWindow.maximize();
 
