@@ -17,6 +17,12 @@ from backend.core.panel_aviso_corte.errors import (
     InvalidMatchRuleError,
     InvalidPanelError,
 )
+from backend.core.panel_aviso_corte.matcher import (
+    _MAX_REGEX_LEN,
+    _MAX_STEM_LEN,
+    compile_match_rule,
+    match_regex,
+)
 from backend.core.panel_aviso_corte.models import (
     MAX_EXCEL_ROWS,
     MAX_IMAGE_BYTES,
@@ -329,3 +335,22 @@ class TestFrozenDataclasses:
         rule = MatchRule(key_column="CODIGO", strategy="prefix")
         with pytest.raises(FrozenInstanceError):
             rule.strategy = "contains"  # type: ignore[misc]
+
+
+# ─── SEC-008c: ReDoS caps (pattern length + stem length) ───────────────────
+
+
+def test_compile_match_rule_rejects_overlong_pattern() -> None:
+    pattern = "(?P<clave>[a-z])" + "a" * _MAX_REGEX_LEN  # > _MAX_REGEX_LEN
+    with pytest.raises(InvalidMatchRuleError):
+        compile_match_rule(MatchRule(strategy="regex", regex_pattern=pattern, key_column="x"))
+
+
+def test_match_regex_skips_overlong_stem() -> None:
+    compiled = compile_match_rule(
+        MatchRule(strategy="regex", regex_pattern="(?P<clave>[A-Za-z0-9]+)", key_column="x")
+    )
+    # Stem por encima del cap -> False sin evaluar el regex (no cuelga).
+    assert match_regex("a", "a" * (_MAX_STEM_LEN + 1), compiled) is False
+    # Stem legítimo sigue matcheando.
+    assert match_regex("foto", "foto-001", compiled) is True

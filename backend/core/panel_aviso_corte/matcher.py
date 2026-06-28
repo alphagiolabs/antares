@@ -36,6 +36,14 @@ _ISO_DATE_RE: re.Pattern[str] = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _ISO_DATETIME_RE: re.Pattern[str] = re.compile(r"^(\d{4}-\d{2}-\d{2})\s+\d{2}:\d{2}")
 _DD_MM_YYYY_RE: re.Pattern[str] = re.compile(r"^(\d{1,2})[/\-](\d{1,2})[/\-](\d{4})$")
 
+# ponytail: `re` no tiene timeout nativo, así que acotamos longitud de patrón y
+# de input para reducir ReDoS (p.ej. `(a+)+$` sobre un stem largo). Ceiling: un
+# patrón malicioso corto aún podría ser lento en un stem de hasta 512 chars;
+# upgrade path: módulo `regex` con `timeout=` o ejecutar el match en un
+# subprocess con kill.
+_MAX_REGEX_LEN: int = 256
+_MAX_STEM_LEN: int = 512
+
 
 # Helpers de normalización (tarea 5.1)
 
@@ -173,6 +181,9 @@ def match_exact(normalized_value: str, normalized_stem: str) -> bool:
 
 
 def match_regex(normalized_value: str, normalized_stem: str, compiled: re.Pattern[str]) -> bool:
+    if len(normalized_stem) > _MAX_STEM_LEN:
+        # ponytail: acota ReDoS — ver nota en _MAX_STEM_LEN.
+        return False
     m = compiled.match(normalized_stem)
     if not m:
         return False
@@ -187,6 +198,11 @@ def compile_match_rule(rule: MatchRule) -> re.Pattern[str] | None:
     if rule.strategy != "regex":
         return None
     assert rule.regex_pattern is not None
+    if len(rule.regex_pattern) > _MAX_REGEX_LEN:
+        msg = f"Patrón regex demasiado largo (máximo {_MAX_REGEX_LEN} caracteres)"
+        raise InvalidMatchRuleError(
+            msg,
+        )
     try:
         compiled = re.compile(rule.regex_pattern, re.IGNORECASE)
     except re.error as exc:
