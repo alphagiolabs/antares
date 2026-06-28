@@ -122,6 +122,41 @@ def test_history_delete_many(seeded_db) -> None:
     assert len(remaining) == 1
 
 
+def test_history_delete_many_uses_bulk_path_not_per_id(seeded_db, monkeypatch) -> None:
+    """perf-14: bulk delete must use one transaction (delete_runs), not call
+    delete_run per id (which committed once per row in the old loop)."""
+    calls: list[int] = []
+    monkeypatch.setattr(
+        "backend.core.history.delete_run",
+        lambda run_id: calls.append(run_id) or True,
+    )
+    result = HANDLERS["history_delete_many"]({"ids": [1, 2]})
+    assert calls == [], "history_delete_many must not call delete_run per id"
+    assert result == {"deleted": 2, "requested": 2}
+
+
+def test_delete_runs_chunks_above_sqlite_param_limit(seeded_db) -> None:
+    """perf-14: delete_runs must chunk ids over SQLite's 999-parameter limit
+    while still deleting everything in a single transaction."""
+    import sqlite3
+
+    from backend.core.history import delete_runs, list_runs_by_ids
+
+    db_file, _ = seeded_db
+    with sqlite3.connect(str(db_file)) as conn:
+        conn.executemany(
+            "INSERT INTO historial (run_type, timestamp, files_json, options_json) "
+            "VALUES ('conversion', ?, '[]', '{}')",
+            [("2026-03-01T00:00:00",)] * 950,
+        )
+        conn.commit()
+        ids = [r[0] for r in conn.execute("SELECT id FROM historial").fetchall()]
+    assert len(ids) > 900  # spans the 900-id chunk boundary
+    deleted = delete_runs(ids)
+    assert deleted == len(ids), f"expected {len(ids)} deletions, got {deleted}"
+    assert list_runs_by_ids(ids) == []
+
+
 def test_history_export_csv_drops_missing_gracefully(seeded_db) -> None:
     _db_file, _runs = seeded_db
     # All-missing ids produce a CSV with only the header row.
@@ -130,3 +165,36 @@ def test_history_export_csv_drops_missing_gracefully(seeded_db) -> None:
     text = base64.b64decode(result["csv"]).decode("utf-8")
     rows = list(csv.DictReader(io.StringIO(text)))
     assert rows == []
+
+
+# ─── SEC-008d: DoS limit clamp ──────────────────────────────────────────────
+
+
+def test_history_list_clamps_limit_to_max(monkeypatch) -> None:
+    captured: dict = {}
+
+    def fake_list_runs(**kwargs):
+        captured.update(kwargs)
+        return []
+
+    monkeypatch.setattr("backend.core.history.list_runs", fake_list_runs)
+    HANDLERS["history_list"]({"limit": 99999})
+    assert captured["limit"] == 500
+    HANDLERS["history_list"]({"limit": 50})
+    assert captured["limit"] == 50
+    HANDLERS["history_list"]({"limit": "notanint"})
+    assert captured["limit"] == 50
+
+
+def test_history_export_clamps_limit_to_max(monkeypatch) -> None:
+    captured: dict = {}
+
+    def fake_list_runs(**kwargs):
+        captured.update(kwargs)
+        return []
+
+    monkeypatch.setattr("backend.core.history.list_runs", fake_list_runs)
+    HANDLERS["history_export"]({"limit": 99999})
+    assert captured["limit"] == 10000
+    HANDLERS["history_export"]({"limit": 100})
+    assert captured["limit"] == 100
