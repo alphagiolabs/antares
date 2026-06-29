@@ -29,9 +29,30 @@ jobs:
         run: pip install -e ".[dev]"
 
       - name: Install Node dependencies
+        # SEC-013: npm ci instala exactamente desde package-lock.json (reproducible,
+        # falla si el lock está desincronizado con package.json — disciplina de
+        # lockfile). Registry oficial para evitar mirror poisoning.
+        env:
+          npm_config_registry: https://registry.npmjs.org
         run: |
-          npm install
-          cd frontend && npm install
+          npm ci
+          cd frontend && npm ci
+
+      # SEC-013: npm audit de dependencias de producción (root + frontend).
+      # No-bloqueante (continue-on-error): las vulns transitivas sin fix conocido
+      # no deben trabar todos los PRs. El output queda en el log del step para
+      # triage. Registry oficial para que el audit consulte la fuente canónica.
+      # Upgrade path (bloqueo gradual): una vez triageado el baseline, quitar
+      # `continue-on-error: true` (y subir --audit-level si se quiere más
+      # estricto) para hacerlo bloqueante. pip-audit ya es bloqueante vía
+      # `npm run ci` (audit:python).
+      - name: npm audit (non-blocking, triage pending)
+        continue-on-error: true
+        env:
+          npm_config_registry: https://registry.npmjs.org
+        run: |
+          npm audit --omit=dev --audit-level=high || true
+          cd frontend && npm audit --omit=dev --audit-level=high || true
 
       - name: Run CI checks
         run: npm run ci

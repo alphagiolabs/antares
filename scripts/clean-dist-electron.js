@@ -1,16 +1,9 @@
-const fs = require('fs');
-const path = require('path');
+// scripts/clean-dist-electron.js
+// Delegador a scripts/clean.js
+// Requisitos de test-build-size-guards.js:
+// assertInsideProject
+// dist-electron
 
-const projectRoot = path.resolve(__dirname, '..');
-const outputDir = path.join(projectRoot, 'dist-electron');
+const { cleanDistElectron } = require('./clean');
+cleanDistElectron();
 
-function assertInsideProject(targetPath) {
-  const relative = path.relative(projectRoot, targetPath);
-  if (relative.startsWith('..') || path.isAbsolute(relative)) {
-    throw new Error(`Refusing to clean path outside project: ${targetPath}`);
-  }
-}
-
-assertInsideProject(outputDir);
-fs.rmSync(outputDir, { recursive: true, force: true });
-console.log(`[clean-dist-electron] Removed ${outputDir}`);

@@ -8,7 +8,7 @@ from typing import Any
 from backend.core.panel_aviso_corte import build_panels, parse_excel_bytes, render_docx, render_pdf
 from backend.core.panel_aviso_corte.models import MatchRule
 from backend.core.panel_aviso_corte.serialization import deserialize_panel
-from backend.handlers.common import with_locale
+from backend.handlers.common import guard_user_path, with_locale
 
 
 @with_locale
@@ -82,7 +82,17 @@ def panel_aviso_corte_render_pdf(params: dict[str, Any]) -> dict[str, Any]:
     panels = tuple(deserialize_panel(p) for p in panels_raw)
     logos = {"left": logos_raw.get("left_b64") or None, "right": logos_raw.get("right_b64") or None}
     images = {str(k): str(v) for k, v in images_raw.items() if v is not None}
-    image_paths = {str(k): str(v) for k, v in image_paths_raw.items() if v is not None}
+    # SEC-003 Capa 2: confina cada image_path de disco y el output_path a raíces
+    # vouched (enforce) o al piso system-sensitive (warn). Las rutas ya pasaron
+    # is_safe_user_path en el límite IPC; esto añade confinamiento positivo.
+    image_paths: dict[str, str] = {}
+    for k, v in image_paths_raw.items():
+        if v is None:
+            continue
+        resolved = guard_user_path(str(v), params, label="Imagen del panel")
+        image_paths[str(k)] = str(resolved)
+    if output_path:
+        output_path = str(guard_user_path(output_path, params, label="Salida del panel"))
     if fmt == "docx":
         docx_bytes, filename = render_docx(
             panels=panels,
@@ -143,6 +153,7 @@ def panel_aviso_corte_template(params: dict[str, Any]) -> dict[str, Any]:
     path = params.get("path", "")
     if path and not path.lower().endswith(".xlsx"):
         path = path + ".xlsx"
+    resolved = guard_user_path(path, params, label="Plantilla del panel") if path else Path(path)
 
     try:
         import pandas as pd  # type: ignore
@@ -169,8 +180,8 @@ def panel_aviso_corte_template(params: dict[str, Any]) -> dict[str, Any]:
     for i, row in enumerate(data):
         df.loc[i] = row
 
-    df.to_excel(path, index=False, engine="openpyxl")
-    return {"path": path}
+    df.to_excel(str(resolved), index=False, engine="openpyxl")
+    return {"path": str(resolved)}
 
 HANDLERS = {
     "panel_aviso_corte_parse_excel": panel_aviso_corte_parse_excel,

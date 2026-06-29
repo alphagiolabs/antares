@@ -1,3 +1,4 @@
+import React from 'react';
 import { Crop, Download, FileImage, Gauge, Maximize2, Tag } from 'lucide-react';
 import { ASPECT_RATIO_OPTIONS, BatchSettings, ImageItem } from './types';
 import { OperationSection, SegmentedControl } from './ui';
@@ -11,7 +12,7 @@ interface SettingsPanelProps {
   onOpenCropEditor: () => void;
 }
 
-export default function SettingsPanel({
+const SettingsPanel = React.memo(function SettingsPanel({
   settings,
   previewNames,
   activeItem,
@@ -235,4 +236,6 @@ export default function SettingsPanel({
       </OperationSection>
     </aside>
   );
-}
+});
+
+export default SettingsPanel;

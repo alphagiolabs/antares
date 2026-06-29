@@ -5,14 +5,7 @@ import { TAB_DEFINITIONS } from '../../../navigation';
 import { ToastProvider } from '../../../hooks/useToast';
 
 const STORAGE_KEY = 'antares_sidebar_expanded';
-const mockSignOut = vi.fn(async () => {});
 
-vi.mock('../../../auth/AuthContext', () => ({
-  useAuth: () => ({
-    user: { id: 'u1', email: 'user@test.com', displayName: 'Test User', isAdmin: false, isDisabled: false, createdAt: '' },
-    signOut: mockSignOut,
-  }),
-}));
 
 function renderSidebar(props: { activeTab: 'convert'; onTabChange: ReturnType<typeof vi.fn> }) {
   return render(
@@ -25,7 +18,6 @@ function renderSidebar(props: { activeTab: 'convert'; onTabChange: ReturnType<ty
 describe('Sidebar', () => {
   beforeEach(() => {
     localStorage.clear();
-    mockSignOut.mockClear();
   });
 
   it('does not show the removed brand tagline', () => {
@@ -95,11 +87,5 @@ describe('Sidebar', () => {
     expect(screen.queryByRole('button', { name: 'Apariencia' })).not.toBeInTheDocument();
   });
 
-  it('calls signOut from the bottom logout button', async () => {
-    renderSidebar({ activeTab: 'convert', onTabChange: vi.fn() });
 
-    fireEvent.click(screen.getByTestId('sidebar-signout-button'));
-
-    expect(mockSignOut).toHaveBeenCalledTimes(1);
-  });
 });

@@ -58,7 +58,7 @@ export default defineConfig(({ mode }) => ({
           'vendor-jspdf': ['jspdf'],
           'vendor-html-to-image': ['html-to-image'],
           'vendor-pdfjs': ['pdfjs-dist'],
-          'vendor-data': ['xlsx'],
+          'vendor-data': ['@e965/xlsx'],
           'vendor-i18n': ['i18next', 'react-i18next'],
         },
         assetFileNames: (assetInfo) => {
@@ -101,5 +101,13 @@ export default defineConfig(({ mode }) => ({
     globals: true,
     environment: 'jsdom',
     setupFiles: ['./src/test-setup.ts'],
+    // Disables parallelism between test files. The UI suite renders the whole
+    // <App /> (lazy-loading heavy modules such as jspdf, pdfjs-dist and xlsx)
+    // and several `findBy*` assertions use 5s timeouts that are tight enough to
+    // flake when Vitest runs many jsdom environments concurrently: the host is
+    // starved while transforming/importing modules, so the awaited element does
+    // not appear within 5s. Running files sequentially removes the race at its
+    // root instead of bumping every timeout one by one.
+    fileParallelism: false,
   },
 }))

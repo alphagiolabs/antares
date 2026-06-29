@@ -10,21 +10,22 @@ from typing import Any
 from backend.core.database import get_db_path
 from backend.core.migrations import Migration, MigrationManager
 from backend.core.repository import _db_lock, get_connection
-from backend.core.run_types import ALL_RUN_TYPES  # noqa: F401
+from backend.core.run_types import ALL_RUN_TYPES, RUN_TYPE_REGISTRY  # noqa: F401
 
 # ─── Constants ─────────────────────────────────────────────────────────────
 
 # Run type ids. Kept here for backward compatibility — the canonical list
-# lives in ``backend.core.run_types.RUN_TYPE_REGISTRY``.
-RUN_TYPE_CONVERSION = "conversion"
-RUN_TYPE_FORMATO = "formato"
-RUN_TYPE_SELLADOR = "sellador"
-RUN_TYPE_PADRON = "padron"
-RUN_TYPE_VOLANTE = "volante"
-RUN_TYPE_IMAGE_OPTIMIZER = "image_optimizer"
-RUN_TYPE_REPORTE_CAMPO = "reporte_campo"
-RUN_TYPE_PANEL_AVISO_CORTE = "panel_aviso_corte"
-RUN_TYPE_INFORME_TECNICO = "informe_tecnico"
+# lives in ``backend.core.run_types.RUN_TYPE_REGISTRY``. The literals are
+# sourced from that registry so the two cannot drift.
+RUN_TYPE_CONVERSION = RUN_TYPE_REGISTRY["conversion"].id
+RUN_TYPE_FORMATO = RUN_TYPE_REGISTRY["formato"].id
+RUN_TYPE_SELLADOR = RUN_TYPE_REGISTRY["sellador"].id
+RUN_TYPE_PADRON = RUN_TYPE_REGISTRY["padron"].id
+RUN_TYPE_VOLANTE = RUN_TYPE_REGISTRY["volante"].id
+RUN_TYPE_IMAGE_OPTIMIZER = RUN_TYPE_REGISTRY["image_optimizer"].id
+RUN_TYPE_REPORTE_CAMPO = RUN_TYPE_REGISTRY["reporte_campo"].id
+RUN_TYPE_PANEL_AVISO_CORTE = RUN_TYPE_REGISTRY["panel_aviso_corte"].id
+RUN_TYPE_INFORME_TECNICO = RUN_TYPE_REGISTRY["informe_tecnico"].id
 
 # Known historial columns — explicit projection (never ``SELECT *``).
 _HISTORIAL_COLUMNS: tuple[str, ...] = (
@@ -265,3 +266,31 @@ def delete_run(run_id: int) -> bool:
         cursor = conn.execute("DELETE FROM historial WHERE id = ?", (run_id,))
         conn.commit()
         return cursor.rowcount > 0
+
+
+def delete_runs(run_ids: list[int]) -> int:
+    """Delete many runs by ID in a single transaction.
+
+    perf-14: replaces the per-id ``delete_run`` loop (N transactions / N
+    commits) with one chunked ``DELETE ... WHERE id IN (...)``. Chunks stay
+    under SQLite's 999-parameter limit. Returns the count of rows actually
+    deleted; missing ids are silently skipped (same rowcount semantics as
+    delete_run). Dedups duplicates (an id listed twice deletes its row once).
+    """
+    if not run_ids:
+        return 0
+    _ensure_table()
+    db = get_db_path()
+    deleted = 0
+    with _db_lock:
+        conn = get_connection(db)
+        for i in range(0, len(run_ids), 900):
+            chunk = run_ids[i:i + 900]
+            placeholders = ", ".join(["?"] * len(chunk))
+            cursor = conn.execute(
+                f"DELETE FROM historial WHERE id IN ({placeholders})",
+                chunk,
+            )
+            deleted += cursor.rowcount
+        conn.commit()
+    return deleted

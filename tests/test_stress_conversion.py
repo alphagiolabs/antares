@@ -38,6 +38,7 @@ def _stress_params(tmp_path, file_count: int) -> dict:
         "conversion_enabled": False,
         "usar_rename": False,
         "locale": "es",
+        "job_id": f"stress-{file_count}",
     }
 
 

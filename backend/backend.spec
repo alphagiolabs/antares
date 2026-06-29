@@ -99,7 +99,7 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-excludes=[
+    excludes=[
         # Optional acceleration/analytics stacks pulled in by pandas hooks.
         # The app uses pandas/openpyxl for Excel I/O, not SciPy/Numba.
         'scipy',
@@ -122,6 +122,13 @@ excludes=[
         'test',
         'tests',
         'playwright',
+        # Dev-only packages accidentally bundled (~8 MB savings)
+        'pygments',
+        '_pytest',
+        'hypothesis',
+        'setuptools',
+        'mypy',
+        'mypyc',
     ],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
@@ -132,13 +139,25 @@ pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 exe = EXE(
     pyz,
     a.scripts,
-    a.binaries,
-    a.zipfiles,
-    a.datas,
     [],
+    exclude_binaries=True,
     name='AntaresBackend',
     debug=False,
     bootloader_ignore_signals=False,
+    strip=False,
+    upx=True,
+    console=True,
+    disable_windowed_traceback=False,
+    target_arch=None,
+    codesign_identity=None,
+    entitlements_file=None,
+)
+
+coll = COLLECT(
+    exe,
+    a.binaries,
+    a.zipfiles,
+    a.datas,
     strip=False,
     upx=True,
     upx_exclude=[
@@ -149,10 +168,5 @@ exe = EXE(
         'libssl-1_1.dll',
         'libcrypto-1_1.dll',
     ],
-    runtime_tmpdir=None,
-    console=True,
-    disable_windowed_traceback=False,
-    target_arch=None,
-    codesign_identity=None,
-    entitlements_file=None,
+    name='AntaresBackend',
 )

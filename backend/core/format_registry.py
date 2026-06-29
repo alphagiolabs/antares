@@ -1,4 +1,13 @@
-"""Format registry for extensible image format support."""
+"""Format registry for extensible image format support.
+
+DEPRECATED (simplification-024): this registry is the surface exposed to
+third-party plugins via ``backend.core.plugins.PluginRegistry.add_format``. The
+plugin subsystem has no UI consumers and is pending a product-owner decision to
+confirm or remove. The base formats registered here are also used directly by
+``converter.py`` independent of plugin loading, so the registry itself stays
+even if plugins are removed — only the plugin-facing ``add_format`` path is
+deprecated.
+"""
 
 from __future__ import annotations
 

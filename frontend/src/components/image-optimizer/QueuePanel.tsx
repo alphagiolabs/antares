@@ -1,4 +1,4 @@
-import { DragEvent, useMemo, useState } from 'react';
+import React, { DragEvent, useMemo, useState } from 'react';
 import { Crop, FileDown, GripVertical, Image as ImageIcon, Loader2, Trash2 } from 'lucide-react';
 import { BatchSettings, ImageItem } from './types';
 import { formatBytes, buildExportNameMap, resolveSettingsForItem } from './utils';
@@ -25,7 +25,7 @@ interface QueuePanelProps {
   getResolvedBlob: (item: ImageItem) => Blob | null;
 }
 
-export default function QueuePanel({
+const QueuePanel = React.memo(function QueuePanel({
   items,
   settings,
   activeItemId,
@@ -248,4 +248,6 @@ export default function QueuePanel({
       </div>
     </section>
   );
-}
+});
+
+export default QueuePanel;

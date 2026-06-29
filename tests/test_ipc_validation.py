@@ -76,6 +76,22 @@ def test_invalid_message_with_known_id_sends_error(monkeypatch) -> None:
     assert '"id": "abc"' in out
     assert '"error"' in out
 
+def test_validate_params_rejects_system_path() -> None:
+    """SEC-003: validate_params must reject system-sensitive absolute paths."""
+    from backend.ipc_protocol import validate_params
+    assert not validate_params({"excelPath": "C:/Windows/System32/secret"}), "system dir must be rejected"
+    assert validate_params({"excelPath": "C:/safe/data.xlsx"}), "safe path must pass"
+
+
+def test_read_message_rejects_oversized_line(monkeypatch) -> None:
+    """SEC-008a: an oversized stdin line is skipped (bounded memory)."""
+    import io
+    monkeypatch.setattr(ipc_protocol, "_MAX_STDIN_LINE", 1024)
+    big = '{"id":"2","method":"version","params":{}} ' + "x" * 1034 + "\n"
+    monkeypatch.setattr(ipc_protocol.sys, "stdin", io.StringIO(big))
+    assert ipc_protocol.read_message() is ipc_protocol._SKIP
+
+
 if __name__ == "__main__":
     test_invalid_method()
     test_path_traversal()

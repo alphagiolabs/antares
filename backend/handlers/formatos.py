@@ -2,10 +2,9 @@
 from __future__ import annotations
 
 import base64
-from pathlib import Path
 from typing import Any
 
-from backend.handlers.common import parse_positive_int, with_locale
+from backend.handlers.common import guard_user_path, parse_positive_int, with_locale
 
 _PDF_MAGIC = b"%PDF"
 _MAX_PREVIEW_WIDTH = 2400
@@ -25,7 +24,7 @@ def formatos_generate(params: dict[str, Any]) -> dict[str, str]:
     pdf_bytes, filename = generate_pdf(fmt_id, desde, hasta)
     output_path = str(params.get("output_path") or "").strip()
     if output_path:
-        destination = Path(output_path).expanduser().resolve()
+        destination = guard_user_path(output_path, params, label="PDF de formato")
         if destination.suffix.lower() != ".pdf":
             destination = destination.with_suffix(".pdf")
         destination.parent.mkdir(parents=True, exist_ok=True)

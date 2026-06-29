@@ -42,12 +42,14 @@ function getBackendCommand(isDev, platform, dir) {
     ? 'AntaresBackend.exe'
     : 'AntaresBackend';
   
-  // In production, resourcesPath would be provided; for testing, use a default
-  const resourcesPath = typeof process !== 'undefined' && process.resourcesPath 
-    ? process.resourcesPath 
-    : path.join(__dirname, '..', 'dist');
-    
-  const exePath = path.join(resourcesPath, 'backend', exeName);
+  // In production (packaged Electron), process.resourcesPath points to
+  // <app>/resources. In dev / unit tests it's undefined — fall back to the
+  // project dist/ directory where build-backend.js copies the PyInstaller output.
+  const resourcesPath = typeof process !== 'undefined' && process.resourcesPath
+    ? process.resourcesPath
+    : path.join(__dirname, '..');
+
+  const exePath = path.join(resourcesPath, 'backend', 'AntaresBackend', exeName);
   
   return { cmd: exePath, args: [] };
 }

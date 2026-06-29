@@ -4,6 +4,7 @@
  */
 
 import type { ProcessStatus, LogEntry, PreviewItem, DBField, RenamePattern, DBRecord, ThemeConfig, VisualMapping, FormatInfo, FormatOrigin, MappingStrategy, MappingResult, MappingCollision } from './types';
+import { markVouchedPaths } from './utils/vouchedPaths';
 
 export type { ProcessStatus, LogEntry, PreviewItem, DBField, RenamePattern, DBRecord, ThemeConfig, VisualMapping, FormatInfo, FormatOrigin, MappingStrategy, MappingResult, MappingCollision };
 
@@ -24,6 +25,12 @@ declare global {
       autoUpdateInstall: () => Promise<{ success: boolean; reason?: string }>;
       onAutoUpdateStatus: (callback: (data: { status: string; version: string | null; progress: number; message?: string }) => void) => () => void;
       getPathForFile: (file: File) => string;
+      authStorageGet: (key: string) => Promise<string | null>;
+      authStorageSet: (key: string, value: string) => Promise<void>;
+      authStorageRemove: (key: string) => Promise<void>;
+      logoStorageGet: (key: string) => Promise<string | null>;
+      logoStorageSet: (key: string, value: string) => Promise<void>;
+      logoStorageRemove: (key: string) => Promise<void>;
     };
   }
 }
@@ -157,6 +164,7 @@ export interface ProcessBody {
   rename_column?: string;
   word_separator?: string;
   sequence_mode?: SequenceMode;
+  job_id?: string;
 }
 
 export interface PreviewBody {
@@ -242,15 +250,28 @@ export const api = {
   version: () => _invoke<{ version: string }>('version'),
   formats: () => _invoke<{ formats: string[] }>('formats'),
 
-  dialogFiles: () => _invoke<{ paths: string[] }>('dialog_files'),
-  dialogDest: () => _invoke<{ paths: string[] }>('dialog_dest'),
+  dialogFiles: () => _invoke<{ paths: string[]; vouchedPaths?: string[] }>('dialog_files').then((r) => {
+    markVouchedPaths(r.vouchedPaths);
+    return r;
+  }),
+  dialogDest: () => _invoke<{ paths: string[]; vouchedRoots?: string[] }>('dialog_dest').then((r) => {
+    markVouchedPaths(r.vouchedRoots);
+    return r;
+  }),
   dialogFolder: (params?: { title?: string; pickOnly?: boolean }) =>
-    _invoke<{ paths: string[]; folder?: string }>('dialog_folder', params),
-  dialogSave: (params?: { title?: string; defaultPath?: string; filters?: Array<{ name: string; extensions: string[] }> }) => _invoke<{ paths: string[] }>('dialog_save', params),
+    _invoke<{ paths: string[]; folder?: string; vouchedRoots?: string[] }>('dialog_folder', params).then((r) => {
+      markVouchedPaths(r.vouchedRoots);
+      return r;
+    }),
+  dialogSave: (params?: { title?: string; defaultPath?: string; filters?: Array<{ name: string; extensions: string[] }> }) =>
+    _invoke<{ paths: string[]; vouchedPaths?: string[] }>('dialog_save', params).then((r) => {
+      markVouchedPaths(r.vouchedPaths);
+      return r;
+    }),
 
-  startProcess: (body: ProcessBody) => _invoke<{ started: boolean }>('process_start', body),
-  getStatus: () => _invoke<ProcessStatus>('process_status'),
-  cancelProcess: () => _invoke<{ cancelled: boolean }>('process_cancel'),
+  startProcess: (body: ProcessBody) => _invoke<{ started: boolean; job_id?: string; reason?: string }>('process_start', body),
+  getStatus: (jobId: string) => _invoke<ProcessStatus>('process_status', { job_id: jobId }),
+  cancelProcess: (jobId: string) => _invoke<{ cancelled: boolean }>('process_cancel', { job_id: jobId }),
 
   preview: (body: PreviewBody) => _invoke<{ preview: PreviewItem[]; collisions?: MappingCollision[] }>('preview', body),
   previewImage: (body: PreviewImageBody) =>

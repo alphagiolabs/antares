@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 from backend.core.state import ProcessState
 from backend.utils.i18n import set_locale
+from backend.utils.paths import guard_user_path, resolve_allowed_roots
 from backend.utils.validators import is_path_like_key, is_safe_user_path
 
 if TYPE_CHECKING:
@@ -86,18 +87,42 @@ def validate_params(*required_params):
 
 
 def _validate_path(path: str) -> None:
-    """Validate that path doesn't contain traversal attempts."""
+    """Validate that path doesn't contain traversal attempts.
+
+    SEC-007: never echo the offending path back to the renderer — stderr keeps
+    the full context, the raised message is generic (no path leak).
+    """
     if not path or not isinstance(path, str):
-        msg = f"Invalid path: {path}"
-        raise ValueError(msg)
+        raise ValueError("Ruta inválida")
     if not is_safe_user_path(path):
-        msg = f"Path traversal detected: {path}"
-        raise ValueError(msg)
+        raise ValueError("Path traversal detected")
+
+
+# ─── SEC-003 Capa 2: confinamiento positivo a raíces vouched ────────────────
+# Re-exportados desde backend.utils.paths (capa utils, sin dependencia de
+# handlers) para que handlers y core.ubicaciones compartan la misma
+# implementación sin riesgo de import circular. Ver paths.py para el contrato
+# (warn = solo piso system-sensitive; enforce = confina a raíces vouched).
+__all__ = [
+    "guard_user_path",
+    "resolve_allowed_roots",
+]
 
 
 # Legacy singleton for backward compatibility with existing frontend.
 # New code should use the per-Job ProcessState inside JobManager instead.
 # See backend/core/jobs.py for context on the legacy single-job surface.
+#
+# TECH DEBT (simplification-019): process_state + reset_state + log_message
+# (state=None) are the legacy state surface. Every runtime caller passes
+# state=job.state, so the `target = state or process_state` fallback below is
+# only reached by legacy/test consumers. Test consumers that block removal of
+# the singleton today:
+#   - tests/test_race_condition.py  (accesses handlers._state._lock directly)
+#   - tests/test_handlers.py        (uses handlers._state.logs, handlers._reset_state())
+# Removing the singleton requires migrating those 2 tests to JobManager first;
+# until then the ProcessState() instance must stay real (it owns the _lock the
+# tests grab), so only document the dualism here.
 process_state = ProcessState()
 
 

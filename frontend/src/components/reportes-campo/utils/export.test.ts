@@ -8,6 +8,7 @@ import {
     exportConsolidatedReportPdf,
     exportReportPdf,
 } from './export';
+import { markVouchedPaths, clearVouchedPaths } from '../../../utils/vouchedPaths';
 import type { CampoPanel, PhotoFile } from '../types';
 
 const mockApi = vi.hoisted(() => ({
@@ -181,6 +182,12 @@ describe('reportes-campo report model', () => {
         Object.defineProperty(photo, 'path', { value: 'C:\\tmp\\foto.jpg' });
         const photos: PhotoFile[] = [{ id: '1', file: photo, previewUrl: 'blob:preview' }];
 
+        // SEC-004 Capa 2: el token disk-backed solo se usa si la ruta está
+        // vouched por un diálogo nativo. Marcamos la ruta del test para
+        // preservar el intent (verificar el render native con imágenes locales).
+        clearVouchedPaths();
+        markVouchedPaths(['C:\\tmp\\foto.jpg']);
+
         mockApi.dialogSave.mockResolvedValue({ paths: ['C:\\tmp\\panel.pdf'] });
         mockApi.htmlToPdf.mockResolvedValue({ filename: 'panel.pdf', saved_path: 'C:\\tmp\\panel.pdf' });
 
@@ -196,12 +203,17 @@ describe('reportes-campo report model', () => {
             localImagePaths: { 'antares-local-image:photo-0': 'C:\\tmp\\foto.jpg' },
         }));
         expect(result).toEqual({ filename: 'panel.pdf', savedPath: 'C:\\tmp\\panel.pdf' });
+        clearVouchedPaths();
     });
 
     it('exports consolidated PDF in a single htmlToPdf call', async () => {
         const config = getReportConfig('panel-fotografico');
         const photo = new File(['image'], 'foto.jpg', { type: 'image/jpeg' });
         Object.defineProperty(photo, 'path', { value: 'C:\\tmp\\foto.jpg' });
+        // SEC-004 Capa 2: marcar vouched para que la foto use token disk-backed
+        // (evita FileReader bajo fake timers y preserva el comportamiento del test).
+        clearVouchedPaths();
+        markVouchedPaths(['C:\\tmp\\foto.jpg']);
 
         const panels: CampoPanel[] = [
             {
@@ -248,10 +260,12 @@ describe('reportes-campo report model', () => {
 beforeEach(() => {
     mockApi.dialogSave.mockReset();
     mockApi.htmlToPdf.mockReset();
+    clearVouchedPaths();
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-06-24T12:00:00Z'));
 });
 
 afterEach(() => {
     vi.useRealTimers();
+    clearVouchedPaths();
 });

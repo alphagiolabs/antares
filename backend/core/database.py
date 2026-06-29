@@ -434,6 +434,52 @@ def buscar_por_columna(codigos: list[str], column: str) -> dict[str, dict[str, A
         return result
 
 
+def contar_matches_por_columna(codigos: list[str], columns: list[str]) -> dict[str, int]:
+    """perf-13: count matching rows per column under a single DB lock hold.
+
+    Replaces the key-column detection loops that called ``buscar_por_columna``
+    once per column (C lock acquires + C full-row ``SELECT *`` fetches just to
+    read ``len()``). One lock hold + ``SELECT COUNT(*)`` per column (no row
+    transfer). Returns ``{column: count}`` with the semantics the callers relied
+    on: a valid column with no matches → 0; a column that errors (invalid
+    identifier / DB error) → -1, matching the old ``except Exception: count = -1``.
+    """
+    if not columns:
+        return {}
+    unique = list(set(str(c).strip() for c in codigos if c))
+    field_names = set(get_field_names())
+    counts: dict[str, int] = {}
+    with _db_lock:
+        conn = _get_connection()
+        cursor = conn.cursor()
+        for col in columns:
+            if not col:
+                counts[col] = 0
+                continue
+            try:
+                safe_column = _validate_identifier(col)
+            except Exception:
+                counts[col] = -1
+                continue
+            if safe_column not in field_names or not unique:
+                counts[col] = 0
+                continue
+            total = 0
+            try:
+                for i in range(0, len(unique), 900):
+                    chunk = unique[i:i + 900]
+                    placeholders = ", ".join(["?"] * len(chunk))
+                    cursor.execute(
+                        f"SELECT COUNT(*) FROM imagenes WHERE {_qi(safe_column)} IN ({placeholders})",
+                        chunk,
+                    )
+                    total += cursor.fetchone()[0]
+            except Exception:
+                total = -1
+            counts[col] = total
+    return counts
+
+
 def obtener_todos(limit: int | None = None, offset: int = 0) -> list[dict[str, Any]]:
     """Retorna registros como lista de diccionarios con paginación opcional.
 

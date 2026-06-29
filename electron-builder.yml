@@ -6,6 +6,7 @@ directories:
   buildResources: assets
 compression: maximum
 files:
+  # ── Exclude non-runtime directories ──────────────────────────────────────
   - "!frontend/src/**/*"
   - "!frontend/public/**/*"
   - "!tests/**/*"
@@ -18,6 +19,15 @@ files:
   - "!**/.git/**/*"
   - "!**/.factory/**/*"
   - "!**/.github/**/*"
+  # ── Include runtime files ────────────────────────────────────────────────
+  - "frontend/dist/**/*"
+  - "electron/**/*"
+  - "shared/**/*"
+  - "assets/icon.ico"
+  # ── node_modules: include all, then exclude dev-only packages ────────────
+  # Order matters: last matching rule wins in electron-builder.
+  - "node_modules/**/*"
+  # Strip .bin, .cache, sourcemaps, TypeScript sources, and test/doc dirs
   - "!**/node_modules/.bin/**/*"
   - "!**/node_modules/.cache/**/*"
   - "!**/node_modules/**/*.map"
@@ -26,10 +36,11 @@ files:
   - "!**/node_modules/**/test/**/*"
   - "!**/node_modules/**/tests/**/*"
   - "!**/node_modules/**/docs/**/*"
-  - "!**/node_modules/**/examples/**/*"
+  - "!node_modules/**/examples/**/*"
   - "!**/node_modules/**/README*"
   - "!**/node_modules/**/CHANGELOG*"
   - "!**/node_modules/**/LICENSE*"
+  # Dev-only packages: must ship zero bytes of these in the installer
   - "!node_modules/concurrently/**/*"
   - "!node_modules/wait-on/**/*"
   - "!node_modules/electron/**/*"
@@ -42,8 +53,7 @@ files:
   - "!node_modules/electron-publish/**/*"
   - "!node_modules/electron-rebuild/**/*"
   - "!node_modules/@electron/**/*"
-  # Build-only native binaries and dev tooling hoisted to top-level node_modules.
-  # These are transitives of electron-builder/typescript and must NOT ship in the installer.
+  # Build-only native binaries and dev tooling hoisted to top-level node_modules
   - "!node_modules/app-builder-bin/**/*"
   - "!node_modules/7zip-bin/**/*"
   - "!node_modules/typescript/**/*"
@@ -55,27 +65,19 @@ files:
   - "!node_modules/config-file-ts/**/*"
   - "!node_modules/path-scurry/**/*"
   - "!node_modules/async/**/*"
-  - "frontend/dist/**/*"
-  - "electron/**/*"
-  - "shared/**/*"
-  - "assets/icon.ico"
-  - "node_modules/**/*"
-  - "!**/node_modules/**/*.map"
-  - "!**/node_modules/**/*.ts"
-  - "!**/node_modules/**/*.d.ts"
-  - "!**/node_modules/**/test/**/*"
-  - "!**/node_modules/**/tests/**/*"
-  - "!**/node_modules/**/docs/**/*"
-  - "!**/node_modules/**/examples/**/*"
-  - "!**/node_modules/**/README*"
-  - "!**/node_modules/**/CHANGELOG*"
+  # Additional dev-only packages not needed at runtime (~45 MB savings)
+  - "!node_modules/electron-winstaller/**/*"
+  - "!node_modules/postject/**/*"
+  - "!node_modules/@electron-internal/**/*"
+  - "!node_modules/jiti/**/*"
+  - "!node_modules/pkijs/**/*"
 extraResources:
   - from: formatos
     to: formatos
     filter: ["**/*"]
-  - from: dist
-    to: backend
-    filter: ["AntaresBackend*"]
+  - from: dist/AntaresBackend
+    to: backend/AntaresBackend
+    filter: ["**/*"]
 win:
   target:
     - target: nsis
@@ -85,8 +87,12 @@ win:
   icon: assets/icon.ico
   legalTrademarks: "ANTARES"
   requestedExecutionLevel: asInvoker
-  # Disabled because installers are not code-signed. Required for
-  # electron-updater to accept new versions on unsigned Windows builds.
+  # SEC-005: false por defecto — los builds sin firma necesitan que
+  # electron-updater NO verifique firma para aceptar updates. scripts/enable-
+  # build-signing.js lo flípea a true en CI sólo cuando CSC_LINK (mapeado desde
+  # secrets.WINDOWS_CERT_B64 en release.yml) está presente (build firmado);
+  # entonces electron-updater rechaza updates no firmados/con firma inválida.
+  # Una vez exista un release firmado, puede quedarse true permanente aquí.
   verifyUpdateCodeSignature: false
   signtoolOptions:
     signingHashAlgorithms:
@@ -99,10 +105,15 @@ mac:
       arch: [x64, arm64]
   category: public.app-category.utilities
   icon: assets/icon.icns
-  hardenedRuntime: true
+  # SEC-005: firma macOS deshabilitada por ahora. Para activar:
+  # 1. Agregar secrets APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD, APPLE_TEAM_ID al workflow
+  # 2. Agregar CSC_LINK (p12) y CSC_KEY_PASSWORD
+  # 3. Descomentar hardenedRuntime + sign + entitlements
+  hardenedRuntime: false
   gatekeeperAssess: false
-  entitlements: build/entitlements.mac.plist
-  entitlementsInherit: build/entitlements.mac.plist
+  sign: false
+  # entitlements: build/entitlements.mac.plist
+  # entitlementsInherit: build/entitlements.mac.plist
 linux:
   target:
     - AppImage
@@ -112,12 +123,6 @@ linux:
   icon: assets/icon.png
   maintainer: "ANTARES"
   vendor: "ANTARES"
-snap:
-  grade: stable
-  confinement: strict
-  summary: "Conversor y renombrador profesional de imágenes"
-  publish:
-    provider: snapStore
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
@@ -139,7 +144,7 @@ portable:
 dmg:
   artifactName: "Antares-${version}-${arch}.dmg"
   icon: assets/icon.icns
-  sign: false
+  # SEC-005: sin firma macOS por ahora. Ver nota en sección mac.
   contents:
     - x: 130
       y: 220

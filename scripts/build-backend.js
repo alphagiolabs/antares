@@ -3,12 +3,16 @@ const path = require('path');
 const fs = require('fs');
 
 const projectRoot = path.resolve(__dirname, '..');
+
+// Find Python from venv312 or system
+const venvPython = path.join(projectRoot, 'venv312', 'Scripts', 'python.exe');
+const pythonCmd = fs.existsSync(venvPython) ? venvPython : 'python';
 const backendDir = path.join(projectRoot, 'backend');
 const distDir = path.join(projectRoot, 'dist');
 const specFile = path.join(backendDir, 'backend.spec');
 const pyInstallerBuild = path.join(backendDir, 'build');
 const pyInstallerDist = path.join(backendDir, 'dist');
-const staleBackendNames = ['AntaresBackend.exe', 'HidroConvertBackend.exe'];
+const staleBackendNames = ['AntaresBackend.exe', 'HidroConvertBackend.exe', 'AntaresBackend'];
 
 function assertInsideProject(targetPath) {
   const relative = path.relative(projectRoot, targetPath);
@@ -37,7 +41,7 @@ try {
   }
 
   execSync(
-    `python -m PyInstaller "${specFile}" --noconfirm`,
+    `"${pythonCmd}" -m PyInstaller "${specFile}" --noconfirm`,
     {
       cwd: backendDir,
       stdio: 'inherit',
@@ -45,15 +49,15 @@ try {
       env: { ...process.env, PYTHONIOENCODING: 'utf-8', PYTHONDONTWRITEBYTECODE: '1' }
     }
   );
-  // PyInstaller puts output in backend/dist by default; move to project dist
-  const pyInstallerExe = path.join(pyInstallerDist, 'AntaresBackend.exe');
-  const targetExe = path.join(distDir, 'AntaresBackend.exe');
+  // PyInstaller ONE-DIR mode puts output in backend/dist/AntaresBackend; move to project dist/AntaresBackend
+  const pyInstallerFolder = path.join(pyInstallerDist, 'AntaresBackend');
+  const targetFolder = path.join(distDir, 'AntaresBackend');
 
-  if (fs.existsSync(pyInstallerExe)) {
-    fs.copyFileSync(pyInstallerExe, targetExe);
-    console.log(`[build-backend] Backend executable copied to ${targetExe}`);
+  if (fs.existsSync(pyInstallerFolder)) {
+    fs.cpSync(pyInstallerFolder, targetFolder, { recursive: true, force: true });
+    console.log(`[build-backend] Backend directory copied to ${targetFolder}`);
   } else {
-    console.warn('[build-backend] Warning: AntaresBackend.exe not found in expected location');
+    console.warn('[build-backend] Warning: AntaresBackend directory not found in expected location');
   }
   console.log('[build-backend] Backend build completed.');
 } catch (err) {

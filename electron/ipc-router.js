@@ -13,8 +13,70 @@
  */
 const { ipcMain, dialog } = require('electron');
 const crypto = require('crypto');
+const { StringDecoder } = require('string_decoder');
+const { _decodeLines } = require('./ipc-stdout-parser');
 const { handleDialogCall } = require('./dialog-handlers');
 const { ALLOWED_RENDERER_METHODS, LONG_RUNNING_METHODS } = require('./ipc-methods');
+const { createVouchedPaths } = require('./vouched-paths');
+const { PATH_PARAMS_BY_METHOD } = require('./path-params');
+
+// SEC-003/004 Capa 2: registro de rutas vouched por el diálogo nativo.
+// mode 'warn' (default) = observabilidad sin bloqueo (cero cambio de behavior);
+// mode 'enforce' = el router bloquea rutas no vouched. Se activa con
+// ANTARES_PATH_VOUCHING=enforce tras migrar el frontend (PR 1.3) + smokes.
+const _vouched = createVouchedPaths({
+  mode: process.env.ANTARES_PATH_VOUCHING === 'enforce' ? 'enforce' : 'warn',
+});
+
+// Extrae paths planos de un valor de param IPC (string | list | dict-of-paths).
+function _extractPaths(value) {
+  if (!value) return [];
+  if (typeof value === 'string') return [value];
+  if (Array.isArray(value)) return value.filter((v) => typeof v === 'string' && v);
+  if (typeof value === 'object') {
+    return Object.values(value).filter((v) => typeof v === 'string' && v);
+  }
+  return [];
+}
+
+/**
+ * SEC-003 Capa 2: prepara los params antes de reenviarlos al backend.
+ *  - Strippea cualquier allowed_roots que venga del renderer (el renderer no
+ *    puede confinar; el main process es la fuente de verdad).
+ *  - Para métodos con paths listados en PATH_PARAMS_BY_METHOD, deriva
+ *    allowed_roots desde el registro de vouchers.
+ *  - mode 'warn': solo loguea mismatches, NO inyecta (cero cambio de behavior).
+ *  - mode 'enforce': inyecta allowed_roots si todos vouched; lanza si no.
+ */
+function _prepareBackendParams(method, params, vouchedInstance = _vouched) {
+  const cfg = PATH_PARAMS_BY_METHOD[method];
+  const cleaned = { ...params };
+  // El renderer nunca debe setear allowed_roots; el main los deriva.
+  delete cleaned.allowed_roots;
+  if (!cfg) return cleaned;
+
+  const readPaths = (cfg.read || []).flatMap((k) => _extractPaths(params[k]));
+  const writePaths = (cfg.write || []).flatMap((k) => _extractPaths(params[k]));
+  if (readPaths.length === 0 && writePaths.length === 0) return cleaned;
+
+  const { roots, missing } = vouchedInstance.deriveRequestRoots({ read: readPaths, write: writePaths });
+  if (missing.length > 0) {
+    const mode = vouchedInstance.getMode();
+    // SEC-007: no loguear el path completo en prod empaquetado; en dev sí para triage.
+    const electron = require('electron');
+    const isPackaged = electron && electron.app && electron.app.isPackaged;
+    const detail = !isPackaged ? missing.join(', ') : `${missing.length} ruta(s)`;
+    if (mode === 'enforce') {
+      throw new Error(`Ruta no autorizada por el diálogo nativo (${detail})`);
+    }
+    console.warn(`[SEC-003] ${method}: ${detail} no vouched (warn)`);
+    return cleaned; // warn: no inyectar → backend queda en Capa 1
+  }
+  if (vouchedInstance.getMode() === 'enforce') {
+    cleaned.allowed_roots = roots;
+  }
+  return cleaned;
+}
 const {
   getProcess,
   isReady,
@@ -54,12 +116,12 @@ function _ensureListeners() {
 
   _attachedProcess = proc;
   let buffer = '';
+  const dec = new StringDecoder('utf8');
 
   proc.stdout.on('data', (data) => {
-    buffer += data.toString();
-    const lines = buffer.split('\n');
-    buffer = lines.pop() || '';
-    for (const line of lines) {
+    const out = _decodeLines(buffer, dec, data);
+    buffer = out.buffer;
+    for (const line of out.lines) {
       if (!line.trim()) continue;
       try {
         const msg = JSON.parse(line);
@@ -217,18 +279,22 @@ function registerIpcHandlers() {
     // Dialog / native methods are handled in Electron main without touching Python.
     const win = getMainWindow();
     const { BrowserWindow, session } = require('electron');
-    const dialogResult = await handleDialogCall(method, params, dialog, win, { BrowserWindow, session });
+    const dialogResult = await handleDialogCall(method, params, dialog, win, { BrowserWindow, session, vouched: _vouched });
     if (dialogResult.handled) return dialogResult.result;
 
-    return _callBackend(method, params);
+    return _callBackend(method, _prepareBackendParams(method, params));
   });
 
   ipcMain.handle('backend-status', async () => {
+    // SEC-007: stderrTail can contain internal paths/tracebacks; only expose it
+    // in development. Packaged builds return an empty tail.
+    const { app } = require('electron');
+    const stderrTail = app.isPackaged ? '' : getStderrTail();
     return {
       state: getState(),
       ready: isReady(),
       lastError: getLastError(),
-      stderrTail: getStderrTail(),
+      stderrTail,
     };
   });
 
@@ -266,6 +332,12 @@ function registerIpcHandlers() {
     });
     return { handled: true };
   });
+
+  // SEC-016: logos del preview fuera de localStorage, cifrados en reposo
+  // (safeStorage). El canal del main rechaza claves fuera de la allowlist.
+  const { safeStorage, app } = require('electron');
+  const { createLogoStorage } = require('./logo-storage');
+  createLogoStorage({ safeStorage, app }).register(ipcMain);
 }
 
-module.exports = { registerIpcHandlers, _ensureListeners };
+module.exports = { registerIpcHandlers, _ensureListeners, _prepareBackendParams, _extractPaths, _vouched };

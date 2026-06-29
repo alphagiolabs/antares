@@ -30,14 +30,14 @@ async function loadPdfFromBlob(blob: Blob): Promise<PDFDocumentProxy> {
   const { ensurePdfJs } = await import('../sellador/pdfjs');
   const pdfjs = await ensurePdfJs();
   const ab = await blob.arrayBuffer();
-  return pdfjs.getDocument({ data: new Uint8Array(ab) }).promise;
+  return pdfjs.getDocument({ data: new Uint8Array(ab), isEvalSupported: false }).promise;
 }
 
 async function loadPdfFromBase64(pdfBase64: string): Promise<PDFDocumentProxy> {
   const { ensurePdfJs } = await import('../sellador/pdfjs');
   const { safeBase64ToBytes } = await import('./base64');
   const pdfjs = await ensurePdfJs();
-  return pdfjs.getDocument({ data: safeBase64ToBytes(pdfBase64) }).promise;
+  return pdfjs.getDocument({ data: safeBase64ToBytes(pdfBase64), isEvalSupported: false }).promise;
 }
 
 export default function MappingPreviewPanel({

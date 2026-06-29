@@ -6,7 +6,12 @@ from io import BytesIO
 
 import pytest
 
-from backend.handlers.optimizer import image_optimizer_save_files, image_optimizer_zip
+from backend.handlers.optimizer import (
+    _MAX_OPTIMIZER_FILES,
+    _enforce_optimizer_bounds,
+    image_optimizer_save_files,
+    image_optimizer_zip,
+)
 
 
 def _zip_names(result: dict[str, str]) -> list[str]:
@@ -90,7 +95,7 @@ def test_image_optimizer_zip_can_write_many_files_directly_to_disk(tmp_path) -> 
                 "filename": f"C:/lote/foto_{index:04}.jpg",
                 "content_b64": base64.b64encode(f"img-{index}".encode("ascii")).decode("ascii"),
             }
-            for index in range(1000)
+            for index in range(500)
         ],
     }
 
@@ -99,9 +104,9 @@ def test_image_optimizer_zip_can_write_many_files_directly_to_disk(tmp_path) -> 
     assert result == {"filename": "lote.zip", "saved_path": str(output_path.resolve())}
     with zipfile.ZipFile(output_path) as zip_file:
         names = zip_file.namelist()
-        assert len(names) == 1000
+        assert len(names) == 500
         assert names[0] == "lote/foto_0000.jpg"
-        assert zip_file.read("lote/foto_0999.jpg") == b"img-999"
+        assert zip_file.read("lote/foto_0499.jpg") == b"img-499"
 
 
 def test_image_optimizer_save_files_writes_safe_basenames_to_chosen_folder(tmp_path) -> None:
@@ -247,3 +252,35 @@ def test_image_optimizer_save_files_skips_malformed_base64_instead_of_aborting(t
     assert (tmp_path / "good.jpg").read_bytes() == b"ok"
     assert (tmp_path / "also-good.jpg").read_bytes() == b"also-ok"
     assert not (tmp_path / "bad.jpg").exists()
+
+
+# ─── SEC-008b: DoS bounds (file count + total bytes) ───────────────────────
+
+
+def test_enforce_optimizer_bounds_truncates_file_count() -> None:
+    files = [{"content_b64": "AAAA"} for _ in range(_MAX_OPTIMIZER_FILES + 100)]
+    capped = _enforce_optimizer_bounds(files)
+    assert len(capped) == _MAX_OPTIMIZER_FILES
+
+
+def test_enforce_optimizer_bounds_rejects_total_bytes() -> None:
+    # 2MB base64 (~1.5MB decoded) x 500 -> ~750MB > 512MB cap.
+    big = "A" * (2 * 1024 * 1024)
+    files = [{"content_b64": big} for _ in range(_MAX_OPTIMIZER_FILES + 100)]
+    with pytest.raises(ValueError):
+        _enforce_optimizer_bounds(files)
+
+
+def test_enforce_optimizer_bounds_passes_legit_batch() -> None:
+    files = [{"content_b64": base64.b64encode(b"x").decode("ascii")} for _ in range(10)]
+    assert len(_enforce_optimizer_bounds(files)) == 10
+
+
+def test_image_optimizer_save_files_marks_overflow_as_skipped(tmp_path) -> None:
+    files = [
+        {"filename": f"f{i}.jpg", "content_b64": base64.b64encode(b"x").decode("ascii")}
+        for i in range(_MAX_OPTIMIZER_FILES + 5)
+    ]
+    result = image_optimizer_save_files({"output_folder": str(tmp_path), "files": files})
+    assert result["skipped_count"] >= 5
+    assert any(entry["reason"] == "batch_limit_exceeded" for entry in result["skipped"])

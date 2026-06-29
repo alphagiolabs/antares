@@ -151,6 +151,33 @@ def _json_default(obj: Any) -> Any:
 _SKIP = object()
 
 
+# SEC-008: cap inbound line length to bound memory on a malicious/huge payload.
+_MAX_STDIN_LINE = int(os.environ.get("ANTARES_IPC_MAX_STDIN_LINE", str(64 * 1024 * 1024)))
+_STDIN_DRAIN_CHUNK = 65536
+
+
+def _readline_bounded() -> str | None:
+    """Read one stdin line, capped at _MAX_STDIN_LINE chars.
+
+    Returns the line (including its trailing newline) on success, None on EOF,
+    or "" for an oversized line (the remainder is drained to keep the stream
+    aligned and the caller maps "" to _SKIP). Uses readline() so blocking/line
+    semantics stay well-defined while the cap bounds memory on a huge payload.
+    """
+    line = sys.stdin.readline(_MAX_STDIN_LINE + 1)
+    if not line:
+        return None  # EOF
+    if len(line) > _MAX_STDIN_LINE and not line.endswith("\n"):
+        # Truncated mid-line → oversized. Drain the rest to keep the stream aligned.
+        while True:
+            rest = sys.stdin.readline(_STDIN_DRAIN_CHUNK)
+            if not rest or rest.endswith("\n"):
+                break
+        logger.error("IPC line too large (>%d chars), skipping", _MAX_STDIN_LINE)
+        return ""
+    return line
+
+
 def read_message() -> IPCMessage | None:
     """Lee una línea JSON desde stdin. Returns None on EOF, _SKIP on parse error.
 
@@ -160,9 +187,11 @@ def read_message() -> IPCMessage | None:
     and the caller would block until its own timeout.
     """
     try:
-        line = sys.stdin.readline()
-        if not line:
+        line = _readline_bounded()
+        if line is None:
             return None  # EOF — pipe closed
+        if not line:
+            return _SKIP  # oversized line, already logged
         data = json.loads(line)
         # Try to recover an id from the partially-parsed payload so the
         # frontend can correlate the error response with the original request.

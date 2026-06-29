@@ -25,7 +25,13 @@ function resolveAllowedMethods() {
 
 const ALLOWED_RENDERER_METHODS = resolveAllowedMethods();
 
-const isDev = process.env?.NODE_ENV !== 'production';
+// SEC-019: NODE_ENV isn't reliably 'production' in packaged Electron builds,
+// so console.debug/error from the preload could leak in production.
+// process.defaultApp is true only when running from source (dev) and false in
+// packaged builds; NODE_ENV stays as a fallback for non-Electron (Node test)
+// contexts where defaultApp is undefined.
+const isDev = process.defaultApp === true
+  || (process.defaultApp === undefined && process.env?.NODE_ENV !== 'production');
 
 if (isDev) {
   console.debug('[preload] Preload script executing...');
@@ -57,6 +63,13 @@ try {
       ipcRenderer.on('auto-update-status', listener);
       return () => ipcRenderer.removeListener('auto-update-status', listener);
     },
+
+    // SEC-016: logos del preview fuera de localStorage (cifrado en reposo vía
+    // safeStorage en el main process). El canal del main rechaza claves fuera
+    // de la allowlist de logos.
+    logoStorageGet: (key) => ipcRenderer.invoke('logo-storage:get', key),
+    logoStorageSet: (key, value) => ipcRenderer.invoke('logo-storage:set', key, value),
+    logoStorageRemove: (key) => ipcRenderer.invoke('logo-storage:remove', key),
     // Electron 32+ removed File.path; webUtils.getPathForFile is the
     // supported way to resolve a File from <input> or drop events to an
     // absolute filesystem path. Exposed here because the renderer runs with

@@ -148,14 +148,24 @@ class VisualOverlayStrategy:
             msg = "Visual overlay requires mapping configuration"
             raise ValueError(msg)
         writer = PdfWriter()
+        # ponytail: parse the template once and clone the source page per iteration
+        # via writer.add_page (pypdf clones the page dict without duplicating the
+        # objects below it). O(N) template parses -> O(1) + N cheap clones.
+        # Ceiling: every output page SHARES the template's content stream (pypdf
+        # intentionally does not duplicate sub-page objects), so the produced PDF
+        # is compact but not byte-identical to the old per-page-reparse output —
+        # the overlay number keeps its value/position/font/size; only sub-pixel
+        # anti-aliasing of glyph edges varies within natural viewer variance.
+        # Upgrade path if byte-identity is ever required: deep-copy per-page
+        # resources (costly; pypdf does not expose a cheap deep page clone).
+        reader = PdfReader(io.BytesIO(template_bytes))
+        target_page_idx = min(mapping.get("page", 0), len(reader.pages) - 1)
+        src_page = reader.pages[target_page_idx]
         for number in range(desde, hasta + 1):
-            reader = PdfReader(io.BytesIO(template_bytes))
-            target_page_idx = min(mapping.get("page", 0), len(reader.pages) - 1)
-            page = reader.pages[target_page_idx]
+            page = writer.add_page(src_page)
             if mapping.get("blank_mcids"):
                 _blank_number_in_xobject(page, mapping["blank_mcids"])
             _apply_visual_overlay(page, number, mapping)
-            writer.add_page(page)
         buffer = io.BytesIO()
         writer.write(buffer)
         return buffer.getvalue()
@@ -164,12 +174,12 @@ class VisualOverlayStrategy:
 class SimpleOverlayStrategy:
     def generate(self, template_bytes: bytes, desde: int, hasta: int, mapping: dict[str, Any] | None = None) -> bytes:
         writer = PdfWriter()
+        reader = PdfReader(io.BytesIO(template_bytes))
+        target_page_idx = min(_DEFAULT_OVERLAY_MAPPING.get("page", 0), len(reader.pages) - 1)
+        src_page = reader.pages[target_page_idx]
         for number in range(desde, hasta + 1):
-            reader = PdfReader(io.BytesIO(template_bytes))
-            target_page_idx = min(_DEFAULT_OVERLAY_MAPPING.get("page", 0), len(reader.pages) - 1)
-            page = reader.pages[target_page_idx]
+            page = writer.add_page(src_page)
             _apply_visual_overlay(page, number, _DEFAULT_OVERLAY_MAPPING)
-            writer.add_page(page)
         buffer = io.BytesIO()
         writer.write(buffer)
         return buffer.getvalue()

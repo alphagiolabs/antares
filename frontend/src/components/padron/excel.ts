@@ -13,6 +13,14 @@ import {
   createDefaultHeaderData,
   createDefaultWaterCutData,
 } from './data';
+import {
+  loadXlsx,
+  assertXlsxSize,
+  safeRead,
+  safeSheetToJson,
+  sanitizeRecords,
+  MAX_XLSX_SHEET_ROWS,
+} from '../../utils/xlsxSafe';
 
 function normalize(value: unknown): string {
   return String(value ?? '')
@@ -139,17 +147,28 @@ export async function parseWorkbook(
   file: File,
   outputFormat: OutputFormat = 'service-interruption',
 ): Promise<ParseResult> {
-  const XLSX = await import('xlsx');
+  // SEC-012: hardening del parsing (size cap + cellFormula/cellHTML off +
+  // range-cap de filas + sanitización anti-prototype-pollution).
+  assertXlsxSize(file.size);
+  const XLSX = await loadXlsx();
   const buffer = await file.arrayBuffer();
-  const workbook = XLSX.read(buffer, { type: 'array' });
+  const workbook = safeRead(XLSX, buffer, { type: 'array' });
 
   const sheetMap: Record<string, Record<string, unknown>[]> = {};
+  let truncated = false;
   workbook.SheetNames.forEach((name: string) => {
-    sheetMap[name] = XLSX.utils.sheet_to_json(workbook.Sheets[name], {
+    const res = safeSheetToJson<Record<string, unknown>>(XLSX, workbook.Sheets[name], {
       defval: '',
       raw: false,
     });
+    if (res.truncated) truncated = true;
+    sheetMap[name] = sanitizeRecords(res.rows);
   });
+  if (truncated) {
+    console.warn(
+      `[Padron] Excel truncado a ${MAX_XLSX_SHEET_ROWS} filas por hoja por límite de seguridad (SEC-012).`,
+    );
+  }
 
   const records = detectRecords(sheetMap, outputFormat);
   const importedItems = detectItems(sheetMap);

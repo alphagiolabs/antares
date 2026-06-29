@@ -21,6 +21,13 @@ import {
   type PdfExportScope,
   type PdfQuality,
 } from './pdfExport';
+import {
+  loadXlsx,
+  assertXlsxSize,
+  safeRead,
+  safeSheetToJson,
+  MAX_XLSX_SHEET_ROWS,
+} from '../../utils/xlsxSafe';
 
 interface TemplateInfo {
   id: string;
@@ -48,19 +55,40 @@ const CUSTOM_COLS_KEY = 'antares_preview_custom_columns';
 const PERSISTED_LOGO_MAX_EDGE = 900;
 const PERSISTED_LOGO_QUALITY = 0.86;
 
-function loadPersistedLogo(key: string): { dataUrl: string; fileName: string } | null {
+async function loadPersistedLogo(key: string): Promise<{ dataUrl: string; fileName: string } | null> {
+  // SEC-016: prioriza el almacenamiento seguro del main process (cifrado en
+  // reposo vía safeStorage). Si el puente IPC no existe (tests / browser
+  // puro), cae al legado en localStorage.
+  try {
+    const secured = await window.electronAPI?.logoStorageGet?.(key);
+    if (secured) {
+      try { return JSON.parse(secured); } catch { /* malformed */ }
+    }
+  } catch { /* IPC failure — fall through to legacy */ }
+  // Legado: dataURL en localStorage. Si existe, migra al almacenamiento
+  // seguro y limpia localStorage (mejor esfuerzo, sin bloquear la carga).
   try {
     const raw = localStorage.getItem(key);
     if (!raw) return null;
-    return JSON.parse(raw);
+    const parsed = JSON.parse(raw);
+    try { await window.electronAPI?.logoStorageSet?.(key, raw); localStorage.removeItem(key); } catch { /* keep legacy */ }
+    return parsed;
   } catch { return null; }
 }
 
-function savePersistedLogo(key: string, dataUrl: string, fileName: string) {
-  try { localStorage.setItem(key, JSON.stringify({ dataUrl, fileName })); } catch { /* ignore */ }
+async function savePersistedLogo(key: string, dataUrl: string, fileName: string): Promise<void> {
+  const raw = JSON.stringify({ dataUrl, fileName });
+  try {
+    await window.electronAPI?.logoStorageSet?.(key, raw);
+  } catch {
+    try { localStorage.setItem(key, raw); } catch { /* ignore */ }
+    return;
+  }
+  try { localStorage.removeItem(key); } catch { /* ignore */ }
 }
 
-function clearPersistedLogo(key: string) {
+async function clearPersistedLogo(key: string): Promise<void> {
+  try { await window.electronAPI?.logoStorageRemove?.(key); } catch { /* ignore */ }
   try { localStorage.removeItem(key); } catch { /* ignore */ }
 }
 
@@ -218,22 +246,33 @@ export default function PreviewPanelView() {
   const [dragStep2, setDragStep2] = useState(false);
   const [dragStep4, setDragStep4] = useState(false);
 
-  // ─── Load persisted logos ───
+  // ─── Load persisted logos (SEC-016: almacenamiento seguro async) ───
+  const hydratedLogos = useRef(false);
   useEffect(() => {
-    const l = loadPersistedLogo(LOGO_LEFT_KEY);
-    if (l) setLogoLeft(l.dataUrl);
-    const r = loadPersistedLogo(LOGO_RIGHT_KEY);
-    if (r) setLogoRight(r.dataUrl);
+    let cancelled = false;
+    (async () => {
+      const [l, r] = await Promise.all([
+        loadPersistedLogo(LOGO_LEFT_KEY),
+        loadPersistedLogo(LOGO_RIGHT_KEY),
+      ]);
+      if (cancelled) return;
+      if (l) setLogoLeft(l.dataUrl);
+      if (r) setLogoRight(r.dataUrl);
+      hydratedLogos.current = true;
+    })();
+    return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {
-    if (logoLeft) savePersistedLogo(LOGO_LEFT_KEY, logoLeft, 'logo-left');
-    else clearPersistedLogo(LOGO_LEFT_KEY);
+    if (!hydratedLogos.current) return;
+    if (logoLeft) void savePersistedLogo(LOGO_LEFT_KEY, logoLeft, 'logo-left');
+    else void clearPersistedLogo(LOGO_LEFT_KEY);
   }, [logoLeft]);
 
   useEffect(() => {
-    if (logoRight) savePersistedLogo(LOGO_RIGHT_KEY, logoRight, 'logo-right');
-    else clearPersistedLogo(LOGO_RIGHT_KEY);
+    if (!hydratedLogos.current) return;
+    if (logoRight) void savePersistedLogo(LOGO_RIGHT_KEY, logoRight, 'logo-right');
+    else void clearPersistedLogo(LOGO_RIGHT_KEY);
   }, [logoRight]);
 
   useEffect(() => {
@@ -335,14 +374,20 @@ export default function PreviewPanelView() {
   };
 
   const parseFile = async (file: File) => {
-    const XLSX = await import('xlsx');
+    // SEC-012: hardening del parsing (size cap + cellFormula/cellHTML off +
+    // range-cap de filas + sanitización de claves __proto__/constructor).
+    assertXlsxSize(file.size);
+    const XLSX = await loadXlsx();
     const reader = new FileReader();
     reader.onload = evt => {
       const bstr = evt.target?.result as string;
-      const wb = XLSX.read(bstr, { type: 'binary', cellDates: false, cellNF: true });
+      const wb = safeRead(XLSX, bstr, { type: 'binary', cellDates: false, cellNF: true });
       const wsname = wb.SheetNames[0];
       const ws = wb.Sheets[wsname];
-      const jsonData = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, dateNF: 'dd/mm/yy' }) as unknown[][];
+      const { rows: jsonData, truncated } = safeSheetToJson<unknown[]>(XLSX, ws, { header: 1, raw: true, dateNF: 'dd/mm/yy' });
+      if (truncated) {
+        console.warn(`[PreviewPanel] Excel truncado a ${MAX_XLSX_SHEET_ROWS} filas por límite de seguridad (SEC-012).`);
+      }
 
       if (jsonData.length > 0) {
         const _headers = jsonData[0] as string[];
@@ -353,7 +398,8 @@ export default function PreviewPanelView() {
             if (isDateColumn(h) && typeof cellValue === 'number' && cellValue > 1000 && cellValue < 100000) {
               cellValue = excelSerialToDate(cellValue);
             }
-            obj[h] = cellValue;
+            // SEC-012: no asignar claves peligrosas aunque un header las nombrase.
+            if (h !== '__proto__' && h !== 'constructor' && h !== 'prototype') obj[h] = cellValue;
           });
           return obj;
         });

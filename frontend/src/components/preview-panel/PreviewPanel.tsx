@@ -31,6 +31,11 @@ const EMPTY_PIXEL = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg
  *  registrarlo aquí en lugar de hardcodear strings dispersos en el componente.
  */
 const KNOWN_TEMPLATES = {
+  // 'maq balde sjl' (con espacios) matchea por substring el archivo
+  // backend/templates/"volan maq balde sjl.html" en isMaqBaldeTemplate abajo.
+  // NO renombrar ese .html a guiones sin actualizar este string + el
+  // .includes('maq balde sjl'): rompería el layout A4 fijo del preview
+  // (simplification-011 documentó este acoplamiento backend→frontend).
   maqBalde: 'maq balde sjl.html',
   maquinaBalde: 'maquina-balde.html',
   reportVolanteo: 'report_volanteo.html',

@@ -9,6 +9,12 @@ from typing import Any
 
 from backend.handlers.common import with_locale
 
+# ponytail: techos anti-DoS para `limit` del cliente. history_listdefault 50,
+# history_export default 10000 — ambos dentro de rango, así que el clamp es
+# puramente aditivo (solo acota valores patológicos como limit=99999).
+_MAX_HISTORY_LIST_LIMIT: int = 500
+_MAX_HISTORY_EXPORT_LIMIT: int = 10_000
+
 _CSV_COLUMNS = [
     "id",
     "run_type",
@@ -29,10 +35,15 @@ _CSV_COLUMNS = [
 @with_locale
 def history_list(params: dict[str, Any]) -> dict[str, Any]:
     from backend.core.history import list_runs
+    try:
+        raw_limit = int(params.get("limit", 50) or 50)
+    except (TypeError, ValueError):
+        raw_limit = 50
+    limit = max(1, min(raw_limit, _MAX_HISTORY_LIST_LIMIT))
     return {
         "runs": list_runs(
             run_type=params.get("run_type"),
-            limit=params.get("limit", 50),
+            limit=limit,
             offset=params.get("offset", 0),
             date_from=params.get("date_from"),
             date_to=params.get("date_to"),
@@ -58,10 +69,9 @@ def history_delete(params: dict[str, Any]) -> dict[str, bool]:
 
 @with_locale
 def history_delete_many(params: dict[str, Any]) -> dict[str, int]:
-    from backend.core.history import delete_run
-    ids = params.get("ids") or []
-    deleted = sum(1 for run_id in ids if delete_run(int(run_id)))
-    return {"deleted": deleted, "requested": len(ids)}
+    from backend.core.history import delete_runs
+    ids = [int(run_id) for run_id in (params.get("ids") or [])]
+    return {"deleted": delete_runs(ids), "requested": len(ids)}
 
 
 @with_locale
@@ -109,9 +119,13 @@ def history_export(params: dict[str, Any]) -> dict[str, Any]:
     if ids:
         runs = list_runs_by_ids([int(x) for x in ids])
     else:
+        try:
+            raw_limit = int(params.get("limit", 10_000) or 10_000)
+        except (TypeError, ValueError):
+            raw_limit = 10_000
         runs = list_runs(
             run_type=params.get("run_type"),
-            limit=params.get("limit", 10_000),
+            limit=max(1, min(raw_limit, _MAX_HISTORY_EXPORT_LIMIT)),
             offset=0,
             date_from=params.get("date_from"),
             date_to=params.get("date_to"),

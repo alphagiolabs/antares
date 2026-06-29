@@ -9,7 +9,6 @@ handlers.
 from __future__ import annotations
 
 import logging
-import os
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -17,6 +16,7 @@ from datetime import datetime
 from typing import Any
 
 from backend.core.state import ProcessState
+from backend.core.system_limits import detect_hardware_limits
 
 logger = logging.getLogger(__name__)
 
@@ -35,48 +35,26 @@ logger = logging.getLogger(__name__)
 # the dual notification logic in conversion.py) can be removed.
 # =============================================================================
 
-DEFAULT_JOB_ID = "default"
-
-
-def resolve_job_id(params: dict[str, Any], *, default: str = DEFAULT_JOB_ID) -> str:
+def resolve_job_id(params: dict[str, Any]) -> str:
     """Resolve job_id from incoming params.
 
-    Falls back to DEFAULT_JOB_ID for backward compatibility with legacy
-    single-job frontend code. All new code should prefer passing explicit job_id.
+    Raises ValueError if job_id is missing or empty.
     """
-    val = params.get("job_id", default)
-    return str(val) if val is not None else default
-
-
-def is_legacy_default_job(job_id: str) -> bool:
-    """True when the job_id matches the legacy single-job identifier."""
-    return job_id == DEFAULT_JOB_ID
+    val = params.get("job_id")
+    if not val:
+        raise ValueError("job_id es requerido")
+    return str(val)
 
 
 def _detect_max_concurrent() -> int:
     """Auto-detect max concurrent jobs based on CPU cores and RAM.
 
-    Note: This is intentionally separate from WorkScheduler._detect_limits().
-    JobManager limits the number of top-level concurrent user operations
-    (conversion jobs, formato generations, etc.).
-    The Scheduler then further limits heavy work *inside* those jobs.
-    See scheduler.py for the sibling detector. Changes here should be
-    coordinated with the heavy slot budget.
+    Delegates to backend.core.system_limits (shared with WorkScheduler) so the
+    two detectors can no longer drift. JobManager limits the number of
+    top-level concurrent user operations; the Scheduler then further limits
+    heavy work *inside* those jobs.
     """
-    try:
-        cpu_count = os.cpu_count() or 2
-        # Try to get available RAM (Windows/Linux/macOS)
-        try:
-            import psutil
-            available_gb = psutil.virtual_memory().available / (1024 ** 3)
-        except ImportError:
-            available_gb = 4  # fallback assumption
-        # Each conversion job can use up to ~4 threads (image I/O + Pillow).
-        # Cap at CPU count, but also respect RAM: ~2GB per job is generous.
-        ram_limited = max(1, int(available_gb // 2))
-        return max(4, min(cpu_count, ram_limited, 16))
-    except Exception:
-        return 4
+    return detect_hardware_limits().max_concurrent_jobs
 
 
 MAX_CONCURRENT_DEFAULT = _detect_max_concurrent()
@@ -254,7 +232,7 @@ class JobManager:
         with self._lock:
             completed = [
                 (jid, j) for jid, j in self._jobs.items()
-                if not j.state.running and jid != DEFAULT_JOB_ID
+                if not j.state.running
             ]
             if len(completed) <= max_remaining:
                 return 0
@@ -264,10 +242,6 @@ class JobManager:
             for jid, _ in to_remove:
                 del self._jobs[jid]
             return len(to_remove)
-
-    def get_default_job(self) -> Job | None:
-        """Get the default job (backward compat)."""
-        return self.get_job(DEFAULT_JOB_ID)
 
 
 # Module-level singleton

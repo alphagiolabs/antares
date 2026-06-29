@@ -81,6 +81,59 @@ function run() {
   const pngDataOut = sanitizeHtmlForPdf(pngDataPayload);
   assert(pngDataOut.includes('data:image/png;base64,iVBOR='), 'S-MEDIO-1: keeps data:image/png URIs in CSS');
 
+  // ─── SEC-017: payloads adicionales (regex path, default) ───────────
+  const imgOnerrorPayload = "<head></head><img src=x onerror=alert(1)>";
+  const imgOnerrorOut = sanitizeHtmlForPdf(imgOnerrorPayload);
+  assert(!imgOnerrorOut.toLowerCase().includes('onerror'), 'SEC-017: strips <img onerror=...>');
+
+  const jsHrefPayload = "<head></head><a href=\"javascript:alert(1)\">x</a>";
+  const jsHrefOut = sanitizeHtmlForPdf(jsHrefPayload);
+  assert(!jsHrefOut.toLowerCase().includes('javascript:alert'), 'SEC-017: neutralises javascript: href');
+
+  const importPayload = "<head></head><style>@import url(https://evil.com/x.css);</style>";
+  const importOut = sanitizeHtmlForPdf(importPayload);
+  assert(!importOut.toLowerCase().includes('@import'), 'SEC-017: strips @import in <style>');
+  assert(!importOut.includes('https://evil.com'), 'SEC-017: collapses external url() from @import');
+
+  // ─── SEC-017: preservar funcionalidad (no romper reportes) ──────────
+  // <meta charset> DEBE sobrevivir (los reportes lo usan para UTF-8).
+  const charsetPayload = "<head><meta charset=\"UTF-8\"></head>";
+  const charsetOut = sanitizeHtmlForPdf(charsetPayload);
+  assert(charsetOut.includes('charset="UTF-8"'), 'SEC-017: preserva <meta charset> (no rompe codificación)');
+
+  // <meta http-equiv="refresh"> DEBE strip (redirección/CSP override).
+  // Nota: la meta CSP inyectada por el sanitizer también lleva http-equiv,
+  // así que se afirma sobre el contenido del refresh del usuario.
+  const refreshPayload = "<head><meta http-equiv=\"refresh\" content=\"0;url=https://evil.com\"></head>";
+  const refreshOut = sanitizeHtmlForPdf(refreshPayload);
+  assert(!refreshOut.includes('evil.com'), 'SEC-017: strip contenido de <meta http-equiv=refresh>');
+  assert(!refreshOut.toLowerCase().includes('refresh'), 'SEC-017: strip <meta http-equiv=refresh>');
+
+  // Placeholder <svg> de logo DEBE sobrevivir (PreviewPanel.tsx lo usa).
+  const svgPlaceholderPayload = "<head></head><div class=\"logo\"><svg width=\"100%\" height=\"100%\" viewBox=\"0 0 200 60\"></svg></div>";
+  const svgPlaceholderOut = sanitizeHtmlForPdf(svgPlaceholderPayload);
+  assert(svgPlaceholderOut.includes('<svg'), 'SEC-017: preserva placeholder <svg> de logo');
+  assert(!svgPlaceholderOut.toLowerCase().includes('onload'), 'SEC-017: svg sin event handlers');
+
+  // ─── SEC-017: path DOMPurify (opt-in via ANTARES_PDF_SANITIZER=purify) ─
+  try {
+    const sanitizerPath = require.resolve('../shared/html-sanitizer');
+    delete require.cache[sanitizerPath];
+    process.env.ANTARES_PDF_SANITIZER = 'purify';
+    const purifyMod = require('../shared/html-sanitizer');
+    const purifyOut = purifyMod.sanitizeHtmlForPdf(
+      "<head></head><script>alert(1)</script><img src=x onerror=alert(1)><style>.x{background:url(https://evil.com)}</style>",
+    );
+    assert(!purifyOut.toLowerCase().includes('<script'), 'SEC-017 purify: strips <script>');
+    assert(!purifyOut.toLowerCase().includes('onerror'), 'SEC-017 purify: strips onerror');
+    assert(!purifyOut.includes('https://evil.com'), 'SEC-017 purify: collapses external url()');
+    assert(purifyOut.includes('Content-Security-Policy'), 'SEC-017 purify: injects CSP meta');
+    delete require.cache[sanitizerPath];
+    delete process.env.ANTARES_PDF_SANITIZER;
+  } catch (err) {
+    console.log(`  (skipped DOMPurify path: ${err && err.message})`);
+  }
+
   console.log(`\n${'='.repeat(50)}`);
   console.log(`Results: ${passed} passed, ${failed} failed`);
   console.log('='.repeat(50));

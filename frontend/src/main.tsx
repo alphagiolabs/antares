@@ -3,6 +3,7 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App'
 import './index.css'
+import { safeThemeValue } from './utils/themeValidate'
 
 function restoreCachedTheme() {
   try {
@@ -11,8 +12,11 @@ function restoreCachedTheme() {
 
     const themeVars = JSON.parse(cached) as Record<string, string>;
     Object.entries(themeVars).forEach(([name, value]) => {
-      if (name.startsWith('--') && typeof value === 'string') {
-        document.documentElement.style.setProperty(name, value);
+      // SEC-016: validar antes de inyectar — solo variables conocidas con
+      // valores tipados (colores/longitudes/fuentes). Rechaza url()/@import/;.
+      const safe = safeThemeValue(name, value);
+      if (safe !== null) {
+        document.documentElement.style.setProperty(name, safe);
       }
     });
 

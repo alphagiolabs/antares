@@ -130,8 +130,14 @@ function _resolveAppVersion() {
 
 function _recordStderr(chunk) {
   const text = chunk.toString();
-  // Forward to main-process stderr for CLI visibility
-  process.stderr.write(text);
+  // Forward to main-process stderr for CLI visibility (dev only). In a packaged
+  // build there is no CLI watching stderr, so per-chunk writes are pure overhead.
+  // ponytail: ceiling — production stderr is dropped from the console (only the
+  // last 30 lines survive in _stderrBuffer for error reports). Upgrade path:
+  // route prod stderr to a log file if on-disk diagnostics are ever needed.
+  if (_isDev) {
+    process.stderr.write(text);
+  }
   // Keep a rolling buffer of the last N non-empty lines for diagnostics
   const lines = text.split(/\r?\n/).map((l) => l.trimEnd()).filter(Boolean);
   for (const line of lines) {

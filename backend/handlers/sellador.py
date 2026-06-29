@@ -10,8 +10,24 @@ from backend.core.sellador import apply_sellador, distribute_stamp_pages
 from backend.core.sellador_io import resolve_pdf_bytes, resolve_stamp_bytes
 from backend.core.sellador_preview import inspect_pdf_path, render_pdf_page_preview
 from backend.handlers.common import parse_positive_int, with_locale
+from backend.utils.paths import assert_path_within_root
 
 _MAX_INLINE_PDF_BYTES = 8 * 1024 * 1024
+
+
+def _allowed_roots(params: dict[str, Any]) -> tuple[Path, ...]:
+    raw = params.get("allowed_roots") or []
+    if not isinstance(raw, list):
+        return ()
+    return tuple(Path(p).expanduser().resolve() for p in raw if isinstance(p, str) and p)
+
+
+def _screen_read(p: str, params: dict[str, Any], label: str) -> str:
+    """SEC-003: confine a user-supplied read path (system-sensitive floor +
+    optional allowed_roots). Returns the resolved path string."""
+    resolved = Path(p).expanduser().resolve()
+    assert_path_within_root(resolved, _allowed_roots(params), label=label)
+    return str(resolved)
 
 
 def _parse_float(value: Any, label: str, *, allow_zero: bool = False) -> float:
@@ -73,7 +89,8 @@ def sellador_inspect_pdf(params: dict[str, Any]) -> dict[str, Any]:
     if not pdf_path:
         msg = "Ruta del PDF requerida"
         raise ValueError(msg)
-    return inspect_pdf_path(pdf_path)
+    resolved = _screen_read(pdf_path, params, "PDF")
+    return inspect_pdf_path(resolved)
 
 
 @with_locale
@@ -82,9 +99,10 @@ def sellador_render_page(params: dict[str, Any]) -> dict[str, Any]:
     if not pdf_path:
         msg = "Ruta del PDF requerida"
         raise ValueError(msg)
+    resolved = _screen_read(pdf_path, params, "PDF")
     page_num = parse_positive_int(params.get("page_num", 1), "Página")
     max_width = parse_positive_int(params.get("max_width", 2800), "Ancho de vista previa")
-    return render_pdf_page_preview(pdf_path, page_num, max_width=max_width)
+    return render_pdf_page_preview(resolved, page_num, max_width=max_width)
 
 
 @with_locale
@@ -127,6 +145,7 @@ def sellador_apply(params: dict[str, Any]) -> dict[str, Any]:
 
     if output_path:
         destination = Path(output_path).expanduser().resolve()
+        assert_path_within_root(destination.parent, _allowed_roots(params), label="Directorio de salida")
         if destination.suffix.lower() != ".pdf":
             destination = destination.with_suffix(".pdf")
         destination.parent.mkdir(parents=True, exist_ok=True)

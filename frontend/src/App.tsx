@@ -10,8 +10,6 @@ import ToastContainer from './components/ui/Toast';
 import Dialog from './components/ui/Dialog';
 import CommandPalette from './components/ui/CommandPalette';
 import { DEFAULT_TAB, FULL_BLEED_TABS, TAB_DEFINITIONS, CONFIG_SECTION_DEFINITIONS, type TabId, type ConfigSectionId } from './navigation';
-import { AuthProvider, useAuth } from './auth/AuthContext';
-import LoginScreen from './auth/LoginScreen';
 
 const ConversionView = React.lazy(() => import('./components/conversion/ConversionView'));
 const FormatosView = React.lazy(() => import('./components/formatos/FormatosView'));
@@ -61,47 +59,6 @@ function ElectronOnlyNotice() {
         </div>
       </div>
     </main>
-  );
-}
-
-function AuthGate() {
-  const { user, loading, signOut } = useAuth();
-
-  if (loading) {
-    return (
-      <div className="flex h-screen w-screen items-center justify-center bg-[var(--bg-base)]">
-        <div className="text-sm text-[var(--text-muted)]">Cargando...</div>
-      </div>
-    );
-  }
-
-  if (!user) {
-    return <LoginScreen />;
-  }
-
-  if (user.isDisabled) {
-    return <DisabledUserNotice onSignOut={signOut} />;
-  }
-
-  // User is authenticated — check Electron bridge
-  if (!window.electronAPI) {
-    return <ElectronOnlyNotice />;
-  }
-
-  return <AppContent />;
-}
-
-function DisabledUserNotice({ onSignOut }: { onSignOut: () => Promise<void> }) {
-  React.useEffect(() => { onSignOut(); }, [onSignOut]);
-  return (
-    <div className="flex h-screen w-screen items-center justify-center bg-[var(--bg-base)] px-6 text-center text-[var(--text-primary)]">
-      <div className="max-w-sm">
-        <h1 className="text-xl font-semibold">Cuenta desactivada</h1>
-        <p className="mt-2 text-sm text-[var(--text-muted)]">
-          Tu cuenta ha sido desactivada. Contacta al administrador.
-        </p>
-      </div>
-    </div>
   );
 }
 
@@ -190,12 +147,14 @@ function AppContent() {
 }
 
 function App() {
+  if (!window.electronAPI) {
+    return <ElectronOnlyNotice />;
+  }
+
   return (
     <ToastProvider>
       <DialogProvider>
-        <AuthProvider>
-          <AuthGate />
-        </AuthProvider>
+        <AppContent />
       </DialogProvider>
     </ToastProvider>
   );

@@ -11,8 +11,14 @@ import {
   sanitizeMultilineText,
   toSlugId
 } from "./format";
-
-const loadXlsx = () => import("xlsx");
+import {
+  loadXlsx,
+  assertXlsxSize,
+  safeRead,
+  safeSheetToJson,
+  sanitizeRecords,
+  MAX_XLSX_SHEET_ROWS
+} from "../../../utils/xlsxSafe";
 
 const validateColumns = (headers: string[]): string[] => {
   const normalized = headers.map(normalizeHeader);
@@ -76,9 +82,12 @@ const mapRowToRecord = (
 };
 
 export const importSpreadsheet = async (file: File): Promise<ImportResult> => {
+  // SEC-012: hardening del parsing (size cap + cellFormula/cellHTML off +
+  // range-cap de filas + sanitización anti-prototype-pollution).
+  assertXlsxSize(file.size);
   const XLSX = await loadXlsx();
   const buffer = await file.arrayBuffer();
-  const workbook = XLSX.read(buffer, {
+  const workbook = safeRead(XLSX, buffer, {
     type: "array",
     cellDates: true
   });
@@ -89,11 +98,12 @@ export const importSpreadsheet = async (file: File): Promise<ImportResult> => {
   }
 
   const sheet = workbook.Sheets[firstSheetName];
-  const matrix = XLSX.utils.sheet_to_json<(string | number | Date)[]>(sheet, {
+  const matrixResult = safeSheetToJson<(string | number | Date)[]>(XLSX, sheet, {
     header: 1,
     blankrows: false,
     defval: ""
   });
+  const matrix = matrixResult.rows;
 
   const headerRow = matrix[0]?.map((value) => String(value).trim()) ?? [];
   const missingColumns = validateColumns(headerRow);
@@ -106,10 +116,11 @@ export const importSpreadsheet = async (file: File): Promise<ImportResult> => {
 
   const normalizedHeaders = headerRow.map(normalizeHeader);
 
-  const rows = XLSX.utils.sheet_to_json<RawFlyerRecord>(sheet, {
+  const rowsResult = safeSheetToJson<RawFlyerRecord>(XLSX, sheet, {
     defval: "",
     raw: true
   });
+  const rows = sanitizeRecords(rowsResult.rows);
 
   const mappedRows = rows.map((row) => {
     const normalized: RawFlyerRecord = {};
@@ -124,6 +135,11 @@ export const importSpreadsheet = async (file: File): Promise<ImportResult> => {
   });
 
   const warnings: string[] = [];
+  if (matrixResult.truncated || rowsResult.truncated) {
+    warnings.push(
+      `El Excel supera ${MAX_XLSX_SHEET_ROWS} filas y fue truncado por límite de seguridad (SEC-012).`
+    );
+  }
 
   const records = mappedRows
     .map((row, index) => mapRowToRecord(row, index, warnings))

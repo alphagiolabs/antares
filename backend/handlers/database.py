@@ -14,7 +14,7 @@ from backend.core.database import (
     obtener_todos,
     parse_id_rename_mapping_full,
 )
-from backend.handlers.common import validate_params, with_locale
+from backend.handlers.common import guard_user_path, validate_params, with_locale
 
 
 @with_locale
@@ -24,12 +24,14 @@ def db_records(params: dict[str, Any]) -> dict[str, Any]:
 @with_locale
 @validate_params("path")
 def db_import(params: dict[str, Any]) -> dict[str, int]:
-    return {"imported": importar_excel(params.get("path", ""))}
+    path = guard_user_path(params.get("path", ""), params, label="Excel a importar")
+    return {"imported": importar_excel(str(path))}
 
 @with_locale
 @validate_params("path")
 def db_export(params: dict[str, Any]) -> dict[str, int]:
-    return {"exported": exportar_excel(params.get("path", ""))}
+    path = guard_user_path(params.get("path", ""), params, label="Excel de exportación")
+    return {"exported": exportar_excel(str(path))}
 
 @with_locale
 def db_clear(params: dict[str, Any]) -> dict[str, int]:
@@ -41,8 +43,9 @@ def db_template(params: dict[str, Any]) -> dict[str, Any]:
     path = params.get("path", "")
     if path and not path.lower().endswith(".xlsx"):
         path = path + ".xlsx"
-    generar_plantilla_excel(path)
-    return {"path": path}
+    resolved = guard_user_path(path, params, label="Plantilla Excel")
+    generar_plantilla_excel(str(resolved))
+    return {"path": str(resolved)}
 
 @with_locale
 def db_fields(params: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
@@ -70,10 +73,10 @@ def db_parse_mapping(params: dict[str, Any]) -> dict[str, Any]:
     """Parsea un Excel ID→RENOMBRE sin tocar la BD del catálogo."""
     from backend.core.mapping_index import MappingIndex
 
-    excel_path = params.get("path", "")
+    excel_path = guard_user_path(params.get("path", ""), params, label="Excel de mapeo")
     id_column = params.get("id_column") or None
     rename_column = params.get("rename_column") or None
-    parsed = parse_id_rename_mapping_full(excel_path, id_column, rename_column)
+    parsed = parse_id_rename_mapping_full(str(excel_path), id_column, rename_column)
     mapping = parsed["mapping"]
     files = params.get("files") or []
     stats = MappingIndex(mapping).compute_stats(files)

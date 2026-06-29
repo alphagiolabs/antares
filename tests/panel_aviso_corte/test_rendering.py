@@ -28,6 +28,13 @@ _ROOT = Path(__file__).resolve().parents[2]
 _W_NS = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
 _WP_NS = {"wp": "http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"}
 
+WEASYPRINT_AVAILABLE = False
+try:
+    import weasyprint  # noqa: F401
+    WEASYPRINT_AVAILABLE = True
+except Exception:
+    pass
+
 
 def _tiny_png() -> str:
     """Devuelve una imagen PNG válida de 1x1 píxel codificada en base64."""
@@ -83,6 +90,7 @@ def test_render_docx_empty_panels_raises() -> None:
         render_docx(panels=(), logos={}, images={}, export_mode="include_empty")
 
 
+@pytest.mark.skipif(not WEASYPRINT_AVAILABLE, reason="WeasyPrint (GTK library) is not available")
 def test_render_pdf_success() -> None:
     panel = _make_panel()
     images = {"img1.jpg": _tiny_png(), "img2.jpg": _tiny_png()}
@@ -105,6 +113,7 @@ def test_pdf_template_photos_fill_their_cells() -> None:
     assert "object-fit: cover;" in template
 
 
+@pytest.mark.skipif(not WEASYPRINT_AVAILABLE, reason="WeasyPrint (GTK library) is not available")
 def test_render_pdf_accepts_disk_backed_images(tmp_path: Path) -> None:
     panel = _make_panel()
     image_path = tmp_path / "img1.png"
@@ -170,6 +179,7 @@ def test_render_docx_multiple_panels() -> None:
     assert filename.endswith(".docx")
 
 
+@pytest.mark.skipif(not WEASYPRINT_AVAILABLE, reason="WeasyPrint (GTK library) is not available")
 def test_render_pdf_fixture_keeps_four_images_per_page(tmp_path: Path) -> None:
     panels, images = _fixture_panels_and_images()
 
@@ -186,6 +196,7 @@ def test_render_pdf_fixture_keeps_four_images_per_page(tmp_path: Path) -> None:
     assert len(PdfReader(str(output)).pages) == 2
 
 
+@pytest.mark.skipif(not WEASYPRINT_AVAILABLE, reason="WeasyPrint (GTK library) is not available")
 def test_render_pdf_fixture_with_square_logo_keeps_one_panel_per_page(
     tmp_path: Path,
 ) -> None:

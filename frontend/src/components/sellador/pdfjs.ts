@@ -25,7 +25,7 @@ export async function ensurePdfJs() {
 
 export async function loadPdfDocument(pdfBase64: string) {
   const pdfjs = await ensurePdfJs();
-  return pdfjs.getDocument({ data: safeBase64ToBytes(pdfBase64) }).promise;
+  return pdfjs.getDocument({ data: safeBase64ToBytes(pdfBase64), isEvalSupported: false }).promise;
 }
 
 export async function getPdfPageSize(pdfBase64: string, pageNum = 1): Promise<PdfPageSize> {

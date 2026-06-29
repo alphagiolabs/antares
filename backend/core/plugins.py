@@ -1,5 +1,13 @@
 """Dynamic plugin loader for format extensions.
 
+DEPRECATED (simplification-024): the plugin subsystem (this module +
+``format_registry.py`` + the ``plugin_formats`` handler in ``handlers/info.py``)
+has no UI consumers — ``api.pluginFormats`` is declared in ``api.ts`` but no
+component ever calls it, and the AST sandbox below gives a false sense of
+security (the module's own note says so). Pending product-owner decision to
+confirm or remove the feature in a next minor; do not extend it. Removal also
+requires migrating ``tests/test_plugins.py``, so it is out of scope here.
+
 Security model
 --------------
 Plugins are loaded only from ``user_data_path("plugins")`` and must expose a
@@ -11,8 +19,10 @@ the backend.  Treat third-party plugins as *use at your own risk*.
 from __future__ import annotations
 
 import ast
+import hashlib
 import importlib.util
 import logging
+import os
 import sys
 from typing import TYPE_CHECKING
 
@@ -88,8 +98,31 @@ def _is_safe_plugin(source: str) -> bool:
     return has_register
 
 
+def _plugin_fingerprint(file_path: Path) -> dict[str, str | int]:
+    """SEC-002: audit fingerprint (sha256 + size + mtime) for a loaded plugin."""
+    try:
+        stat = file_path.stat()
+        h = hashlib.sha256()
+        with file_path.open("rb") as fh:
+            for chunk in iter(lambda: fh.read(65536), b""):
+                h.update(chunk)
+        return {"name": file_path.name, "size": stat.st_size,
+                "mtime": int(stat.st_mtime), "sha256": h.hexdigest()}
+    except OSError:
+        return {"name": file_path.name, "sha256": "<unreadable>"}
+
+
 def load_plugins_from_dir(plugins_dir: Path | None = None) -> None:
-    """Load all .py plugins from the plugins directory."""
+    """Load all .py plugins from the plugins directory.
+
+    SEC-002: additive kill switch (ANTARES_PLUGINS_DISABLED) + audit logging of
+    every candidate's fingerprint. Default behaviour (load) is unchanged when
+    the env var is not set, preserving the plugin feature.
+    """
+    if os.environ.get("ANTARES_PLUGINS_DISABLED", "").lower() in ("1", "true", "yes"):
+        logger.info("Plugins deshabilitados por ANTARES_PLUGINS_DISABLED")
+        return
+
     if plugins_dir is None:
         plugins_dir = user_data_path("plugins")
     plugins_dir.mkdir(parents=True, exist_ok=True)
@@ -98,9 +131,12 @@ def load_plugins_from_dir(plugins_dir: Path | None = None) -> None:
         if file_path.name.startswith("_"):
             continue
         try:
+            fp = _plugin_fingerprint(file_path)
+            logger.info("Plugin candidato: %s", fp)
             source = file_path.read_text(encoding="utf-8")
             if not _is_safe_plugin(source):
-                logger.warning("Plugin %s bloqueado por uso de APIs no permitidas", file_path.name)
+                logger.warning("Plugin %s bloqueado por uso de APIs no permitidas (sha256=%s)",
+                               file_path.name, fp.get("sha256"))
                 continue
             spec = importlib.util.spec_from_file_location(file_path.stem, file_path)
             if spec is None or spec.loader is None:
@@ -118,7 +154,7 @@ def load_plugins_from_dir(plugins_dir: Path | None = None) -> None:
             if hasattr(module, "register"):
                 registry = PluginRegistry(get_registry())
                 module.register(registry)
-                logger.info("Plugin cargado: %s", file_path.name)
+                logger.info("Plugin cargado: %s (sha256=%s)", file_path.name, fp.get("sha256"))
             else:
                 logger.warning("Plugin %s no tiene función register()", file_path.name)
         except Exception as exc:

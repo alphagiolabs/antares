@@ -12,14 +12,39 @@ function _sanitizeHtmlForPdf(html) {
   return sanitizeHtmlForPdf(html);
 }
 
-function _localImageEntries(rawPaths) {
+// SEC-004 Capa 1: reject local image paths that resolve into system-sensitive
+// directories (C:\Windows, /etc, ...). Preserves legit flows (user images under
+// tmp/home/external drives). Capa 2 (vouching by the native dialog) is the
+// stronger follow-up documented in issues/security-004.
+const _SYSTEM_SENSITIVE_ROOTS = process.platform === 'win32'
+  ? ['c:\\windows', 'c:\\program files', 'c:\\program files (x86)', 'c:\\programdata']
+  : ['/etc', '/usr', '/bin', '/sbin', '/proc', '/sys', '/dev', '/boot', '/lib', '/lib64', '/root'];
+
+function _isSystemSensitivePath(absPath) {
+  const p = path.resolve(absPath).toLowerCase();
+  for (const root of _SYSTEM_SENSITIVE_ROOTS) {
+    if (p === root || p.startsWith(root + path.sep)) return true;
+  }
+  return false;
+}
+
+function _localImageEntries(rawPaths, vouched) {
   if (!rawPaths || typeof rawPaths !== 'object' || Array.isArray(rawPaths)) return [];
   const allowedExtensions = new Set(['.jpg', '.jpeg', '.png', '.webp', '.bmp', '.gif', '.tif', '.tiff', '.ico']);
+  // SEC-004 Capa 2: en modo enforce, solo imagenes cuya ruta este vouched por
+  // un dialogo nativo reciente (read). Sin vouched (tests) o en warn, se
+  // aplica solo Capa 1 (denylist) — preserva el flujo existente.
+  const enforce = vouched && vouched.getMode() === 'enforce';
 
   return Object.entries(rawPaths).flatMap(([token, rawPath]) => {
     if (typeof token !== 'string' || !/^antares-local-image:[a-zA-Z0-9_-]{1,120}$/.test(token)) return [];
     if (typeof rawPath !== 'string' || !path.isAbsolute(rawPath)) return [];
     if (!allowedExtensions.has(path.extname(rawPath).toLowerCase())) return [];
+    if (_isSystemSensitivePath(rawPath)) return [];
+    if (enforce && !vouched.isVouched(rawPath, 'read')) {
+      console.warn(`[SEC-004] localImagePaths no vouched, descartando: ${rawPath}`);
+      return [];
+    }
     return [{ token, fileUrl: pathToFileURL(rawPath).toString() }];
   });
 }
@@ -83,13 +108,13 @@ async function _scanFolderRecursive(dirPath, extensions) {
   return results;
 }
 
-async function renderHtmlToPdf(params = {}, electronModules = {}) {
+async function renderHtmlToPdf(params = {}, electronModules = {}, vouched = null) {
   const html = typeof params.html === 'string' ? params.html : '';
   if (!html.trim()) {
     throw new Error('HTML requerido para generar PDF');
   }
 
-  const localImages = _localImageEntries(params.localImagePaths);
+  const localImages = _localImageEntries(params.localImagePaths, vouched);
   const htmlWithLocalImages = _injectLocalImageUrls(html, localImages);
   const allowedFileUrls = new Set(localImages.map(entry => entry.fileUrl));
 
@@ -193,6 +218,10 @@ async function renderHtmlToPdf(params = {}, electronModules = {}) {
     const outputPath = _sanitizePdfOutputPath(params.outputPath, filename);
 
     if (outputPath) {
+      // SEC-004 Capa 2: el outputPath debe venir de dialog_save (write voucher).
+      if (vouched && vouched.getMode() === 'enforce' && !vouched.isVouched(outputPath, 'write')) {
+        throw new Error('La ruta de salida no fue elegida por el usuario');
+      }
       await fs.promises.mkdir(path.dirname(outputPath), { recursive: true });
       await fs.promises.writeFile(outputPath, pdfBuffer);
       return {
@@ -244,13 +273,27 @@ async function renderHtmlToPdf(params = {}, electronModules = {}) {
   }
 }
 
+// SEC-003/004 Capa 2: adjunta metadatos opcionales (vouchedPaths/vouchedRoots)
+// a la respuesta del dialogo. Campos aditivos: los callers que no los lean
+// siguen funcionando. El registro de vouchers se hace en cada sitio de llamada
+// donde se conoce el kind (read/write, file/root).
+function _vouchAndTag(vouched, result, { paths = [], roots = [] } = {}) {
+  if (!vouched) return result;
+  const tag = {};
+  if (paths.length) tag.vouchedPaths = [...paths];
+  if (roots.length) tag.vouchedRoots = [...roots];
+  return { ...result, ...tag };
+}
+
 async function handleDialogCall(method, params = {}, dialog, window, electronModules = {}) {
   if (!NATIVE_METHODS.has(method)) {
     return { handled: false };
   }
 
+  const vouched = electronModules.vouched || null;
+
   if (method === 'html_to_pdf') {
-    return { handled: true, result: await renderHtmlToPdf(params, electronModules) };
+    return { handled: true, result: await renderHtmlToPdf(params, electronModules, vouched) };
   }
 
   if (method === 'dialog_save') {
@@ -262,7 +305,10 @@ async function handleDialogCall(method, params = {}, dialog, window, electronMod
         { name: 'Todos los archivos', extensions: ['*'] },
       ],
     });
-    return { handled: true, result: resultFromSaveDialog(response) };
+    const result = resultFromSaveDialog(response);
+    // dialog_save: archivo exacto de escritura elegido por el usuario.
+    if (vouched && result.paths.length) vouched.registerWriteFile(result.paths[0]);
+    return { handled: true, result: _vouchAndTag(vouched, result, { paths: result.paths }) };
   }
 
   if (method === 'dialog_folder') {
@@ -278,10 +324,13 @@ async function handleDialogCall(method, params = {}, dialog, window, electronMod
     // Used by features that only need a destination (e.g. image optimizer
     // "save to folder"), so we avoid an expensive recursive scan.
     if (params && params.pickOnly) {
-      return { handled: true, result: { paths: [], folder: folderPath } };
+      if (vouched) vouched.registerWriteRoot(folderPath);
+      return { handled: true, result: _vouchAndTag(vouched, { paths: [], folder: folderPath }, { roots: [folderPath] }) };
     }
+    // Sin pickOnly: se escanea y LEE los archivos bajo la carpeta → read-root.
+    if (vouched) vouched.registerReadRoot(folderPath);
     const files = await _scanFolderRecursive(folderPath, FOLDER_SCAN_EXTENSIONS);
-    return { handled: true, result: { paths: files } };
+    return { handled: true, result: _vouchAndTag(vouched, { paths: files }, { roots: [folderPath] }) };
   }
 
   const properties = method === 'dialog_dest'
@@ -297,7 +346,15 @@ async function handleDialogCall(method, params = {}, dialog, window, electronMod
     ],
   });
 
-  return { handled: true, result: resultFromOpenDialog(response) };
+  const result = resultFromOpenDialog(response);
+  if (method === 'dialog_dest') {
+    // dialog_dest: carpeta destino de escritura (convertir/renombrar).
+    if (vouched && result.paths.length) vouched.registerWriteRoot(result.paths[0]);
+    return { handled: true, result: _vouchAndTag(vouched, result, { roots: result.paths }) };
+  }
+  // dialog_files: archivos exactos elegidos para lectura.
+  if (vouched) for (const p of result.paths) vouched.registerReadFile(p);
+  return { handled: true, result: _vouchAndTag(vouched, result, { paths: result.paths }) };
 }
 
 module.exports = { handleDialogCall, _sanitizeHtmlForPdf };

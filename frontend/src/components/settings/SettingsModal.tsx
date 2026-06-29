@@ -3,8 +3,6 @@ import { useTranslation } from 'react-i18next';
 import { History, Palette, X, type LucideIcon } from 'lucide-react';
 import AppearanceView from './AppearanceView';
 import HistoryView from '../history/HistoryView';
-import PanelView from './PanelView';
-import { Users } from 'lucide-react';
 import { CONFIG_SECTION_DEFINITIONS, type ConfigSectionId } from '../../navigation';
 
 interface SettingsModalProps {
@@ -14,10 +12,9 @@ interface SettingsModalProps {
   onClose: () => void;
 }
 
-const SECTION_ICONS: Record<ConfigSectionId, LucideIcon> = {
+const SECTION_ICONS: Record<Exclude<ConfigSectionId, 'panel'>, LucideIcon> = {
   appearance: Palette,
   history: History,
-  panel: Users,
 };
 
 export default function SettingsModal({ isOpen, section, onSectionChange, onClose }: SettingsModalProps) {
@@ -56,7 +53,7 @@ export default function SettingsModal({ isOpen, section, onSectionChange, onClos
   const sections = useMemo(
     () => CONFIG_SECTION_DEFINITIONS.map((def) => ({
       ...def,
-      label: def.id === 'appearance' ? t('tab.appearance') : def.id === 'history' ? t('tab.history') : t('tab.panel'),
+      label: def.id === 'appearance' ? t('tab.appearance') : t('tab.history'),
       icon: SECTION_ICONS[def.id],
     })),
     [t],
@@ -139,14 +136,12 @@ export default function SettingsModal({ isOpen, section, onSectionChange, onClos
           <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-[var(--border-subtle)] bg-[var(--bg-surface)] px-6">
             <div className="flex min-w-0 items-center gap-3">
               <h2 className="truncate text-[15px] font-semibold text-[var(--text-primary)]">
-                {section === 'appearance' ? t('tab.appearance') : section === 'history' ? t('tab.history') : t('tab.panel')}
+                {section === 'appearance' ? t('tab.appearance') : t('tab.history')}
               </h2>
               <span className="hidden text-[11px] font-medium text-[var(--text-muted)] sm:inline">
                 {section === 'appearance'
                   ? 'Personaliza el aspecto de la aplicación'
-                  : section === 'history'
-                  ? 'Revisa las ejecuciones anteriores'
-                  : 'Gestiona usuarios y permisos'}
+                  : 'Revisa las ejecuciones anteriores'}
               </span>
             </div>
             <button
@@ -170,11 +165,6 @@ export default function SettingsModal({ isOpen, section, onSectionChange, onClos
             {section === 'history' && (
               <div className="h-full overflow-hidden">
                 <HistoryView />
-              </div>
-            )}
-            {section === 'panel' && (
-              <div className="h-full overflow-y-auto">
-                <PanelView />
               </div>
             )}
           </div>

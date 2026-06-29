@@ -1,0 +1,21 @@
+# SEC-006: mantener Electron (y el tooling de build/update) fuera de EOL.
+# Abre PRs automáticos sólo para los paquetes del ecosistema Electron, para no
+# inundar el repo con updates del resto del grafo npm. CI corre contra npmjs.org
+# (no el mirror local), así que los PRs de Dependabot se validan en el registro
+# público. Frecuencia semanal = patch de Chromium poco después de cada release.
+# Upgrade path: si se quiere cobertura total de npm, quitar el filtro `allow`.
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    allow:
+      - dependency-name: "electron"
+      - dependency-name: "electron-builder"
+      - dependency-name: "electron-updater"
+    commit-message:
+      prefix: "deps(electron)"
+    labels:
+      - "security"
+      - "dependencies"

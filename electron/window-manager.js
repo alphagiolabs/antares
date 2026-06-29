@@ -1,7 +1,7 @@
 /**
  * Window management: BrowserWindow creation and lifecycle.
  */
-const { BrowserWindow, screen, session, Menu } = require('electron');
+const { BrowserWindow, screen, session, Menu, app, shell } = require('electron');
 const path = require('path');
 const { ALLOWED_RENDERER_METHODS } = require('./ipc-methods');
 
@@ -16,6 +16,13 @@ function buildAppMenu(menuIndex = 0) {
     { label: 'Ventana', submenu: [{ label: 'Minimizar', role: 'minimize' }, { label: 'Maximizar', click: () => mainWindow?.maximize() }, { label: 'Restaurar', click: () => mainWindow?.unmaximize() }, { type: 'separator' }, { label: 'Cerrar', role: 'close' }] },
     { label: 'Ayuda', submenu: [{ label: 'Acerca de Antares', role: 'about' }] },
   ];
+  // SEC-014: hide DevTools from the app menu in packaged builds.
+  if (app && app.isPackaged) {
+    const ver = menus.find((m) => m.label === 'Ver');
+    if (ver && Array.isArray(ver.submenu)) {
+      ver.submenu = ver.submenu.filter((item) => item.role !== 'toggleDevTools');
+    }
+  }
   return Menu.buildFromTemplate([menus[menuIndex] || menus[0]]);
 }
 
@@ -55,6 +62,36 @@ function createWindow(isDev) {
       }
     });
   });
+
+  // SEC-010: lock down navigation and popups from a compromised renderer.
+  // The app is a single-origin SPA (file:// in prod, localhost:5173 in dev);
+  // block any navigation outside it and deny window.open() (external links
+  // must use shell.openExternal). No window.open()/OAuth-popup usage exists
+  // in the renderer, so denying popups breaks nothing.
+  const navAllow = isDev ? ['http://localhost:5173/'] : ['file://'];
+  mainWindow.webContents.on('will-navigate', (e, url) => {
+    if (!navAllow.some((p) => url.startsWith(p))) e.preventDefault();
+  });
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (shell && /^https?:\/\//i.test(url)) {
+      shell.openExternal(url).catch(() => {});
+    }
+    return { action: 'deny' };
+  });
+
+  // SEC-014: bloquear los atajos de teclado de DevTools (F12 /
+  // Ctrl+Shift+I|J|C) en builds empaquetados. El menú de la app ya oculta
+  // "Herramientas de desarrollo" en prod (buildAppMenu), pero Chromium abre
+  // DevTools por teclado por defecto — esto cierra ese vector.
+  if (app && app.isPackaged) {
+    mainWindow.webContents.on('before-input-event', (event, input) => {
+      if (input.type !== 'keyDown') return;
+      const isDevtoolsShortcut =
+        input.key === 'F12' ||
+        (input.control && input.shift && (input.key === 'I' || input.key === 'J' || input.key === 'C'));
+      if (isDevtoolsShortcut) event.preventDefault();
+    });
+  }
 
   mainWindow.webContents.setBackgroundThrottling(false);
   mainWindow.maximize();

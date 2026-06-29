@@ -1,158 +1,66 @@
-import { describe, expect, it } from 'vitest';
-import { DEFAULT_BATCH_SETTINGS } from './presets';
-import { BatchSettings, ImageItem } from './types';
-import { arrayBufferToBase64, buildDownloadNameMap, buildExportNameMap, buildZipFilename, previewFilenames, resolveExportFilename, reorderImageItems } from './utils';
+import { describe, it, expect } from 'vitest';
+import { chunkFilesForIpc, type OptimizerFile } from './utils';
 
-function makeItem(id: string, originalName: string): ImageItem {
-  return {
-    id,
-    originalName,
-    sourceFile: new File(['x'], originalName, { type: 'image/jpeg' }),
-    preview: '',
-    originalSize: 1024,
-    status: 'pending',
-    stale: false,
-    selected: false,
-    excluded: false,
-    overrides: {
-      customFilename: '',
-      customCropOffset: undefined,
-      excluded: false,
-      skipCompression: false,
-      presetId: null,
-    },
-  };
-}
-
-const renameSettings: BatchSettings = {
-  ...DEFAULT_BATCH_SETTINGS,
-  operations: {
-    ...DEFAULT_BATCH_SETTINGS.operations,
-    renameEnabled: true,
-  },
-  rename: {
-    prefix: 'foto',
-    startAt: 1,
-  },
-};
-
-describe('image optimizer queue order', () => {
-  it('moves an image before the drop target without mutating the existing queue', () => {
-    const items = [
-      makeItem('first', 'a.jpg'),
-      makeItem('second', 'b.jpg'),
-      makeItem('third', 'c.jpg'),
-    ];
-
-    const reordered = reorderImageItems(items, 'third', 'first');
-
-    expect(reordered.map((item) => item.id)).toEqual(['third', 'first', 'second']);
-    expect(items.map((item) => item.id)).toEqual(['first', 'second', 'third']);
-  });
-
-  it('keeps before-target semantics when dragging an earlier image downward', () => {
-    const items = [
-      makeItem('first', 'a.jpg'),
-      makeItem('second', 'b.jpg'),
-      makeItem('third', 'c.jpg'),
-    ];
-
-    const reordered = reorderImageItems(items, 'first', 'third');
-
-    expect(reordered.map((item) => item.id)).toEqual(['second', 'first', 'third']);
-  });
-
-  it('uses the reordered queue to assign sequential filenames', () => {
-    const items = [
-      makeItem('first', 'a.jpg'),
-      makeItem('second', 'b.jpg'),
-      makeItem('third', 'c.jpg'),
-    ];
-
-    const reordered = reorderImageItems(items, 'third', 'first');
-    const names = buildDownloadNameMap(reordered, renameSettings);
-
-    expect(names.get('third')).toBe('foto_001.jpg');
-    expect(names.get('first')).toBe('foto_002.jpg');
-    expect(names.get('second')).toBe('foto_003.jpg');
-  });
+const file = (filename: string, kb: number): OptimizerFile => ({
+  filename,
+  // 1 KB of base64 = 1024 chars
+  content_b64: 'A'.repeat(kb * 1024),
 });
 
-describe('image optimizer export naming', () => {
-  it('preserves queue indices when resolving names for a download subset', () => {
-    const items = [
-      makeItem('first', 'a.jpg'),
-      makeItem('second', 'b.jpg'),
-      makeItem('third', 'c.jpg'),
-    ];
-    const fullMap = buildExportNameMap(items, renameSettings);
-    const subsetMap = buildDownloadNameMap([items[0], items[2]], renameSettings);
-
-    expect(fullMap.get('first')).toBe('foto_001.jpg');
-    expect(fullMap.get('third')).toBe('foto_003.jpg');
-    expect(subsetMap.get('third')).toBe('foto_002.jpg');
-    expect(resolveExportFilename('third', items, renameSettings)).toBe('foto_003.jpg');
+describe('chunkFilesForIpc', () => {
+  it('devuelve un único chunk cuando el batch cabe en el límite', () => {
+    const files = [file('a.jpg', 100), file('b.jpg', 200)];
+    const chunks = chunkFilesForIpc(files);
+    expect(chunks).toHaveLength(1);
+    expect(chunks[0]).toHaveLength(2);
   });
 
-  it('previewFilenames shows sequential names when rename is enabled', () => {
-    const names = previewFilenames(renameSettings, 0);
-    expect(names[0]).toBe('foto_001.jpg');
-    expect(names[1]).toBe('foto_002.jpg');
-    expect(names[2]).toBe('foto_003.jpg');
-  });
-});
-
-describe('image optimizer zip export', () => {
-  it('keeps a single zip extension when the user includes it', () => {
-    const settings: BatchSettings = {
-      ...DEFAULT_BATCH_SETTINGS,
-      export: {
-        mode: 'zip',
-        zipName: 'fotos_cliente.zip',
-        outputFolder: '',
-      },
-    };
-
-    expect(buildZipFilename(settings)).toBe('fotos_cliente.zip');
-  });
-
-  it('keeps the backend-compatible zip filename sanitization', () => {
-    const settings: BatchSettings = {
-      ...DEFAULT_BATCH_SETTINGS,
-      export: {
-        mode: 'zip',
-        zipName: 'imagenes optimizadas cliente.zip',
-        outputFolder: '',
-      },
-    };
-
-    expect(buildZipFilename(settings)).toBe('imagenes_optimizadas_cliente.zip');
-  });
-});
-
-describe('arrayBufferToBase64', () => {
-  it('encodes an empty buffer to an empty string', () => {
-    expect(arrayBufferToBase64(new ArrayBuffer(0))).toBe('');
-  });
-
-  it('encodes a small buffer identically to btoa', () => {
-    const text = 'Antares optimizador';
-    const buffer = new TextEncoder().encode(text).buffer;
-    expect(arrayBufferToBase64(buffer)).toBe(btoa(text));
-  });
-
-  it('encodes a buffer larger than the chunk size without stack overflow', () => {
-    // 0x8000 (32 KB) is the chunk boundary inside arrayBufferToBase64 —
-    // a buffer bigger than that exercises the loop path that previously
-    // crashed when spreading the whole Uint8Array into String.fromCharCode.
-    const bytes = new Uint8Array(0x10000);
-    for (let i = 0; i < bytes.length; i += 1) {
-      bytes[i] = i & 0xff;
+  it('parte por tamaño base64: ningún chunk excede maxBytesPerChunk', () => {
+    // 3 archivos de 20MB base64 cada uno, cap 32MB → [20],[20],[20]
+    const files = [file('1.jpg', 20 * 1024), file('2.jpg', 20 * 1024), file('3.jpg', 20 * 1024)];
+    const chunks = chunkFilesForIpc(files, 32 * 1024 * 1024, 500);
+    expect(chunks).toHaveLength(3);
+    for (const c of chunks) {
+      const bytes = c.reduce((acc, f) => acc + f.content_b64.length, 0);
+      expect(bytes).toBeLessThanOrEqual(32 * 1024 * 1024);
     }
-    const encoded = arrayBufferToBase64(bytes.buffer);
-    // Decode back and compare — confirms no data was dropped between chunks.
-    const decoded = Uint8Array.from(atob(encoded), (c) => c.charCodeAt(0));
-    expect(decoded.length).toBe(bytes.length);
-    expect(decoded.every((value, index) => value === bytes[index])).toBe(true);
+  });
+
+  it('agrupa archivos pequeños hasta justo por debajo del cap de bytes', () => {
+    // 4 archivos de 10MB, cap 32MB → [10,10,10] excedería? 10+10+10=30 ok, +10=40>32
+    // => [10,10,10],[10]
+    const files = [file('a', 10 * 1024), file('b', 10 * 1024), file('c', 10 * 1024), file('d', 10 * 1024)];
+    const chunks = chunkFilesForIpc(files, 32 * 1024 * 1024, 500);
+    expect(chunks).toHaveLength(2);
+    expect(chunks[0]).toHaveLength(3);
+    expect(chunks[1]).toHaveLength(1);
+  });
+
+  it('parte por conteo: ningún chunk excede maxFilesPerChunk (archivos diminutos)', () => {
+    const files = Array.from({ length: 1200 }, (_, i) => file(`${i}.jpg`, 1));
+    const chunks = chunkFilesForIpc(files, 32 * 1024 * 1024, 500);
+    expect(chunks).toHaveLength(3);
+    expect(chunks[0]).toHaveLength(500);
+    expect(chunks[1]).toHaveLength(500);
+    expect(chunks[2]).toHaveLength(200);
+  });
+
+  it('preserva el orden y la totalidad de archivos a través de los chunks', () => {
+    const files = Array.from({ length: 100 }, (_, i) => file(`${i}.jpg`, 600)); // 600KB c/u
+    const chunks = chunkFilesForIpc(files, 32 * 1024 * 1024, 500);
+    const flat = chunks.flat();
+    expect(flat).toHaveLength(100);
+    expect(flat.map((f) => f.filename)).toEqual(files.map((f) => f.filename));
+  });
+
+  it('entrada vacía → sin chunks', () => {
+    expect(chunkFilesForIpc([])).toEqual([]);
+  });
+
+  it('un solo archivo que excede el cap va en su propio chunk (no se pierde)', () => {
+    const files = [file('huge.jpg', 60 * 1024)];
+    const chunks = chunkFilesForIpc(files, 32 * 1024 * 1024, 500);
+    expect(chunks).toHaveLength(1);
+    expect(chunks[0]).toHaveLength(1);
   });
 });

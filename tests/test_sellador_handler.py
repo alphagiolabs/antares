@@ -7,6 +7,7 @@ import pytest
 from PIL import Image
 from pypdf import PdfReader, PdfWriter
 
+from backend.core import sellador
 from backend.core.sellador import apply_sellador, distribute_stamp_pages, group_stamp_pages
 from backend.handlers.sellador import (
     sellador_apply,
@@ -203,3 +204,72 @@ def test_sellador_apply_from_paths(tmp_path) -> None:
     })
     assert result["saved_path"] == str(output_path.resolve())
     assert output_path.exists()
+
+
+def test_apply_sellador_placements_prepare_stamp_once_per_geometry(monkeypatch) -> None:
+    """perf-09: placements sharing the same (width, height) must reuse one
+    prepared stamp (one resize + one PDF encode) instead of re-encoding it per
+    placement. The old code re-prepared the stamp inside the placement loop."""
+    pdf_bytes = _blank_pdf(5)
+    stamp_bytes = _stamp_png()
+    placements = [
+        {"page_index": i, "x": 50, "y": 100, "width": 40, "height": 40}
+        for i in range(5)
+    ]
+    calls: list[int] = []
+    orig = sellador._prepare_stamp_image
+
+    def counting(*a, **kw):
+        calls.append(1)
+        return orig(*a, **kw)
+
+    monkeypatch.setattr("backend.core.sellador._prepare_stamp_image", counting)
+    result_bytes, page_indices, _ = apply_sellador(
+        pdf_bytes,
+        stamp_bytes,
+        stamp_count=5,
+        x=0,
+        y=0,
+        width=40,
+        height=40,
+        seed=11,
+        stamp_placements=placements,
+    )
+    assert len(calls) == 1, f"5 same-geometry placements should prepare stamp once, got {len(calls)}"
+    assert page_indices == [0, 1, 2, 3, 4]
+    assert len(PdfReader(BytesIO(result_bytes)).pages) == 5
+
+
+def test_apply_sellador_placements_dedup_only_equal_geometries(monkeypatch) -> None:
+    """perf-09: the stamp cache is keyed by (width, height) — distinct sizes
+    still get their own preparation, equal sizes are deduped. 5 placements with
+    3 distinct geometries -> 3 preparations."""
+    pdf_bytes = _blank_pdf(5)
+    stamp_bytes = _stamp_png()
+    placements = [
+        {"page_index": 0, "x": 50, "y": 100, "width": 40, "height": 40},
+        {"page_index": 1, "x": 50, "y": 100, "width": 60, "height": 60},
+        {"page_index": 2, "x": 50, "y": 100, "width": 40, "height": 40},
+        {"page_index": 3, "x": 50, "y": 100, "width": 80, "height": 80},
+        {"page_index": 4, "x": 50, "y": 100, "width": 60, "height": 60},
+    ]
+    calls: list[int] = []
+    orig = sellador._prepare_stamp_image
+
+    def counting(*a, **kw):
+        calls.append(1)
+        return orig(*a, **kw)
+
+    monkeypatch.setattr("backend.core.sellador._prepare_stamp_image", counting)
+    apply_sellador(
+        pdf_bytes,
+        stamp_bytes,
+        stamp_count=5,
+        x=0,
+        y=0,
+        width=40,
+        height=40,
+        seed=11,
+        stamp_placements=placements,
+    )
+    assert len(calls) == 3, f"3 distinct geometries -> 3 preparations, got {len(calls)}"

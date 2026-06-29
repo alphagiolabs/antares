@@ -1,10 +1,7 @@
-import { useCallback, useEffect, useState, type ComponentType } from 'react';
-import { useTranslation } from 'react-i18next';
-import { Camera, ClipboardList, LogOut, PanelLeft } from 'lucide-react';
+import { useEffect, useState, type ComponentType } from 'react';
+import { Camera, ClipboardList, PanelLeft } from 'lucide-react';
 import BrandMark from '../brand/BrandMark';
 import { TAB_DEFINITIONS, type TabId } from '../../navigation';
-import { useAuth } from '../../auth/AuthContext';
-import { useToast } from '../../hooks/useToast';
 
 const SIDEBAR_STORAGE_KEY = 'antares_sidebar_expanded';
 const SIDEBAR_WIDTH_EXPANDED = 240;
@@ -132,11 +129,7 @@ function MapPinIcon({ className }: { className?: string }) {
 }
 
 export default function Sidebar({ activeTab, onTabChange }: SidebarProps) {
-  const { t } = useTranslation();
-  const { signOut } = useAuth();
-  const { addToast } = useToast();
   const [expanded, setExpanded] = useState(readStoredExpanded);
-  const [signingOut, setSigningOut] = useState(false);
 
   useEffect(() => {
     try {
@@ -147,17 +140,6 @@ export default function Sidebar({ activeTab, onTabChange }: SidebarProps) {
   }, [expanded]);
 
   const toggleExpanded = () => setExpanded((value) => !value);
-
-  const handleSignOut = useCallback(async () => {
-    if (signingOut) return;
-    setSigningOut(true);
-    try {
-      await signOut();
-      addToast({ message: t('auth.signedOut'), type: 'success' });
-    } finally {
-      setSigningOut(false);
-    }
-  }, [addToast, signOut, signingOut, t]);
 
   return (
     <aside
@@ -225,30 +207,7 @@ export default function Sidebar({ activeTab, onTabChange }: SidebarProps) {
         })}
       </nav>
 
-      <div className="mx-2 mt-auto h-px shrink-0 bg-[var(--border-subtle)]" />
 
-      <div className="shrink-0 px-2 py-2">
-        <button
-          type="button"
-          data-testid="sidebar-signout-button"
-          aria-label={t('auth.signOut')}
-          title={t('auth.signOut')}
-          disabled={signingOut}
-          onClick={handleSignOut}
-          className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left text-[var(--text-muted)] transition-colors duration-150 hover:bg-[var(--bg-surface)] hover:text-[var(--text-secondary)] disabled:opacity-50"
-        >
-          <span className="flex h-5 w-5 shrink-0 items-center justify-center">
-            <LogOut size={18} strokeWidth={1.75} />
-          </span>
-          <span
-            className={`min-w-0 truncate text-[13px] font-medium whitespace-nowrap transition-[opacity,width] duration-200 ${
-              expanded ? 'opacity-100 w-auto' : 'opacity-0 w-0 pointer-events-none'
-            }`}
-          >
-            {t('auth.signOut')}
-          </span>
-        </button>
-      </div>
       </div>
     </aside>
   );
