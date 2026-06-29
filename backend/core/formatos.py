@@ -217,8 +217,27 @@ def _load_template_bytes(fmt: dict[str, Any]) -> bytes:
 
 
 def list_formats() -> list[dict[str, Any]]:
+    # Track uploaded formats with missing files so we can disable them
+    _needs_save = False
     with _formats_lock:
         snapshots = [dict(f) for f in _formats.values()]
+        for f in snapshots:
+            if f.get("origen") == "uploaded" and f.get("enabled", True):
+                try:
+                    path = _resolve_path(f)
+                    if not path.exists():
+                        logger.warning(
+                            "Formato uploaded '%s' tiene archivo faltante (%s), deshabilitando",
+                            f.get("id"),
+                            f.get("storage_path"),
+                        )
+                        f["enabled"] = False
+                        _formats[f["id"]]["enabled"] = False
+                        _needs_save = True
+                except Exception:
+                    logger.exception("Error verificando archivo de formato '%s'", f.get("id"))
+    if _needs_save:
+        _save_catalog()
     result = []
     for f in snapshots:
         if not f.get("enabled", True):
