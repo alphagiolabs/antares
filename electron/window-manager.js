@@ -72,7 +72,7 @@ function createWindow(isDev) {
   mainWindow.webContents.on('will-navigate', (e, url) => {
     if (!navAllow.some((p) => url.startsWith(p))) e.preventDefault();
   });
-  mainWindow.setWindowOpenHandler(({ url }) => {
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (shell && /^https?:\/\//i.test(url)) {
       shell.openExternal(url).catch(() => {});
     }

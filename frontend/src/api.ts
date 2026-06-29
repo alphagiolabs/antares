@@ -164,6 +164,7 @@ export interface ProcessBody {
   rename_column?: string;
   word_separator?: string;
   sequence_mode?: SequenceMode;
+  job_id?: string;
 }
 
 export interface PreviewBody {
@@ -268,9 +269,9 @@ export const api = {
       return r;
     }),
 
-  startProcess: (body: ProcessBody) => _invoke<{ started: boolean }>('process_start', body),
-  getStatus: () => _invoke<ProcessStatus>('process_status'),
-  cancelProcess: () => _invoke<{ cancelled: boolean }>('process_cancel'),
+  startProcess: (body: ProcessBody) => _invoke<{ started: boolean; job_id?: string; reason?: string }>('process_start', body),
+  getStatus: (jobId: string) => _invoke<ProcessStatus>('process_status', { job_id: jobId }),
+  cancelProcess: (jobId: string) => _invoke<{ cancelled: boolean }>('process_cancel', { job_id: jobId }),
 
   preview: (body: PreviewBody) => _invoke<{ preview: PreviewItem[]; collisions?: MappingCollision[] }>('preview', body),
   previewImage: (body: PreviewImageBody) =>

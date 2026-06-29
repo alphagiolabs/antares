@@ -1,3 +1,4 @@
+import React from 'react';
 import { CheckCircle2, Crop, Download, Eye, Loader2, Sparkles, Trash2, Wand2 } from 'lucide-react';
 import { BatchSettings, CropRectangle, ImageItem, PreviewTab, PresetId } from './types';
 import { BeforeAfterSlider, ItemSummary, ProgressBar } from './ui';
@@ -31,7 +32,7 @@ interface PreviewWorkspaceProps {
   onClearPresetOverride: (id: string) => void;
 }
 
-export default function PreviewWorkspace({
+const PreviewWorkspace = React.memo(function PreviewWorkspace({
   items,
   downloadNameMap,
   activeItem,
@@ -413,4 +414,6 @@ export default function PreviewWorkspace({
       </div>
     </section>
   );
-}
+});
+
+export default PreviewWorkspace;

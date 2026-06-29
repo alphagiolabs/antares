@@ -18,7 +18,6 @@ from backend.core.converter import FORMATOS_SOPORTADOS, convertir_imagen, copiar
 from backend.core.jobs import (
     Job,
     get_job_manager,
-    is_legacy_default_job,
     resolve_job_id,
 )
 from backend.core.renamer import RenamerEngine, SequenceMode
@@ -302,9 +301,9 @@ def preview(params: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
 def process_start(params: dict[str, Any]) -> dict[str, Any]:
     """Start a conversion job.
 
-    Accepts optional job_id for concurrent jobs. Falls back to "default"
-    for backward compatibility with legacy frontend.
+    Requires job_id.
     """
+    job_id = resolve_job_id(params)
     files = params.get("files", [])
     if not files or not isinstance(files, list) or len(files) == 0:
         log_message(t("error.no_files_to_process"), "error")
@@ -314,7 +313,6 @@ def process_start(params: dict[str, Any]) -> dict[str, Any]:
         log_message(t("error.no_destination"), "error")
         return {"started": False, "reason": "no_destination"}
 
-    job_id = resolve_job_id(params)
     mgr = get_job_manager()
 
     existing = mgr.get_job(job_id)
@@ -395,7 +393,6 @@ def _run_conversion_job(job: Job) -> None:
     state = job.state
     params = job.params
     job_id = job.id
-    is_default = is_legacy_default_job(job_id)
 
     try:
         set_locale(params.get("locale", "es"))
@@ -619,7 +616,7 @@ def _run_conversion_job(job: Job) -> None:
                             "ok_count": ok_count, "err_count": err_count,
                             "job_id": job_id,
                         }
-                        _emit_progress_notifications(job_id, notif_data, is_default)
+                        _emit_progress_notifications(job_id, notif_data)
 
                     # Check cancellation between completions
                     with state._lock:
@@ -675,25 +672,15 @@ def _run_conversion_job(job: Job) -> None:
             state.running = False
 
 
-def _emit_progress_notifications(job_id: str, data: dict[str, Any], is_default: bool) -> None:
-    """Send modern job progress notification + legacy one when needed."""
+def _emit_progress_notifications(job_id: str, data: dict[str, Any]) -> None:
+    """Send modern job progress notification."""
     send_notification(f"job.{job_id}.progress", data)
-    if is_default:
-        send_notification("process.progress", {
-            "progress": data["progress"],
-            "current_file": data["current_file"],
-            "ok_count": data["ok_count"],
-            "err_count": data["err_count"],
-        })
 
 
 def _emit_complete_notifications(job: Job, ok_count: int, err_count: int) -> None:
-    """Send modern job complete notification + legacy one when needed."""
-    is_default = is_legacy_default_job(job.id)
+    """Send modern job complete notification."""
     notif_data = {"ok_count": ok_count, "err_count": err_count, "job_id": job.id}
     send_notification(f"job.{job.id}.complete", notif_data)
-    if is_default:
-        send_notification("process.complete", {"ok_count": ok_count, "err_count": err_count})
 
 
 # Backwards-compatible alias (used internally by _run_conversion_job)

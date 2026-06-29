@@ -3,19 +3,6 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import App from '../App';
 import { TAB_DEFINITIONS } from '../navigation';
 
-// Mock AuthContext so the app renders as an authenticated admin in tests.
-vi.mock('../auth/AuthContext', () => ({
-  AuthProvider: ({ children }: { children: React.ReactNode }) => children,
-  useAuth: () => ({
-    user: { id: 'test', email: 'test@test.com', displayName: 'Test', isAdmin: true, isDisabled: false, createdAt: '' },
-    loading: false,
-    error: null,
-    signIn: async () => ({ error: null }),
-    signUp: async () => ({ error: null }),
-    signOut: async () => {},
-    refreshUser: async () => {},
-  }),
-}));
 
 describe('App', () => {
   it('shows an Electron-only message when the preload bridge is unavailable', () => {

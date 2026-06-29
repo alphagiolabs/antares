@@ -1,7 +1,7 @@
 {
   "name": "antares-frontend",
   "private": true,
-  "version": "0.10.13",
+  "version": "0.10.14",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -24,6 +24,9 @@
     "react-dom": "^18.2.0",
     "react-i18next": "^17.0.4",
     "react-window": "^2.2.7"
+  },
+  "overrides": {
+    "dompurify": "^3.4.11"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.9.1",

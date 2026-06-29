@@ -30,7 +30,7 @@ _WP_NS = {"wp": "http://schemas.openxmlformats.org/drawingml/2006/wordprocessing
 
 WEASYPRINT_AVAILABLE = False
 try:
-    import weasyprint
+    import weasyprint  # noqa: F401
     WEASYPRINT_AVAILABLE = True
 except Exception:
     pass

@@ -63,12 +63,7 @@ try {
       ipcRenderer.on('auto-update-status', listener);
       return () => ipcRenderer.removeListener('auto-update-status', listener);
     },
-    // SEC-009: almacenamiento del token Supabase fuera del renderer
-    // (cifrado en reposo vía safeStorage en el main process). El canal del
-    // main rechaza claves que no sean sb-<ref>-auth-token.
-    authStorageGet: (key) => ipcRenderer.invoke('auth-storage:get', key),
-    authStorageSet: (key, value) => ipcRenderer.invoke('auth-storage:set', key, value),
-    authStorageRemove: (key) => ipcRenderer.invoke('auth-storage:remove', key),
+
     // SEC-016: logos del preview fuera de localStorage (cifrado en reposo vía
     // safeStorage en el main process). El canal del main rechaza claves fuera
     // de la allowlist de logos.

@@ -5,30 +5,30 @@ Thread-safety is verified separately in test_race_condition.py.
 """
 from __future__ import annotations
 
-from backend.core.jobs import DEFAULT_JOB_ID, Job, JobManager, resolve_job_id
+import pytest
+
+from backend.core.jobs import Job, JobManager, resolve_job_id
 from backend.core.state import ProcessState
 
 
 class TestResolveJobId:
-    def test_missing_key_falls_back_to_default(self):
-        assert resolve_job_id({}) == DEFAULT_JOB_ID
+    def test_missing_key_raises_error(self):
+        with pytest.raises(ValueError, match="job_id es requerido"):
+            resolve_job_id({})
 
-    def test_none_value_falls_back_to_default(self):
-        # Regression: str(None) used to leak "None" as the job id.
-        assert resolve_job_id({"job_id": None}) == DEFAULT_JOB_ID
+    def test_none_value_raises_error(self):
+        with pytest.raises(ValueError, match="job_id es requerido"):
+            resolve_job_id({"job_id": None})
 
-    def test_empty_string_kept_as_is(self):
-        assert resolve_job_id({"job_id": ""}) == ""
+    def test_empty_string_raises_error(self):
+        with pytest.raises(ValueError, match="job_id es requerido"):
+            resolve_job_id({"job_id": ""})
 
     def test_string_value_kept_as_is(self):
         assert resolve_job_id({"job_id": "abc"}) == "abc"
 
     def test_int_value_coerced_to_string(self):
         assert resolve_job_id({"job_id": 123}) == "123"
-
-    def test_custom_default(self):
-        assert resolve_job_id({}, default="custom") == "custom"
-        assert resolve_job_id({"job_id": None}, default="custom") == "custom"
 
 
 class TestProcessState:
@@ -98,15 +98,6 @@ class TestJobManager:
         assert len(conv) == 1
         assert conv[0].job_type == "conversion"
 
-    def test_cleanup_preserves_default_job(self):
-        mgr = JobManager()
-        j = Job(id=DEFAULT_JOB_ID, job_type="conversion")
-        j.state.running = False
-        mgr._jobs[DEFAULT_JOB_ID] = j
-        removed = mgr.cleanup_completed(max_remaining=0)
-        assert removed == 0
-        assert mgr.get_job(DEFAULT_JOB_ID) is not None
-
     def test_cleanup_removes_old_completed(self):
         mgr = JobManager()
         for i in range(5):
@@ -116,9 +107,6 @@ class TestJobManager:
         removed = mgr.cleanup_completed(max_remaining=2)
         assert removed == 3
         assert len(mgr.list_jobs()) == 2
-
-    def test_default_job_id_constant(self):
-        assert DEFAULT_JOB_ID == "default"
 
     def test_max_concurrent_default(self):
         mgr = JobManager()

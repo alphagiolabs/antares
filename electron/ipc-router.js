@@ -333,13 +333,9 @@ function registerIpcHandlers() {
     return { handled: true };
   });
 
-  // SEC-009: token Supabase fuera de localStorage, cifrado en reposo (safeStorage).
-  const { safeStorage, app } = require('electron');
-  const { createAuthStorage } = require('./auth-storage');
-  createAuthStorage({ safeStorage, app }).register(ipcMain);
-
   // SEC-016: logos del preview fuera de localStorage, cifrados en reposo
   // (safeStorage). El canal del main rechaza claves fuera de la allowlist.
+  const { safeStorage, app } = require('electron');
   const { createLogoStorage } = require('./logo-storage');
   createLogoStorage({ safeStorage, app }).register(ipcMain);
 }

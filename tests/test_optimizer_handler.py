@@ -8,7 +8,6 @@ import pytest
 
 from backend.handlers.optimizer import (
     _MAX_OPTIMIZER_FILES,
-    _MAX_OPTIMIZER_TOTAL_BYTES,
     _enforce_optimizer_bounds,
     image_optimizer_save_files,
     image_optimizer_zip,
