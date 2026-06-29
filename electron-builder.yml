@@ -37,9 +37,50 @@ files:
   - "!**/node_modules/**/tests/**/*"
   - "!**/node_modules/**/docs/**/*"
   - "!node_modules/**/examples/**/*"
-  - "!**/node_modules/**/README*"
-  - "!**/node_modules/**/CHANGELOG*"
+  # Documentation and metadata files (~15-20% of node_modules)
+  - "!**/node_modules/**/*.md"
+  - "!**/node_modules/**/*.txt"
+  - "!**/node_modules/**/*.yml"
+  - "!**/node_modules/**/*.yaml"
+  - "!**/node_modules/**/*.rst"
+  # Config files not needed at runtime
+  - "!**/node_modules/**/.eslintrc*"
+  - "!**/node_modules/**/.prettierrc*"
+  - "!**/node_modules/**/.editorconfig"
+  - "!**/node_modules/**/tsconfig*.json"
+  - "!**/node_modules/**/.npmignore"
+  - "!**/node_modules/**/.gitignore"
+  - "!**/node_modules/**/Makefile"
+  - "!**/node_modules/**/Gruntfile*"
+  - "!**/node_modules/**/Gulpfile*"
+  # Test and coverage directories
+  - "!**/node_modules/**/__tests__/**/*"
+  - "!**/node_modules/**/__mocks__/**/*"
+  - "!**/node_modules/**/coverage/**/*"
+  - "!**/node_modules/**/.nyc_output/**/*"
+  # TypeScript declaration subdirectories (src/, lib/ with .d.ts only)
+  - "!**/node_modules/**/src/**/*.d.ts"
+  # CI/CD and build configs
+  - "!**/node_modules/**/.github/**/*"
+  - "!**/node_modules/**/.circleci/**/*"
+  - "!**/node_modules/**/.travis.yml"
+  - "!**/node_modules/**/appveyor.yml"
+  - "!**/node_modules/**/.gitlab-ci.yml"
+  # Package metadata files (not needed at runtime)
+  - "!**/node_modules/**/package.json"
+  - "!**/node_modules/**/package-lock.json"
+  - "!**/node_modules/**/yarn.lock"
+  - "!**/node_modules/**/pnpm-lock.yaml"
+  # License and readme files (keep root licenses only)
   - "!**/node_modules/**/LICENSE*"
+  - "!**/node_modules/**/LICENCE*"
+  - "!**/node_modules/**/COPYING*"
+  - "!**/node_modules/**/AUTHORS*"
+  - "!**/node_modules/**/CONTRIBUTORS*"
+  # Changelogs and history
+  - "!**/node_modules/**/CHANGELOG*"
+  - "!**/node_modules/**/CHANGES*"
+  - "!**/node_modules/**/HISTORY*"
   # Dev-only packages: must ship zero bytes of these in the installer
   - "!node_modules/concurrently/**/*"
   - "!node_modules/wait-on/**/*"
@@ -71,6 +112,12 @@ files:
   - "!node_modules/@electron-internal/**/*"
   - "!node_modules/jiti/**/*"
   - "!node_modules/pkijs/**/*"
+  # Runtime-unnecessary packages (~15 MB savings)
+  - "!node_modules/undici/**/*"          # HTTP client not needed (browser fetch)
+  - "!node_modules/tar/**/*"             # Archive handling not needed at runtime
+  - "!node_modules/ajv/**/*"             # JSON schema validation not needed
+  - "!node_modules/fast-json-stable/**/*" # JSON sorting not needed
+  - "!node_modules/json-schema-traverse/**/*"
 extraResources:
   - from: formatos
     to: formatos
