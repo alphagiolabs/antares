@@ -14,7 +14,7 @@
 const path = require('path');
 const { execSync } = require('child_process');
 
-const REPO_OWNER = 'sechgio';
+const REPO_OWNER = 'alphagiolabs';
 const REPO_NAME = 'antares';
 const BASE_BRANCH = 'main';
 // scripts/lib/ está un nivel más profundo que scripts/, así que ROOT sube 2.

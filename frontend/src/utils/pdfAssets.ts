@@ -33,7 +33,7 @@ function buildLocalImageToken(key: string): string {
   return `${LOCAL_IMAGE_TOKEN_PREFIX}${key.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
 }
 
-function fileToPdfImageSource(
+export function fileToPdfImageSource(
   file: File,
   key: string,
   localImagePaths: Record<string, string>,
