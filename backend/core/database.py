@@ -9,6 +9,7 @@ import unicodedata
 from pathlib import Path
 from typing import Any, cast
 
+from backend.core.config import SQLITE_PARAM_LIMIT
 from backend.core.config_fields import get_field_names, load_fields, save_fields
 from backend.core.exceptions import DatabaseError
 from backend.core.repository import _db_lock, get_connection
@@ -374,8 +375,8 @@ def buscar_lote_por_codigos(codigos: list[str]) -> dict[str, dict[str, Any]]:
         # Use chunks to avoid SQLite variable limit (999 per query).
         result: dict[str, dict[str, Any]] = {}
         # safe margin for SQLite param limit; clamp to >=1 so a schema with
-        # >900 fields cannot produce CHUNK == 0 (range step of 0 -> ValueError).
-        CHUNK = max(1, 900 // len(field_names))
+        # >SQLITE_PARAM_LIMIT fields cannot produce CHUNK == 0 (range step of 0 -> ValueError).
+        CHUNK = max(1, SQLITE_PARAM_LIMIT // len(field_names))
         for i in range(0, len(unique_codes), CHUNK):
             chunk = unique_codes[i:i + CHUNK]
             placeholders = ", ".join(["?"] * len(chunk))
@@ -418,7 +419,7 @@ def buscar_por_columna(codigos: list[str], column: str) -> dict[str, dict[str, A
             return {}
 
         result: dict[str, dict[str, Any]] = {}
-        CHUNK = 900  # safe margin for SQLite param limit
+        CHUNK = SQLITE_PARAM_LIMIT  # safe margin for SQLite param limit
         for i in range(0, len(unique_codes), CHUNK):
             chunk = unique_codes[i:i + CHUNK]
             placeholders = ", ".join(["?"] * len(chunk))
@@ -466,8 +467,8 @@ def contar_matches_por_columna(codigos: list[str], columns: list[str]) -> dict[s
                 continue
             total = 0
             try:
-                for i in range(0, len(unique), 900):
-                    chunk = unique[i:i + 900]
+                for i in range(0, len(unique), SQLITE_PARAM_LIMIT):
+                    chunk = unique[i:i + SQLITE_PARAM_LIMIT]
                     placeholders = ", ".join(["?"] * len(chunk))
                     cursor.execute(
                         f"SELECT COUNT(*) FROM imagenes WHERE {_qi(safe_column)} IN ({placeholders})",
@@ -642,20 +643,30 @@ def parse_id_rename_mapping_full(
         raw_id = row.get(chosen_id)
         raw_rename = row.get(chosen_rename)
 
-        if pd.isna(raw_id) or not str(raw_id).strip():
+        # FIX: Explicit type validation before string conversion.
+        # Although dtype=str should prevent non-string values, edge cases
+        # (e.g., empty cells returning float NaN) require defensive checks.
+        if not isinstance(raw_id, str):
+            if pd.isna(raw_id):
+                msg = f"ID vacío en la fila {excel_row} de la columna '{chosen_id}'"
+                raise ValueError(msg)
+            raw_id = str(raw_id)
+        if not isinstance(raw_rename, str):
+            if pd.isna(raw_rename):
+                msg = f"Nuevo nombre vacío en la fila {excel_row} de la columna '{chosen_rename}'"
+                raise ValueError(msg)
+            raw_rename = str(raw_rename)
+
+        id_key = raw_id.strip()
+        if not id_key:
             msg = f"ID vacío en la fila {excel_row} de la columna '{chosen_id}'"
             raise ValueError(msg)
-        if pd.isna(raw_rename) or not str(raw_rename).strip():
-            msg = f"Nuevo nombre vacío en la fila {excel_row} de la columna '{chosen_rename}'"
-            raise ValueError(msg)
-
-        id_key = str(raw_id).strip()
         if id_key in seen_ids:
             msg = f"ID duplicado '{id_key}' en la fila {excel_row} de la columna '{chosen_id}'"
             raise ValueError(msg)
         seen_ids.add(id_key)
 
-        rename_val = sanitizar_nombre(str(raw_rename).strip())
+        rename_val = sanitizar_nombre(raw_rename.strip())
         if not rename_val:
             msg = f"Nuevo nombre inválido en la fila {excel_row} de la columna '{chosen_rename}'"
             raise ValueError(msg)

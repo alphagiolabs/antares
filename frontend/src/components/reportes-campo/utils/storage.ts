@@ -4,7 +4,7 @@ import type { CampoPanel, HeaderMap, PhotoFile, ReportType, StoredPanel, StoredP
 // jsdom (tests) y navegadores sin Electron pueden no exponer IndexedDB. En ese
 // caso todas las operaciones se degradan a no-op / vacío para no romper nada.
 
-export function isPersistenceAvailable(): boolean {
+function isPersistenceAvailable(): boolean {
     return typeof indexedDB !== 'undefined';
 }
 
@@ -115,7 +115,7 @@ export async function deleteStoredPanel(id: string): Promise<void> {
     });
 }
 
-export async function clearPanelsByType(reportType: ReportType): Promise<void> {
+function clearPanelsByType(reportType: ReportType): Promise<void> {
     if (!isPersistenceAvailable()) return;
     const db = await openDb();
     await new Promise<void>((resolve, reject) => {

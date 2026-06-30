@@ -22,7 +22,6 @@ from backend.core.ubicaciones.cache import (
     _compose_and_cache_preview,
     _load_excel_data,
     _prefetch_alternate_formato,
-    _preview_composed_cache,
 )
 from backend.core.ubicaciones.layout import (
     _FOOTER_LAYOUT_VERSION,

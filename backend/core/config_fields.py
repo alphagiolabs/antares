@@ -145,16 +145,6 @@ def get_field_names() -> list[str]:
     return [f["name"] for f in load_fields()]
 
 
-def get_required_fields() -> list[str]:
-    """Retorna lista de campos requeridos."""
-    return [f["name"] for f in load_fields() if f.get("required")]
-
-
-def get_unique_fields() -> list[str]:
-    """Retorna lista de campos únicos."""
-    return [f["name"] for f in load_fields() if f.get("unique")]
-
-
 def reset_to_defaults() -> list[dict[str, Any]]:
     """Restaura la configuración a los valores por defecto."""
     result = save_fields(DEFAULT_FIELDS)

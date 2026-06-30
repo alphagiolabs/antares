@@ -66,7 +66,7 @@ export function defaultStampRect(page: PdfPageSize, stampAspect: number): StampR
   }, page);
 }
 
-export function rectAtDropPoint(
+function rectAtDropPoint(
   page: PdfPageSize,
   dropX: number,
   dropY: number,
@@ -141,7 +141,7 @@ export function stripPdfExtension(name: string): string {
   return name.replace(/\.pdf$/i, '');
 }
 
-export function createPositionId(): string {
+function createPositionId(): string {
   return `pos-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 

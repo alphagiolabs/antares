@@ -19,6 +19,7 @@ const { handleDialogCall } = require('./dialog-handlers');
 const { ALLOWED_RENDERER_METHODS, LONG_RUNNING_METHODS } = require('./ipc-methods');
 const { createVouchedPaths } = require('./vouched-paths');
 const { PATH_PARAMS_BY_METHOD } = require('./path-params');
+const { IPC_TIMEOUT: REQUEST_TIMEOUT_MS, IPC_LONG_TIMEOUT: LONG_REQUEST_TIMEOUT_MS, STARTUP_WAIT_MS, MID_FLIGHT_RETRIES } = require('../shared/config');
 
 // SEC-003/004 Capa 2: registro de rutas vouched por el diálogo nativo.
 // mode 'warn' (default) = observabilidad sin bloqueo (cero cambio de behavior);
@@ -93,12 +94,6 @@ const { getMainWindow, buildAppMenu } = require('./window-manager');
 
 const _pendingRequests = new Map();
 let _attachedProcess = null;               // process instance we have listeners on
-
-// Budgets
-const REQUEST_TIMEOUT_MS = 30_000;         // per-request response timeout — most ops finish in <5s
-const LONG_REQUEST_TIMEOUT_MS = 900_000;   // 15 min for heavy operations (large PDF/ZIP batches)
-const STARTUP_WAIT_MS = 30_000;            // backend should start in <10s; 30s is a safe margin
-const MID_FLIGHT_RETRIES = 2;              // retries for transient mid-flight errors
 
 /**
  * Allowlist of backend method names that can be called via IPC.

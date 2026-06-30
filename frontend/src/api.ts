@@ -3,10 +3,61 @@
  * en vez de HTTP fetch como en la arquitectura antigua (FastAPI+PyQt5).
  */
 
-import type { ProcessStatus, LogEntry, PreviewItem, DBField, RenamePattern, DBRecord, ThemeConfig, VisualMapping, FormatInfo, FormatOrigin, MappingStrategy, MappingResult, MappingCollision } from './types';
+import type {
+  ProcessStatus,
+  LogEntry,
+  PreviewItem,
+  DBField,
+  RenamePattern,
+  DBRecord,
+  ThemeConfig,
+  VisualMapping,
+  FormatInfo,
+  FormatOrigin,
+  MappingStrategy,
+  MappingResult,
+  MappingCollision,
+  HistoryRun,
+  HistorySchema,
+  TechnicalReport,
+  TechnicalReportVariable,
+  PanelAvisoCortePanel,
+  PanelAvisoCorteSummary,
+  UbicacionData,
+} from './types';
 import { markVouchedPaths } from './utils/vouchedPaths';
+import { IPC_TIMEOUT, IPC_LONG_TIMEOUT, IPC_MAX_RETRIES, IPC_RETRY_DELAY, LONG_RUNNING_METHODS } from '../../shared/config.ts';
+import { createBackendCircuitBreaker, CircuitBrokenError } from './utils/circuitBreaker';
+import type { CircuitState } from './utils/circuitBreaker';
 
-export type { ProcessStatus, LogEntry, PreviewItem, DBField, RenamePattern, DBRecord, ThemeConfig, VisualMapping, FormatInfo, FormatOrigin, MappingStrategy, MappingResult, MappingCollision };
+export type {
+  ProcessStatus,
+  LogEntry,
+  PreviewItem,
+  DBField,
+  RenamePattern,
+  DBRecord,
+  ThemeConfig,
+  VisualMapping,
+  FormatInfo,
+  FormatOrigin,
+  MappingStrategy,
+  MappingResult,
+  MappingCollision,
+  HistoryRun,
+  HistorySchema,
+  TechnicalReport,
+  TechnicalReportVariable,
+  PanelAvisoCortePanel,
+  PanelAvisoCorteSummary,
+  UbicacionData,
+};
+
+// ─── Circuit Breaker ───────────────────────────────────────────────────────
+
+// Singleton circuit breaker for backend IPC calls.
+// Prevents infinite retries when backend is in FATAL state.
+let _circuitBreaker = createBackendCircuitBreaker();
 
 // ─── Electron IPC bridge ───────────────────────────────────────────────────
 
@@ -35,35 +86,6 @@ declare global {
   }
 }
 
-const IPC_TIMEOUT = 30_000;           // default timeout — most ops finish in <5s
-const IPC_LONG_TIMEOUT = 900_000;     // 15 min for large PDF/ZIP/image batches
-const IPC_MAX_RETRIES = 2;
-const IPC_RETRY_DELAY = 500;          // fast retry — backend is usually ready by the time we retry
-
-const LONG_RUNNING_METHODS = new Set([
-  'process_start',
-  'db_import',
-  'db_export',
-  'db_clear',
-  'preview_image',
-  'formatos_generate',
-  'formatos_render_template_page',
-  'sellador_apply',
-  'sellador_inspect_pdf',
-  'sellador_render_page',
-  'image_optimizer_zip',
-  'image_optimizer_save_files',
-  'technical_reports_import_file',
-  'technical_reports_render_consolidated_html',
-  'panel_aviso_corte_parse_excel',
-  'technical_reports_render_html',
-  'panel_aviso_corte_render_pdf',
-  'panel_aviso_corte_compute_match',
-  'generar_ubicaciones',
-  'preview_ubicacion',
-  'html_to_pdf',
-]);
-
 const _delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 const _isRetryable = (err: unknown): boolean => {
@@ -84,7 +106,7 @@ const _isRetryable = (err: unknown): boolean => {
   );
 };
 
-const _invoke = async <T>(method: string, params?: Record<string, unknown> | object): Promise<T> => {
+const _invokeInner = async <T>(method: string, params?: Record<string, unknown> | object): Promise<T> => {
   if (!window.electronAPI) {
     throw new Error('Electron IPC no disponible');
   }
@@ -113,6 +135,37 @@ const _invoke = async <T>(method: string, params?: Record<string, unknown> | obj
   throw lastError || new Error('IPC call failed');
 };
 
+/**
+ * Invoke a backend method through the circuit breaker.
+ * 
+ * The circuit breaker prevents infinite retries when the backend is in FATAL state:
+ * - CLOSED: Normal operation, requests pass through
+ * - OPEN: Circuit is tripped, requests fail immediately with CircuitBrokenError
+ * - HALF-OPEN: After timeout, allow one request to test recovery
+ */
+const _invoke = async <T>(method: string, params?: Record<string, unknown> | object): Promise<T> => {
+  // Skip circuit breaker for certain methods that should always be allowed
+  const alwaysAllowed = new Set(['version', 'backend-status', 'backend-restart']);
+  if (alwaysAllowed.has(method)) {
+    return _invokeInner<T>(method, params);
+  }
+
+  try {
+    return await _circuitBreaker.execute(() => _invokeInner<T>(method, params));
+  } catch (err) {
+    // If circuit is broken, provide a user-friendly error
+    if (err instanceof CircuitBrokenError) {
+      const friendlyError = new Error(
+        `Backend no disponible. El circuito de protección está activo. ` +
+        `Intenta reiniciar el backend manualmente o espera ${Math.ceil(err.retryAfterMs / 1000)} segundos.`
+      );
+      friendlyError.name = 'BackendUnavailable';
+      throw friendlyError;
+    }
+    throw err;
+  }
+};
+
 export function onNotify(callback: (method: string, params: unknown) => void) {
   if (!window.electronAPI) return () => {};
   return window.electronAPI.onNotify(callback);
@@ -123,20 +176,30 @@ export interface BackendStatus {
   ready: boolean;
   lastError: { kind: string; message: string; stderrTail: string } | null;
   stderrTail: string;
+  circuitState?: CircuitState;
 }
 
 export async function getBackendStatus(): Promise<BackendStatus> {
   if (!window.electronAPI) {
-    return { state: 'unavailable', ready: false, lastError: null, stderrTail: '' };
+    return { state: 'unavailable', ready: false, lastError: null, stderrTail: '', circuitState: 'CLOSED' };
   }
-  return window.electronAPI.backendStatus() as Promise<BackendStatus>;
+  const status = await window.electronAPI.backendStatus() as BackendStatus;
+  // Add circuit breaker state to the response
+  status.circuitState = _circuitBreaker.getState();
+  return status;
 }
 
 export async function restartBackend(): Promise<{ success: boolean; state: string }> {
   if (!window.electronAPI) {
     throw new Error('Electron IPC no disponible');
   }
-  return window.electronAPI.backendRestart() as Promise<{ success: boolean; state: string }>;
+  const result = await window.electronAPI.backendRestart() as { success: boolean; state: string };
+  // Reset circuit breaker on manual restart — backend is coming back up
+  if (result.success) {
+    _circuitBreaker.reset();
+    console.log('[api] Circuit breaker reset after successful backend restart');
+  }
+  return result;
 }
 
 // ─── API methods ───────────────────────────────────────────────────────────
@@ -246,8 +309,33 @@ export interface ImageOptimizerSaveFilesResponse {
   skipped: ImageOptimizerSaveSkippedEntry[];
 }
 
+export interface HealthCheckMetrics {
+  status: 'ok' | 'degraded' | 'error';
+  uptime_seconds: number;
+  memory_mb: number | null;
+  cpu_percent: number | null;
+  scheduler: {
+    light_workers: number;
+    heavy_workers: number;
+    heavy_queue_limit: number;
+    heavy_capacity: number;
+    heavy_outstanding: number;
+    heavy_active: number;
+    heavy_queued: number;
+    heavy_rejected: number;
+    heavy_cancelled_waits: number;
+    heavy_submitted: number;
+    heavy_completed: number;
+    system_ram_total_mb?: number;
+    system_ram_available_mb?: number;
+    system_ram_percent?: number;
+  };
+  warnings: string[];
+}
+
 export const api = {
   version: () => _invoke<{ version: string }>('version'),
+  healthCheck: () => _invoke<HealthCheckMetrics>('health_check'),
   formats: () => _invoke<{ formats: string[] }>('formats'),
 
   dialogFiles: () => _invoke<{ paths: string[]; vouchedPaths?: string[] }>('dialog_files').then((r) => {
@@ -313,8 +401,8 @@ export const api = {
   applyPreset: (name: string) => _invoke<ThemeConfig>('theme_preset', { name }),
   resetTheme: () => _invoke<ThemeConfig>('theme_reset'),
 
-  historyList: (body?: { limit?: number; offset?: number; run_type?: string; date_from?: string; date_to?: string }) => _invoke<{ runs: unknown[] }>('history_list', body),
-  historyGet: (id: number) => _invoke<{ run: unknown }>('history_get', { id }),
+  historyList: (body?: { limit?: number; offset?: number; run_type?: string; date_from?: string; date_to?: string }) => _invoke<{ runs: HistoryRun[] }>('history_list', body),
+  historyGet: (id: number) => _invoke<{ run: HistoryRun }>('history_get', { id }),
   historyDelete: (id: number) => _invoke<{ deleted: boolean }>('history_delete', { id }),
   historyDeleteMany: (ids: number[]) => _invoke<{ deleted: number; requested: number }>('history_delete_many', { ids }),
   historySave: (body: {
@@ -329,21 +417,7 @@ export const api = {
     run_type: string;
     duration_ms?: number;
   }) => _invoke<{ id: number }>('history_save', body),
-  historySchema: () => _invoke<{
-    run_types: Array<{
-      id: string;
-      label_key: string;
-      description_key: string;
-      color_token: string;
-      show_patron: boolean;
-      filter_group: string;
-      options_schema: Record<string, unknown>;
-      files_schema: Record<string, unknown>;
-      stats: Array<{ key: string; label_key: string; color_token: string | null }>;
-    }>;
-    all_run_types: string[];
-    current_version: string;
-  }>('history_schema', {}),
+  historySchema: () => _invoke<HistorySchema>('history_schema', {}),
   historyExport: (body?: { ids?: number[]; run_type?: string; date_from?: string; date_to?: string; limit?: number }) =>
     _invoke<{ csv: string; count: number }>('history_export', body ?? {}),
 
@@ -431,13 +505,13 @@ export const api = {
 
   // ─── Informes técnicos ─────────────────────────────────────────────────
   technicalReportsList: (body?: TechnicalReportsListBody) =>
-    _invoke<{ reports: unknown[] }>('technical_reports_list', body),
+    _invoke<{ reports: TechnicalReport[] }>('technical_reports_list', body),
   technicalReportsGet: (id: string) =>
-    _invoke<{ report: unknown }>('technical_reports_get', { id }),
-  technicalReportsCreate: (report?: unknown) =>
-    _invoke<{ success: boolean; report: unknown }>('technical_reports_create', report ? { report } : {}),
-  technicalReportsUpdate: (id: string, report: unknown) =>
-    _invoke<{ success: boolean; report: unknown }>('technical_reports_update', { id, report }),
+    _invoke<{ report: TechnicalReport }>('technical_reports_get', { id }),
+  technicalReportsCreate: (report?: Partial<TechnicalReport>) =>
+    _invoke<{ success: boolean; report: TechnicalReport }>('technical_reports_create', report ? { report } : {}),
+  technicalReportsUpdate: (id: string, report: Partial<TechnicalReport>) =>
+    _invoke<{ success: boolean; report: TechnicalReport }>('technical_reports_update', { id, report }),
   technicalReportsDelete: (id: string) =>
     _invoke<{ success: boolean; deleted_id: string }>('technical_reports_delete', { id }),
   technicalReportsClear: () =>
@@ -445,7 +519,7 @@ export const api = {
   technicalReportsImportFile: (body: TechnicalReportsImportBody) =>
     _invoke<{ success: boolean; message: string; deleted_count: number; imported_count: number; total_rows_in_file: number }>('technical_reports_import_file', body),
   technicalReportsVariables: () =>
-    _invoke<{ variables: Array<{ key: string; label: string; category: string }> }>('technical_reports_variables'),
+    _invoke<{ variables: TechnicalReportVariable[] }>('technical_reports_variables'),
   technicalReportsAutocompleteCs: () =>
     _invoke<{ options: string[] }>('technical_reports_autocomplete_cs'),
   technicalReportsAutocompleteContratista: (cs?: string) =>
@@ -466,9 +540,9 @@ export const api = {
     address_column?: string;
     image_names: string[];
     export_mode: string;
-  }) => _invoke<{ panels: unknown[]; summary: unknown; warnings: string[] }>('panel_aviso_corte_compute_match', body),
+  }) => _invoke<{ panels: PanelAvisoCortePanel[]; summary: PanelAvisoCorteSummary; warnings: string[] }>('panel_aviso_corte_compute_match', body),
   panelAvisoCorteRenderPdf: (body: {
-    panels: unknown[];
+    panels: PanelAvisoCortePanel[];
     logos: { left_b64?: string; right_b64?: string };
     images: Record<string, string>;
     image_paths?: Record<string, string>;
@@ -485,7 +559,7 @@ export const api = {
     recomposeOnly?: boolean;
     provider?: string;
     google_maps_key?: string;
-  }) => _invoke<{ success: boolean; data?: unknown; error?: string }>('preview_ubicacion', body),
+  }) => _invoke<{ success: boolean; data?: UbicacionData; error?: string }>('preview_ubicacion', body),
   generarUbicaciones: (body: {
     excelPath: string;
     outputDir: string;
@@ -493,5 +567,5 @@ export const api = {
     consolidado: boolean;
     provider?: string;
     google_maps_key?: string;
-  }) => _invoke<{ success: boolean; data?: unknown; error?: string }>('generar_ubicaciones', body),
+  }) => _invoke<{ success: boolean; data?: UbicacionData[]; error?: string }>('generar_ubicaciones', body),
 };

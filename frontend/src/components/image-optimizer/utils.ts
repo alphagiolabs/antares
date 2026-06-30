@@ -87,7 +87,7 @@ export function chunkFilesForIpc(
   return chunks;
 }
 
-export function getAspectRatioValue(ratio: AspectRatio): number | null {
+function getAspectRatioValue(ratio: AspectRatio): number | null {
   const option = ASPECT_RATIO_OPTIONS.find((item) => item.value === ratio);
   return option?.ratio ?? null;
 }
@@ -109,7 +109,7 @@ export function getOutputMimeType(format: OutputFormat, originalType: string): s
   }
 }
 
-export function getExtensionForFormat(format: OutputFormat, originalName: string): string {
+function getExtensionForFormat(format: OutputFormat, originalName: string): string {
   const originalExtension = (originalName.split('.').pop() || 'jpg').toLowerCase();
   switch (format) {
     case 'jpeg':
@@ -127,7 +127,7 @@ export function getExtensionForFormat(format: OutputFormat, originalName: string
   }
 }
 
-export function splitFilename(filename: string): { base: string; extension: string } {
+function splitFilename(filename: string): { base: string; extension: string } {
   const sanitized = filename.trim().replace(/[\\/:*?"<>|]+/g, '-');
   const match = sanitized.match(/^(.*?)(?:\.([^.]+))?$/);
   const base = (match?.[1] || 'archivo').trim() || 'archivo';
@@ -227,23 +227,23 @@ export function getCropRectangle(
   };
 }
 
-export function hasCropOperation(settings: BatchSettings): boolean {
+function hasCropOperation(settings: BatchSettings): boolean {
   return settings.operations.cropEnabled && settings.crop.aspectRatio !== 'original';
 }
 
-export function hasFormatConversion(settings: BatchSettings): boolean {
+function hasFormatConversion(settings: BatchSettings): boolean {
   return settings.operations.formatEnabled && settings.format.outputFormat !== 'original';
 }
 
-export function hasResizeOperation(settings: BatchSettings): boolean {
+function hasResizeOperation(settings: BatchSettings): boolean {
   return settings.operations.resizeEnabled;
 }
 
-export function hasCompressionOperation(settings: BatchSettings): boolean {
+function hasCompressionOperation(settings: BatchSettings): boolean {
   return settings.operations.compressionEnabled;
 }
 
-export function isDirectExportMode(settings: BatchSettings): boolean {
+function isDirectExportMode(settings: BatchSettings): boolean {
   return !hasCropOperation(settings) && !hasResizeOperation(settings) && !hasFormatConversion(settings) && !hasCompressionOperation(settings);
 }
 
@@ -335,7 +335,7 @@ function buildFilenameCore(item: ImageItem, index: number, total: number, settin
   return `${base}.${extension}`;
 }
 
-export function dedupeFilenames(filenames: string[]): string[] {
+function dedupeFilenames(filenames: string[]): string[] {
   const seen = new Map<string, number>();
   return filenames.map((filename) => {
     const { base, extension } = splitFilename(filename);
@@ -349,18 +349,18 @@ export function dedupeFilenames(filenames: string[]): string[] {
   });
 }
 
-export function buildDownloadNameMap(items: ImageItem[], settings: BatchSettings): Map<string, string> {
+function buildDownloadNameMap(items: ImageItem[], settings: BatchSettings): Map<string, string> {
   const names = items.map((item, index) => buildFilenameCore(item, index, items.length, settings));
   const uniqueNames = dedupeFilenames(names);
   return new Map(items.map((item, index) => [item.id, uniqueNames[index]]));
 }
 
 /** Name map keyed by queue position (non-excluded items only). Use for UI and export lookup. */
-export function buildExportNameMap(allItems: ImageItem[], settings: BatchSettings): Map<string, string> {
+function buildExportNameMap(allItems: ImageItem[], settings: BatchSettings): Map<string, string> {
   return buildDownloadNameMap(getEligibleItems(allItems), settings);
 }
 
-export function resolveExportFilename(
+function resolveExportFilename(
   itemId: string,
   allItems: ImageItem[],
   settings: BatchSettings,

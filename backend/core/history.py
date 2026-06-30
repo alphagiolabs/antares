@@ -10,7 +10,7 @@ from typing import Any
 from backend.core.database import get_db_path
 from backend.core.migrations import Migration, MigrationManager
 from backend.core.repository import _db_lock, get_connection
-from backend.core.run_types import ALL_RUN_TYPES, RUN_TYPE_REGISTRY  # noqa: F401
+from backend.core.run_types import ALL_RUN_TYPES, RUN_TYPE_REGISTRY
 
 # ─── Constants ─────────────────────────────────────────────────────────────
 
@@ -18,14 +18,6 @@ from backend.core.run_types import ALL_RUN_TYPES, RUN_TYPE_REGISTRY  # noqa: F40
 # lives in ``backend.core.run_types.RUN_TYPE_REGISTRY``. The literals are
 # sourced from that registry so the two cannot drift.
 RUN_TYPE_CONVERSION = RUN_TYPE_REGISTRY["conversion"].id
-RUN_TYPE_FORMATO = RUN_TYPE_REGISTRY["formato"].id
-RUN_TYPE_SELLADOR = RUN_TYPE_REGISTRY["sellador"].id
-RUN_TYPE_PADRON = RUN_TYPE_REGISTRY["padron"].id
-RUN_TYPE_VOLANTE = RUN_TYPE_REGISTRY["volante"].id
-RUN_TYPE_IMAGE_OPTIMIZER = RUN_TYPE_REGISTRY["image_optimizer"].id
-RUN_TYPE_REPORTE_CAMPO = RUN_TYPE_REGISTRY["reporte_campo"].id
-RUN_TYPE_PANEL_AVISO_CORTE = RUN_TYPE_REGISTRY["panel_aviso_corte"].id
-RUN_TYPE_INFORME_TECNICO = RUN_TYPE_REGISTRY["informe_tecnico"].id
 
 # Known historial columns — explicit projection (never ``SELECT *``).
 _HISTORIAL_COLUMNS: tuple[str, ...] = (

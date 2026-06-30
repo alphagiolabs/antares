@@ -13,7 +13,7 @@ export const REQUIRED_COLUMNS = [
   "reservorio"
 ] as const;
 
-export const SAMPLE_RECORDS: FlyerRecord[] = [
+const SAMPLE_RECORDS: FlyerRecord[] = [
   {
     id: "demo-1",
     distrito: "ATE VITARTE",

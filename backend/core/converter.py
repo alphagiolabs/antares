@@ -10,6 +10,7 @@ from typing import cast
 
 from PIL import Image
 
+from backend.core.config import MAX_IMAGE_PIXELS, PREVIEW_MAX_SIZE
 from backend.core.format_registry import get_registry
 
 # ponytail: cap process-wide de píxeles para frenar bombas de descompresión
@@ -18,7 +19,7 @@ from backend.core.format_registry import get_registry
 # Image.open del proceso (sellador, ubicaciones, rendering). Ceiling: 50MP
 # cubre cualquier imagen legítima del flujo; encima Pillow lanza
 # DecompressionBombError. Upgrade path: env var si se requiere subir el techo.
-Image.MAX_IMAGE_PIXELS = 50_000_000
+Image.MAX_IMAGE_PIXELS = MAX_IMAGE_PIXELS
 
 _registry = get_registry()
 _registry.add_format("JPEG", ".jpg", ("RGB", "L", "CMYK"))
@@ -259,8 +260,7 @@ def convertir_a_preview(
         if resize and isinstance(resize, (tuple, list)) and len(resize) == 2:
             target_size = (int(resize[0]), int(resize[1]))
         else:
-            max_size = 400
-            ratio = min(max_size / longest, 1.0)
+            ratio = min(PREVIEW_MAX_SIZE / longest, 1.0)
             target_size = (int(source_img.width * ratio), int(source_img.height * ratio))
         # perf-15: reducing_gap=2.0 — heavy-downscale speedup (measured 64%,
         # PSNR 53.6 dB), no-op for small/upscale, exact size unchanged.

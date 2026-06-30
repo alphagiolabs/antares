@@ -1,14 +1,13 @@
 """Composición Pillow de la imagen de ubicación (mapa + textos + pin + footer).
 
-Puro respecto a estado de caches: los loaders de assets usan ``functools.lru_cache``
-(ver simplification-006) y ``render_ubicacion`` obtiene el screenshot de
-``map_provider._get_cached_map_screenshot`` (import top-level seguro: map_provider
-no importa composer → sin ciclo).
+Puro respecto a estado de caches: los loaders de assets usan weakref cache
+para evitar fugas de memoria por referencias fuertes a ImageFont.FreeTypeFont
+(que retienen recursos nativos FreeType hasta que el GC recolecta el objeto).
 """
 from __future__ import annotations
 
-import functools
 import os
+import weakref
 from io import BytesIO
 from typing import Any, cast
 
@@ -25,16 +24,41 @@ from backend.core.ubicaciones.map_provider import _get_cached_map_screenshot
 from backend.utils.paths import resource_path
 
 
-@functools.lru_cache(maxsize=32)
+# Weakref-based font cache to avoid memory leaks from lru_cache holding
+# strong references to ImageFont.FreeTypeFont objects (which hold native
+# FreeType resources that aren't released until GC collects the Python object).
+class _WeakFontCache:
+    def __init__(self):
+        self._cache: weakref.WeakValueDictionary[tuple[bool, int], ImageFont.FreeTypeFont | ImageFont.ImageFont] = (
+            weakref.WeakValueDictionary()
+        )
+
+    def get(self, bold: bool, size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont | None:
+        return self._cache.get((bold, size))
+
+    def set(self, bold: bool, size: int, font: ImageFont.FreeTypeFont | ImageFont.ImageFont) -> None:
+        self._cache[(bold, size)] = font
+
+
+_font_cache = _WeakFontCache()
+
+
 def _get_font(bold: bool, size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
+    cached = _font_cache.get(bold, size)
+    if cached is not None:
+        return cached
+
     key = ("arialbd" if bold else "arial", size)
     try:
-        return ImageFont.truetype(f"{key[0]}.ttf", size)
+        font = ImageFont.truetype(f"{key[0]}.ttf", size)
     except Exception:
         try:
-            return ImageFont.truetype("arial.ttf", size)
+            font = ImageFont.truetype("arial.ttf", size)
         except Exception:
-            return ImageFont.load_default()
+            font = ImageFont.load_default()
+
+    _font_cache.set(bold, size, font)
+    return font
 
 
 def _crop_footer_bar(img: Image.Image) -> Image.Image:
@@ -81,9 +105,30 @@ def _measure_footer_band_height(jpg_path: str) -> int:
     return best_end - best_start + 1
 
 
-@functools.lru_cache(maxsize=16)
+# Weakref-based image cache to avoid memory leaks from lru_cache holding
+# strong references to PIL Image objects (which hold pixel data in memory).
+class _WeakImageCache:
+    def __init__(self):
+        self._cache: weakref.WeakValueDictionary[tuple[int, int], Image.Image] = (
+            weakref.WeakValueDictionary()
+        )
+
+    def get(self, width: int, height: int) -> Image.Image | None:
+        return self._cache.get((width, height))
+
+    def set(self, width: int, height: int, image: Image.Image) -> None:
+        self._cache[(width, height)] = image
+
+
+_footer_cache = _WeakImageCache()
+
+
 def _get_footer_image(width: int, height: int) -> Image.Image | None:
     """Pega logo_footer.png en barra negra; escala por ancho (como plantillas JPG)."""
+    cached = _footer_cache.get(width, height)
+    if cached is not None:
+        return cached
+
     assets_dir = resource_path("assets/ubicaciones")
     logo_path = os.path.join(assets_dir, "logo_footer.png")
     if not os.path.exists(logo_path):
@@ -104,16 +149,24 @@ def _get_footer_image(width: int, height: int) -> Image.Image | None:
         x = (width - new_w) // 2
         y = (height - new_h) // 2
         footer.paste(logo_resized, (x, y), logo_resized)
+        _footer_cache.set(width, height, footer)
         return footer
     return None
 
 
-@functools.lru_cache(maxsize=1)
+_pin_cache: Image.Image | None = None
+
+
 def _get_pin_rgba() -> Image.Image | None:
     """Return the cached pin.png as RGBA, loading it once on first access."""
+    global _pin_cache
+    if _pin_cache is not None:
+        return _pin_cache
+
     pin_path = os.path.join(resource_path("assets/ubicaciones"), "pin.png")
     if os.path.exists(pin_path):
-        return Image.open(pin_path).convert("RGBA")
+        _pin_cache = Image.open(pin_path).convert("RGBA")
+        return _pin_cache
     return None
 
 

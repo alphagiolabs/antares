@@ -253,22 +253,31 @@ async function renderHtmlToPdf(params = {}, electronModules = {}, vouched = null
     }
     if (tempDir) {
       // Retry removal on Windows where EBUSY is common right after window close
+      // Hard limits: max 5 attempts AND max 10s total to prevent indefinite retry
+      const MAX_ATTEMPTS = 5;
+      const MAX_RETRY_MS = 10_000;
+      const start = Date.now();
       let attempts = 0;
-      const tryRm = async () => {
-        for (;;) {
-          try {
-            await fs.promises.rm(tempDir, { recursive: true, force: true });
-            return;
-          } catch (err) {
-            attempts++;
-            if (attempts >= 5 || err.code !== 'EBUSY') throw err;
-            await new Promise(r => setTimeout(r, 200 * attempts));
-          }
+      let removed = false;
+      while (attempts < MAX_ATTEMPTS && Date.now() - start < MAX_RETRY_MS) {
+        try {
+          await fs.promises.rm(tempDir, { recursive: true, force: true });
+          removed = true;
+          break;
+        } catch (err) {
+          attempts++;
+          if (err.code !== 'EBUSY' || attempts >= MAX_ATTEMPTS) throw err;
+          await new Promise(r => setTimeout(r, 200 * attempts));
         }
-      };
-      await tryRm().catch(err => {
-        console.warn('[dialog-handlers] Failed to clean temp dir after retries:', err.message);
-      });
+      }
+      // Final attempt without retry (catches case where loop exited due to time)
+      if (!removed) {
+        try {
+          await fs.promises.rm(tempDir, { recursive: true, force: true });
+        } catch (err) {
+          console.warn('[dialog-handlers] Failed to clean temp dir after retries:', err.message);
+        }
+      }
     }
   }
 }
