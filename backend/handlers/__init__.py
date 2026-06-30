@@ -12,6 +12,7 @@ from backend.handlers.common import (
 from backend.handlers.conversion import HANDLERS as CONVERSION_HANDLERS
 from backend.handlers.database import HANDLERS as DB_HANDLERS
 from backend.handlers.formatos import HANDLERS as FORMATOS_HANDLERS
+from backend.handlers.health import HANDLERS as HEALTH_HANDLERS
 from backend.handlers.history import HANDLERS as HISTORY_HANDLERS
 from backend.handlers.info import HANDLERS as INFO_HANDLERS
 from backend.handlers.jobs import HANDLERS as JOBS_HANDLERS
@@ -32,6 +33,7 @@ HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
     **CONVERSION_HANDLERS,
     **THEME_HANDLERS,
     **FORMATOS_HANDLERS,
+    **HEALTH_HANDLERS,
     **HISTORY_HANDLERS,
     **TECH_REPORTS_HANDLERS,
     **TEMPLATES_HANDLERS,

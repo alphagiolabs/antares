@@ -18,6 +18,18 @@ const path = require('path');
 const crypto = require('crypto');
 const { spawn, execFile } = require('child_process');
 const { getBackendCommand } = require('./backend-command');
+const {
+  HANDSHAKE_TIMEOUT_MS,
+  MAX_RESTART_BACKOFF_SEC,
+  RESTART_RESET_MS,
+  HEALTH_CHECK_INTERVAL_MS,
+  HEALTH_PROBE_TIMEOUT_MS,
+  STARTUP_WAIT_MS,
+  START_RETRY_LIMIT,
+  MAX_AUTO_RESTARTS,
+  STDERR_BUFFER_LINES,
+  WAIT_FOR_READY_TIMEOUT_MS,
+} = require('../shared/config');
 
 const STATE = Object.freeze({
   IDLE: 'idle',
@@ -26,15 +38,6 @@ const STATE = Object.freeze({
   EXITED: 'exited',
   FATAL: 'fatal',
 });
-
-const HANDSHAKE_TIMEOUT_MS = 30_000;    // single spawn attempt timeout
-const START_RETRY_LIMIT = 5;             // spawn retry count per start cycle
-const MAX_AUTO_RESTARTS = Infinity;      // keep recovering from transient failures while the app is open
-const MAX_RESTART_BACKOFF_SEC = 30;      // cap backoff at 30s
-const RESTART_RESET_MS = 60_000;         // time of stability before counter resets
-const STDERR_BUFFER_LINES = 30;          // rolling stderr tail
-const HEALTH_CHECK_INTERVAL_MS = 15_000; // detect crashes faster
-const HEALTH_PROBE_TIMEOUT_MS = 3_000;   // version probe is cheap — should answer in <1s
 
 let pythonProcess = null;
 let _state = STATE.IDLE;
@@ -49,6 +52,7 @@ let _healthProbeInFlight = false;        // avoid overlapping liveness probes
 let _startInProgress = false;            // prevents concurrent start/restart cycles
 let _manualRestartInProgress = false;    // synchronous claim for manualRestart() concurrency
 let _pendingRequestCount = 0;            // track in-flight IPC requests to avoid killing busy backend
+let _healthCheckCount = 0;              // count health checks for periodic logging
 
 // Promise-based readiness gate; resolves when state === READY,
 // rejects when state === FATAL.
@@ -88,7 +92,7 @@ function decrementPendingRequests() { if (_pendingRequestCount > 0) _pendingRequ
  * Wait until the backend is ready. Resolves true when ready, false when it
  * fails fatally or the timeout expires. Never rejects.
  */
-async function waitForReady(timeoutMs = 60_000) {
+async function waitForReady(timeoutMs = WAIT_FOR_READY_TIMEOUT_MS) {
   if (_state === STATE.READY && pythonProcess && !pythonProcess.killed) return true;
   if (_state === STATE.FATAL) return false;
 
@@ -287,7 +291,11 @@ function _probeBackendResponsiveness(proc) {
         try {
           const msg = JSON.parse(line);
           if (msg.id === probeId) {
-            finish(resolve, true);
+            if (msg.error) {
+              finish(reject, new Error(msg.error.message || 'health_check returned error'));
+            } else {
+              finish(resolve, msg.result || { status: 'ok' });
+            }
             return;
           }
         } catch {
@@ -308,7 +316,7 @@ function _probeBackendResponsiveness(proc) {
       proc.stdin.write(JSON.stringify({
         jsonrpc: '2.0',
         id: probeId,
-        method: 'version',
+        method: 'health_check',
         params: {},
       }) + '\n');
     } catch (err) {
@@ -328,7 +336,15 @@ async function runHealthCheckOnce() {
   _healthProbeInFlight = true;
   const probedProcess = pythonProcess;
   try {
-    await _probeBackendResponsiveness(probedProcess);
+    const metrics = await _probeBackendResponsiveness(probedProcess);
+    // Log metrics periodically for diagnostics (every 10th check ≈ 2.5 min)
+    _healthCheckCount = (_healthCheckCount || 0) + 1;
+    if (_healthCheckCount % 10 === 0) {
+      const mem = metrics?.memory_mb ? `${metrics.memory_mb}MB` : 'n/a';
+      const queue = metrics?.scheduler?.heavy_queued ?? 'n/a';
+      const active = metrics?.scheduler?.heavy_active ?? 'n/a';
+      console.log(`[backend-spawner] Health OK — mem=${mem} queue=${queue} active=${active}`);
+    }
   } catch (err) {
     if (_isShuttingDown || probedProcess !== pythonProcess) return;
     // If there are in-flight requests, the backend is likely busy — not dead.

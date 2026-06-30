@@ -58,7 +58,7 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 
 
-def _signal_handler(signum, frame) -> None:
+def _signal_handler(_signum, _frame) -> None:
     """Handle termination signals gracefully.
 
     Only sets a flag — avoids non-async-signal-safe calls (logging, I/O)

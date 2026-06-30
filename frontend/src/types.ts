@@ -118,3 +118,70 @@ export interface FormatInfo {
   number_max: number;
   has_mapping: boolean;
 }
+
+// ─── History ───────────────────────────────────────────────────────────────
+// History types are defined in components/history/runTypes.ts
+// Re-export for convenience
+export type { HistoryRunRow as HistoryRun } from './components/history/runTypes';
+
+export interface HistorySchema {
+  run_types: RunTypeSchema[];
+  all_run_types: string[];
+  current_version: string;
+}
+
+export interface RunTypeSchema {
+  id: string;
+  label_key: string;
+  description_key: string;
+  color_token: string;
+  show_patron: boolean;
+  filter_group: string;
+  options_schema: Record<string, unknown>;
+  files_schema: Record<string, unknown>;
+  stats: RunTypeStat[];
+}
+
+export interface RunTypeStat {
+  key: string;
+  label_key: string;
+  color_token: string | null;
+}
+
+// ─── Technical Reports ─────────────────────────────────────────────────────
+// Technical report types are defined in components/technical-reports/types.ts
+// Re-export for convenience
+export type { TechnicalReport, TechnicalReportListItem } from './components/technical-reports/types';
+
+export interface TechnicalReportVariable {
+  key: string;
+  label: string;
+  category: string;
+}
+
+// ─── Panel Aviso de Corte ──────────────────────────────────────────────────
+
+export interface PanelAvisoCorteRow {
+  [key: string]: string;
+}
+
+// Panel type is complex and varies by component - use Record<string, unknown> for API responses
+export type PanelAvisoCortePanel = Record<string, unknown>;
+
+export interface PanelAvisoCorteSummary {
+  total: number;
+  matched: number;
+  unmatched: number;
+}
+
+// ─── Ubicaciones ───────────────────────────────────────────────────────────
+
+export interface UbicacionData {
+  id: string;
+  address: string;
+  lat: number;
+  lng: number;
+  image_url?: string;
+  [key: string]: unknown;
+}
+

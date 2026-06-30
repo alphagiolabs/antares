@@ -1,5 +1,6 @@
 const BACKEND_METHODS = [
   'version', 'formats', 'plugin_formats',
+  'health_check',
   'db_records', 'db_import', 'db_export', 'db_clear', 'db_template',
   'db_parse_mapping', 'db_validate_mapping',
   'db_fields', 'db_fields_update', 'db_fields_reset',
@@ -36,31 +37,7 @@ const NATIVE_METHODS = [
   'html_to_pdf',
 ];
 
-// Methods with larger user payloads or slow rendering/import work. Kept next
-// to the allowlist so Electron routing metadata changes in one place.
-const LONG_RUNNING_METHODS = new Set([
-  'process_start',
-  'db_import',
-  'db_export',
-  'db_clear',
-  'preview_image',
-  'formatos_generate',
-  'formatos_render_template_page',
-  'image_optimizer_zip',
-  'image_optimizer_save_files',
-  'sellador_apply',
-  'sellador_inspect_pdf',
-  'sellador_render_page',
-  'technical_reports_import_file',
-  'technical_reports_render_consolidated_html',
-  'panel_aviso_corte_parse_excel',
-  'technical_reports_render_html',
-  'panel_aviso_corte_render_pdf',
-  'panel_aviso_corte_compute_match',
-  'html_to_pdf',
-  'generar_ubicaciones',
-  'preview_ubicacion',
-]);
+const { LONG_RUNNING_METHODS } = require('../shared/config');
 
 const ALLOWED_RENDERER_METHODS = new Set([...BACKEND_METHODS, ...NATIVE_METHODS]);
 

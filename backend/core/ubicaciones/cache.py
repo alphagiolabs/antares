@@ -12,6 +12,8 @@ import base64
 import logging
 import os
 import threading
+from collections import OrderedDict
+from functools import lru_cache
 from io import BytesIO
 from typing import Any
 
@@ -29,17 +31,11 @@ from backend.core.ubicaciones.parsers import _parse_excel_columns
 logger = logging.getLogger(__name__)
 
 _excel_cache: dict[str, tuple[float, pd.DataFrame, tuple[Any, ...]]] = {}
-_preview_composed_cache: dict[tuple[int, int, tuple[str, float], int, str], dict[str, Any]] = {}
-# Guarda las caches mutadas desde el thread daemon de prefetch (B1): sin lock,
-# _trim_cache + __setitem__ concurrentes pueden lanzar RuntimeError o corromper
-# el orden LRU.
+# LRU cache using functools.lru_cache on the composition function (true LRU)
+# Key includes mtime, so file changes naturally create new cache entries.
+# Old entries are evicted by LRU when maxsize is reached.
 _cache_lock = threading.Lock()
 _MAX_COMPOSED_CACHE = 80
-
-
-def _trim_cache(cache: dict, max_size: int) -> None:
-    while len(cache) > max_size:
-        del cache[next(iter(cache))]
 
 
 def _load_excel_data(excel_path: str) -> tuple[pd.DataFrame, tuple[Any, ...]]:
@@ -77,6 +73,32 @@ def _encode_preview_data(
     }
 
 
+@lru_cache(maxsize=_MAX_COMPOSED_CACHE)
+def _compose_preview_cached(
+    footer_ver: int,
+    map_ver: int,
+    excel_path: str,
+    mtime: float,
+    row_index: int,
+    formato: str,
+    datos_tuple: tuple[tuple[str, Any], ...],
+    screenshot_bytes: bytes,
+    total_filas: int,
+) -> dict[str, Any]:
+    """Cached preview composition using functools.lru_cache (true LRU)."""
+    from backend.core.ubicaciones.composer import _compose_ubicacion_image  # lazy: anti-ciclo
+
+    datos = dict(datos_tuple)
+    preview_img = _compose_ubicacion_image(datos, formato, screenshot_bytes, preview=True)
+    return _encode_preview_data(
+        preview_img,
+        datos,
+        row_index=row_index,
+        total_filas=total_filas,
+        formato=formato,
+    )
+
+
 def _compose_and_cache_preview(
     excel_ctx: tuple[str, float],
     row_index: int,
@@ -85,20 +107,22 @@ def _compose_and_cache_preview(
     screenshot_bytes: bytes,
     total_filas: int,
 ) -> dict[str, Any]:
-    from backend.core.ubicaciones.composer import _compose_ubicacion_image  # lazy: anti-ciclo
-
-    preview_img = _compose_ubicacion_image(datos, formato, screenshot_bytes, preview=True)
-    data = _encode_preview_data(
-        preview_img,
-        datos,
-        row_index=row_index,
-        total_filas=total_filas,
-        formato=formato,
-    )
+    """Compose preview using LRU-cached function (thread-safe via _cache_lock)."""
+    # Convert dict to hashable tuple for lru_cache key
+    datos_tuple = tuple(sorted(datos.items()))
+    excel_path, mtime = excel_ctx
     with _cache_lock:
-        _preview_composed_cache[(_FOOTER_LAYOUT_VERSION, _MAP_CAPTURE_VERSION, excel_ctx, row_index, formato)] = data
-        _trim_cache(_preview_composed_cache, _MAX_COMPOSED_CACHE)
-    return data
+        return _compose_preview_cached(
+            _FOOTER_LAYOUT_VERSION,
+            _MAP_CAPTURE_VERSION,
+            excel_path,
+            mtime,
+            row_index,
+            formato,
+            datos_tuple,
+            screenshot_bytes,
+            total_filas,
+        )
 
 
 def _prefetch_alternate_formato(
@@ -113,9 +137,9 @@ def _prefetch_alternate_formato(
     """Pre-compone la orientación opuesta en background (solo Pillow, sin Playwright)."""
     try:
         alt = "horizontal" if formato == "vertical" else "vertical"
-        cache_key = (_FOOTER_LAYOUT_VERSION, _MAP_CAPTURE_VERSION, excel_ctx, row_index, alt)
-        if cache_key in _preview_composed_cache:
-            return
+        # Check LRU cache via the cached function's cache_info / direct call would
+        # need same key; simpler: try to get from cache via a dummy call would be
+        # wasteful. Instead, we just attempt to compose - lru_cache handles dedup.
         map_bytes = _map_screenshot_cache.get(_map_cache_key(lat, lon, alt, preview=True))
         if map_bytes is None:
             return
