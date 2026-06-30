@@ -1,6 +1,6 @@
 import { MappingCollision, MappingResult, RenamePattern } from '../../types';
 
-export const VIDEO_EXTENSIONS = new Set(['.mp4', '.avi', '.mov', '.mkv', '.wmv', '.flv', '.webm', '.m4v', '.3gp', '.mpg', '.mpeg']);
+const VIDEO_EXTENSIONS = new Set(['.mp4', '.avi', '.mov', '.mkv', '.wmv', '.flv', '.webm', '.m4v', '.3gp', '.mpg', '.mpeg']);
 
 export type RenameSource = 'none' | 'catalog' | 'mapping';
 
@@ -39,7 +39,7 @@ export const lookupMappingValue = (mapping: Record<string, string>, fileName: st
   return undefined;
 };
 
-export const resolveMappedOutputName = (mapping: Record<string, string>, fileName: string): string | null => {
+const resolveMappedOutputName = (mapping: Record<string, string>, fileName: string): string | null => {
   const raw = lookupMappingValue(mapping, fileName);
   if (!raw) return null;
   const name = fileNameFromPath(fileName);
@@ -112,29 +112,6 @@ export const buildDefaultPresets = (fields: string[]): RenamePattern[] => {
   ];
 };
 
-export const buildColumnPresets = (columns: string[]): RenamePattern[] => {
-  if (columns.length === 0) return [];
-  const first = columns[0];
-  const second = columns[1];
-  const presets: RenamePattern[] = [];
-
-  if (columns.length >= 2) {
-    presets.push({ id: `col_${first}_${second}`, label: `${first} + ${second}`, pattern: `{${first}}_{${second}}_{seq}{ext}` });
-  }
-  presets.push({ id: `col_${first}`, label: `${first} + seq`, pattern: `{${first}}_{seq}{ext}` });
-
-  for (const col of columns) {
-    presets.push({ id: `col_only_${col}`, label: col, pattern: `{${col}}{ext}` });
-  }
-
-  return presets;
-};
-
-export const pickSyncedKeyColumn = (current: string, columns: string[]) => {
-  if (current && columns.includes(current)) return current;
-  return columns[0] ?? '';
-};
-
 const normalizeColumnName = (name: string) => {
   const text = name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
   return text.replace(/[\s_\-]+/g, ' ').trim().replace(/\s+/g, ' ');
@@ -143,7 +120,7 @@ const normalizeColumnName = (name: string) => {
 const ID_ALIASES = new Set(['id', 'codigo', 'code', 'filename', 'archivo', 'nombre original']);
 const RENAME_ALIASES = new Set(['renombre', 'rename', 'new_name', 'newname', 'nombre nuevo', 'nuevo_nombre', 'nuevonombre']);
 
-export const detectMappingColumns = (columns: string[]): { id_column?: string; rename_column?: string } => {
+const detectMappingColumns = (columns: string[]): { id_column?: string; rename_column?: string } => {
   const find = (aliases: Set<string>) => {
     for (const col of columns) {
       if (aliases.has(normalizeColumnName(col))) return col;
@@ -156,7 +133,7 @@ export const detectMappingColumns = (columns: string[]): { id_column?: string; r
   };
 };
 
-export const detectMappingMode = (columns: string[]): boolean => {
+const detectMappingMode = (columns: string[]): boolean => {
   const { id_column, rename_column } = detectMappingColumns(columns);
   return Boolean(id_column && rename_column);
 };

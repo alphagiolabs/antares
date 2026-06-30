@@ -94,7 +94,7 @@ export const HEADER_FIELDS: HeaderField[] = [
 export const DATE_FIELDS = new Set(['fechaInicio', 'fechaPrevista', 'fechaTrabajo', 'fechaComunicacion']);
 export const WATER_CUT_DATE_FIELDS = new Set(['fechaCorte', 'fecha']);
 
-export const ITEM_COLUMNS = [
+const ITEM_COLUMNS = [
   { key: 'item', label: 'Item' },
   { key: 'nombresApellidos', label: 'Nombres y Apellidos' },
   { key: 'direccion', label: 'Dirección' },
@@ -255,7 +255,7 @@ export function createDefaultWaterCutData(): WaterCutData {
   };
 }
 
-export function createEmptyItem(num: number): PadronItem {
+function createEmptyItem(num: number): PadronItem {
   return {
     item: num,
     nombresApellidos: '',
@@ -269,7 +269,7 @@ export function createInitialItems(total = 36): PadronItem[] {
   return Array.from({ length: total }, (_, i) => createEmptyItem(i + 1));
 }
 
-export function createEmptyWaterCutItem(num: number): WaterCutItem {
+function createEmptyWaterCutItem(num: number): WaterCutItem {
   return {
     item: num,
     hora: '',

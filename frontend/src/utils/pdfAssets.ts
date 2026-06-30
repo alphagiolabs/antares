@@ -29,11 +29,11 @@ export function getElectronFilePath(file: File): string | null {
   return typeof maybePath === 'string' && maybePath.trim() ? maybePath : null;
 }
 
-export function buildLocalImageToken(key: string): string {
+function buildLocalImageToken(key: string): string {
   return `${LOCAL_IMAGE_TOKEN_PREFIX}${key.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
 }
 
-export async function fileToPdfImageSource(
+function fileToPdfImageSource(
   file: File,
   key: string,
   localImagePaths: Record<string, string>,
@@ -88,7 +88,7 @@ function compressImageForPdf(
   });
 }
 
-export async function imageToPdfDataUrl(file: File, quality: PdfQuality): Promise<string> {
+async function imageToPdfDataUrl(file: File, quality: PdfQuality): Promise<string> {
   if (quality === 'high') {
     try {
       return await compressImageForPdf(file, { maxSide: 2600, quality: 0.9 });

@@ -38,7 +38,7 @@ export async function renderMappingPageToDataUrl(
   };
 }
 
-export const MAPPING_LOAD_TIMEOUT_MS = 25_000;
+const MAPPING_LOAD_TIMEOUT_MS = 25_000;
 
 const RESTART_HINT =
   'Cierra y reinicia la aplicación por completo (npm run dev) para aplicar los nuevos métodos del backend.';

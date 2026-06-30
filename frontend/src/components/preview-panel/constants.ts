@@ -42,9 +42,9 @@ export const TEMPLATE_KEY_MAP: Record<string, string> = {
   direcciones_afectadas: 'DIRECCIONES AFECTADAS',
 };
 
-export const DATE_FIELDS = ['fecha-corte', 'fecha_corte', 'fecha-trabajo', 'fecha_trabajo'];
+const DATE_FIELDS = ['fecha-corte', 'fecha_corte', 'fecha-trabajo', 'fecha_trabajo'];
 
-export const TEMPLATE_HEADERS = [
+const TEMPLATE_HEADERS = [
   'ID_ORDEN',
   'CENTRO', 'NIS', 'OT',
   'DIRECCION', 'LOCALIDAD', 'DISTRITO', 'ESTADO',

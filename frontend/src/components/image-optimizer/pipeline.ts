@@ -10,7 +10,7 @@ import {
   resolveSettingsForItem,
 } from './utils';
 
-export async function loadImageDimensions(file: Blob): Promise<{ width: number; height: number }> {
+async function loadImageDimensions(file: Blob): Promise<{ width: number; height: number }> {
   return new Promise((resolve, reject) => {
     const img = new Image();
     const url = URL.createObjectURL(file);

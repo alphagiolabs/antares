@@ -1,11 +1,4 @@
-import { matchesRecordId, naturalSortByName } from './utils';
-export {
-  buildLocalImageToken,
-  fileToDataUrl,
-  imageToPdfDataUrl,
-  imageToPdfSource,
-  type PdfImageSource,
-} from '../../utils/pdfAssets';
+export { buildPdfFilename, selectRowsForPdfExport, mergeHtmlDocuments, imageToPdfSource } from '../../utils/pdfAssets';
 
 export type PdfExportScope = 'single' | 'all';
 export type PdfQuality = 'high' | 'low';
@@ -17,7 +10,7 @@ export interface PdfExportRow {
   images: File[];
 }
 
-export function safeFilenamePart(value: unknown): string {
+function safeFilenamePart(value: unknown): string {
   const text = String(value ?? '').trim();
   return text.replace(/[\\/:*?"<>|]+/g, '_').replace(/\s+/g, '_') || 'reporte';
 }

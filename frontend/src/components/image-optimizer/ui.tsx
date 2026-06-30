@@ -213,7 +213,7 @@ export function OperationSection({
   );
 }
 
-export function ModeToggle({
+function ModeToggle({
   label,
   enabled,
   onChange,

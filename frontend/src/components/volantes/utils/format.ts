@@ -18,7 +18,7 @@ export const toSlugId = (): string =>
 export const normalizeHeader = (value: string): string =>
   stripAccents(value).replace(/\s+/g, "_");
 
-export const excelSerialToDate = (value: number): Date => {
+function excelSerialToDate(value: number): Date {
   const base = new Date(Date.UTC(1899, 11, 30));
   const millis = value * 24 * 60 * 60 * 1000;
   return new Date(base.getTime() + millis);
@@ -123,7 +123,7 @@ export const normalizeTimeInput = (value: unknown): string | null => {
   return null;
 };
 
-export const capitalize = (value: string): string =>
+function capitalize(value: string): string {
   value ? value.charAt(0).toUpperCase() + value.slice(1) : value;
 
 export const formatFlyerDateLine = (
