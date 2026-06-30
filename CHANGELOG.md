@@ -124,10 +124,22 @@ y este proyecto sigue [Semantic Versioning](https://semver.org/).
 ### Changed
 - Mejoras en la UI de conversión con soporte para arrastrar y soltar.
 
-## [1.10.1] — 2025-04-01
+## [1.10.1] — 2026-06-29
+
+### Added
+- Centralized configuration: shared/config.ts (TypeScript) + shared/config.js (CommonJS) for all IPC timeouts, backend spawner constants, and long-running methods list.
+- Backend health check endpoint (backend/handlers/health.py) with circuit breaker on frontend (circuitBreaker.ts).
+- Centralized constants in backend/core/config.py (MAX_IMAGE_PIXELS, PREVIEW_MAX_SIZE, SQLITE_PARAM_LIMIT).
 
 ### Fixed
-- Correcciones en el spawned de backend y manejo de errores de IPC.
+- **BUG-4 (Magic Constants)**: MAX_IMAGE_PIXELS, PREVIEW_MAX_SIZE, SQLITE_PARAM_LIMIT centralized in backend/core/config.py (was hardcoded in converter.py/database.py).
+- **BUG-7 (Timeout Drift)**: All timeout values, retry config, and LONG_RUNNING_METHODS set centralized in shared/config.ts|js; updated imports in ipc-router.js, ipc-methods.js, backend-spawner.js, and api.ts.
+- **BUG-12 (Temp Dir Cleanup)**: renderHtmlToPdf now has dual limits (max 5 attempts AND max 10s total) + best-effort final attempt; replaced infinite for(;;) loop.
+- **Security**: 19 security fixes (SEC-001 through SEC-019) including path traversal, PDF image disclosure, Electron sandboxing, CSP hardening, and safe storage for sensitive data.
+- **Performance**: 17 performance improvements (PERF-01 through PERF-17) including LANCZOS reducing_gap, IPC stdout parser, virtualized lists, SQLite batch counting, and asset optimization.
+- **Simplifications**: 26 codebase simplifications removing ~700 lines of dead code, consolidating redundant modules, extracting shared helpers, and deprecating unused systems (plugins, legacy format strategy, jobs dual layer).
+- Electron IPC: fixed shutdown race conditions, stale interceptor leak in pdfSession, and health-probe TOCTOU race.
+- Frontend: removed 5 deprecated components (ImagePreview, PreviewDrawer, StickyActionBar, DatabaseView, theme-init.js) and tightened module exports across 16 files.
 
 ## [1.10.0] — 2025-03-15
 

@@ -1,7 +1,7 @@
 {
   "name": "antares-frontend",
   "private": true,
-  "version": "0.10.14",
+  "version": "1.10.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
